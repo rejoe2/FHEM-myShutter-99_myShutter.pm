@@ -3,7 +3,7 @@
  use warnings;
  use POSIX;
  sub
- myUtils_Initialize($$)
+ myShutterUtils_Initialize($$)
  {
    my ($hash) = @_;
  }
@@ -56,9 +56,9 @@
     }
 }
 
-sub winShutterAssociate($$$) {
-    #Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung
-    #Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",10) }
+sub winShutterAssociate($$$$) {
+    #Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
+    #Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
     my ($windowcontact, $shutter, $maxPosition, $maxPosTilted) = @_;
     my ($hash, @param) = @_;
     #Erst mal prüfen, ob die Parameter sinnvoll sind
