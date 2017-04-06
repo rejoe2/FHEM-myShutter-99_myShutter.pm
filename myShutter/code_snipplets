@@ -1,0 +1,47 @@
+ # Temperaturabhaengige Erstalarmierungszeiten verwenden
+          #
+          # und ggf die Wartezeit ueberschreiben, wurde ein Temperatur-Array definiert.
+          # Wird in den definierten Intervallen nicht die passende Temperatur gefunden, dient 'winOpenTimer' als default
+          #
+          # Ein Temperaturintervall wird im Device-Attribut "winOpenTempArray" angegeben und mit "<MIN> <MAX> <DAUER>" definiert.
+          # Mehrere Intervalle koennen mit ";" aneinander gefuegt werden.
+          #
+          # Beispiel: -99 -1 00:05:00;-1 5 00:10:00;5 10 00:15:00;10 15 00:30:00;15 99 0
+          #     Zwischen 5 und 10 Grad Celsius wird die Erstalarmierungszeit auf 15 Minuten gesetzt.
+          #
+          my $tempArray=AttrVal($dev,'winOpenTempArray',0);
+          if($tempArray) {
+                my @temperatures = split /;/, $tempArray;
+                foreach (@temperatures)
+                {
+                        my ($minTemp, $maxTemp, $dauer) = split / /, $_;
+                        # die Funktion "getTemperature" muss definiert sein, welche die zu pruefende Temperatur liefert.
+                        if ($minTemp < getTemperature && $maxTemp >= getTemperature) {
+                                $waittime=$dauer;
+                                last;
+                        }
+                }
+          }
+          #################### ENDE Temperaturabhaengige Erstalarmierungszeiten verwenden
+          
+          
+ sub Window_status {
+ my $resultstring='';
+ my @fhttks = devspec2array("DEF=ShutterContact .+");
+ my @wopen = ();
+ foreach(@fhttks) {
+  my $fhttk_window = ReadingsVal($_, "state", "?");
+  push (@wopen,AttrVal($_, "comment", "?")) if ($fhttk_window =~ m/open/ );
+ }
+ my $num_wopen = @wopen;
+ if ( $num_wopen gt 0 ) {
+  $resultstring="folgende Fenster sind noch offen:\n\n";
+  foreach(@wopen) {
+   $resultstring.="- ".$_."\n";
+   Log 4, "FHTTK_status: ". $_. "noch offen";
+  }
+ } else {
+  $resultstring.="alle Fenster sind geschlossen.";
+ }
+ return $resultstring;
+}
