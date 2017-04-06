@@ -45,3 +45,20 @@
  }
  return $resultstring;
 }
+
+sub statusFensterOffen() {
+
+	my @monitored=devspec2array("(FensterKontakt.*):FILTER=STATE!=closed");
+	my $cnt_devs=@monitored;
+	my $i = 0;
+	my $msgtext = "";
+	foreach(@monitored) {
+		$msgtext .= AttrVal($_,"alias",$_);
+		if ($i < $cnt_devs - 2) {
+		  $msgtext .= ", ";
+		}
+		if ($i == $cnt_devs - 2) {
+		  $msgtext .= " und ";
+		}
+	$i++;
+	}
