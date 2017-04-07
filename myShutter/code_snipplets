@@ -62,3 +62,28 @@ sub statusFensterOffen() {
 		}
 	$i++;
 	}
+
+# HM threestate
+@list = devspec2array("subType=threeStateSensor:FILTER=winOpenMsg=1");
+foreach $sdev (@list) {
+        my $devname=AttrVal($sdev,'winOpenName',AttrVal($sdev,'alias',$sdev));
+        $wOpen = $wOpen."$devname\n" if (ReadingsVal($sdev,"state","unknown") !~ "closed");
+        }
+
+if ( ! defined( $cmd ) || ( $cmd eq "" ) )
+	{
+    $wOpen = undef if ( $wOpen eq "" );
+    } elsif ( $cmd eq "msg" )
+		{
+        my ($seconds, $microseconds) = gettimeofday();
+        my @t = localtime($seconds);
+        my $tim = sprintf("%02d.%02d %02d:%02d:%02d",
+                $t[3],$t[4]+1, $t[2],$t[1],$t[0]);
+        $wOpen = "Fenster nicht geschlossen:\n$wOpen [$tim]" if ( $wOpen ne "" );
+    	} else
+			{
+    		$wOpen = "unknwown cmd :$cmd: in checkWindowOpen";
+    		}
+   
+return $wOpen;
+}
