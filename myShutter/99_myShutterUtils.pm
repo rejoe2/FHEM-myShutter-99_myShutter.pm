@@ -44,10 +44,10 @@ sub winOpenShutterTester($$) {
               if($onHoldState eq "none") { fhem("setreading $shutter WindowContactOnHoldState $position");}
           }
           #...(gekippt)...
-          elsif($position < $maxPosTilted && $winState eq "tilted" && $windowcontact ne "none") {
-              if($onHoldState eq "none") { fhem("setreading $shutter WindowContactOnHoldState $position");}
+          elsif($winState eq "tilted" && $windowcontact ne "none") {
+              if($position < $maxPosTilted && $onHoldState eq "none") { fhem("setreading $shutter WindowContactOnHoldState $position");}
 			  elsif ($maxPosTilted < $onHoldState) { $maxPosTilted = $onHoldState; }
-			  fhem("set $shutter $targetPosTilted");
+			  fhem("set $shutter $maxPosTilted");
           }
           #...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
           elsif ($event eq "Window" && $winState eq "closed" && $onHoldState ne "none") {
@@ -87,12 +87,12 @@ sub winShutterAssociate($$$$) {
             fhem("attr $windowcontact ShutterAssociated $shutter");
               if(index($oldAttrRollo,"WindowContactAssociated") < 0) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactAssociated");
-                $oldAttrRollo = AttrVal($shutter,'userattr',undef);
+                  $oldAttrRollo = AttrVal($shutter,'userattr',undef);
             }
             fhem("attr $shutter WindowContactAssociated $windowcontact");
             if(index($oldAttrRollo,"WindowContactOnHoldState") < 0) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactOnHoldState");
-                $oldAttrRollo = AttrVal($shutter,'userattr',undef);
+                  $oldAttrRollo = AttrVal($shutter,'userattr',undef);
             }
             fhem("attr $shutter WindowContactOnHoldState none");
 			fhem("setreading $shutter WindowContactOnHoldState none");
