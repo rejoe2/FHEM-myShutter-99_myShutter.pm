@@ -7,7 +7,8 @@
  {
    my ($hash) = @_;
  }
- sub winOpenShutterTester($$) {
+
+sub winOpenShutterTester($$) {
     #Als Parameter muss der device-Name übergeben werden
     #notify-Definitionen:
     #defmod n_Rolladen_Window notify .*(closed|open|tilted)..to.VCCU. { winOpenShutterTester(AttrVal($NAME,'ShutterAssociated','none'), "Window") }
@@ -29,29 +30,40 @@
           #Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
           my $position = ReadingsVal($shutter,'level',0);
           my $winState = Value($windowcontact);
-          my $maxPosition = AttrVal($shutter,'WindowContactOpenMaxClosed',100);
-          my $maxPosTilted = AttrVal($shutter,'WindowContactOpenMaxTilted',100);
-          my $onHoldState = AttrVal($shutter,'WindowContactOnHoldState',"none");
-          
-          #Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (offen)...
-          if($position < $maxPosition && $winState eq "open" && $windowcontact ne "none") {
-              fhem("set $shutter $maxPosition");
-              if($onHoldState eq "none") { fhem("setreading $shutter:WindowContactOnHoldState $position");}
+          my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
+          my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
+		  my $turnValue = AttrVal($shutter,'JalousieTurnValue',0);
+		  my $onHoldState = ReadingsVal($shutter,'WindowContactOnHoldState',"none");
+          my $turnPosOpen = $maxPosOpen+$turnValue;
+		  my $turnPosTilted = $maxPosTilted+$turnValue;
+		  my $targetPosOpen = $maxPosOpen+$turnValue;
+          my $targetPosTilted = $maxPosTilted+$turnValue;
+		  
+          #Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
+          if($position < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
+		      fhem("set $shutter $targetPosOpen");
+              if($onHoldState eq "none") { fhem("setreading $shutter WindowContactOnHoldState $position");}
           }
           #...(gekippt)...
           elsif($position < $maxPosTilted && $winState eq "tilted" && $windowcontact ne "none") {
-              fhem("set $shutter $maxPosTilted");
-              if($onHoldState eq "none") { fhem("setreading $shutter:WindowContactOnHoldState $position");}
+              if($onHoldState eq "none") { fhem("setreading $shutter WindowContactOnHoldState $position");}
+			  elsif ($maxPosTilted < $onHoldState) { $maxPosTilted = $onHoldState; }
+			  fhem("set $shutter $targetPosTilted");
           }
           #...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
-          elsif ($event eq "Window" && $winState eq "closed" && $maxPosition ne "none") {
+          elsif ($event eq "Window" && $winState eq "closed" && $onHoldState ne "none") {
               fhem("set $shutter $onHoldState");
-              fhem("setreading $shutter:WindowContactOnHoldState none"); #changed from "attr" 
+              fhem("setreading $shutter WindowContactOnHoldState none");  
           }
-          #...oder ob die Positionsinfo wegen manueller Änderung gelöscht werden kann.
-          elsif ($event eq "Rollo" && $onHoldState ne "none" && $position ne $maxPosition) {
-              fhem("setreading $shutter WindowContactOnHoldState none"); #changed from "attr"
-          }
+          #...oder ob es sich um einen Stop zum Drehen der Jalousielamellen handelt...
+		  elsif ($event eq "Rollo") {
+		  	if ($turnValue > 0 && $position == $turnPosOpen) {fhem("set $shutter $maxPosOpen");}
+		  	elsif ($turnValue > 0 && $position == $turnPosTilted) {fhem("set $shutter $maxPosTilted");}
+		  #...oder die Positionsinfo wegen manueller Änderung gelöscht werden kann.
+		    elsif ($position != $maxPosOpen && $position != $maxPosTilted && $onHoldState ne "none") {
+              fhem("setreading $shutter WindowContactOnHoldState none"); 
+            }
+		  }
         }
     }
 }
@@ -83,21 +95,45 @@ sub winShutterAssociate($$$$) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactOnHoldState");
                   $oldAttrRollo = AttrVal($shutter,'userattr',undef);
             }
-            fhem("attr $shutter WindowContactOnHoldState 100");
+            fhem("attr $shutter WindowContactOnHoldState none");
             if(index($oldAttrRollo,"WindowContactOpenMaxClosed") < 0) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactOpenMaxClosed");
             }
-            fhem("attr $shutter WindowContactOpenMaxClosed $maxPosition");
-            if(index($oldAttrRollo,"WindowContactOpenMaxTilted") < 0) {
-                fhem("attr $shutter userattr $oldAttrRollo WindowContactOpenMaxTilted");
+            fhem("attr $shutter WindowContactOpenMaxOpen $maxPosition");
+            if(index($oldAttrRollo,"WindowContactTiltedMaxOpen") < 0) {
+                fhem("attr $shutter userattr $oldAttrRollo WindowContactTiltedMaxClosed");
             }
-            fhem("attr $shutter WindowContactOpenMaxTilted $maxPosTilted");
+            fhem("attr $shutter WindowContactTiltedMaxClosed $maxPosTilted");
             
         }
         else { return "One of the devices has wrong subtype";}
     }
     else { return "One of the devices does not exist";}
 }
- 
+
+sub attrShutterTypeJalousie($$) {
+    #Als Parameter muss der Namen vom Rolladen übergeben werden sowie 
+	#der Wert, um den zum Drehen nach oben gefahren werden soll
+    #Call in FHEMWEB e.g.: { attrShutterTypeJalousie ("Jalousie_WZ",3) }
+    my ($shutter, $turnValue) = @_;
+    my ($hash, @param) = @_;
+    #Erst mal prüfen, ob die Parameter sinnvoll sind
+    if ($defs{$shutter}) {
+
+        if (AttrVal($shutter,'subType', undef) eq "blindActuator") {
+            my $oldAttrRollo = AttrVal($shutter,'userattr',undef);
+           
+            #Jetzt können wir sehen, ob das notwendige userattr vorhanden ist
+            #und ggf. den Wert zuweisen
+            if(index($oldAttrRollo,"JalousieTurnLevel") < 0){
+                fhem("attr $shutter userattr $oldAttrRollo JalousieTurnValue");
+                  }
+            fhem("attr $shutter JalousieTurnValue $turnValue");
+        }
+        else { return "Device has wrong subtype";}
+    }
+    else { return "Devices does not exist";}
+}
+
+
 1;
- 
