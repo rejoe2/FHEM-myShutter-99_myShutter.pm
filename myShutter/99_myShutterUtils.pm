@@ -21,7 +21,6 @@ sub winOpenShutterTester($$) {
  
         #Als erstes brauchen wir die Info, welcher Rolladen bzw. welcher Fenster- bzw. Türkontakt
         #betroffen sind
-        #Also erst mal so tun, als wäre es der Rolladen gewesen, der augeslöst hat:
         my $windowcontact = AttrVal($dev,'WindowContactAssociated',"none");
         my $shutter=$dev;
      
@@ -32,7 +31,7 @@ sub winOpenShutterTester($$) {
           my $winState = Value($windowcontact);
           my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
           my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
-		  my $turnValue = AttrVal($shutter,'JalousieTurnValue',0);
+		  my $turnValue = ReadingsVal($shutter,'JalousieTurnValue',0);
 		  my $onHoldState = ReadingsVal($shutter,'WindowContactOnHoldState',"none");
           my $turnPosOpen = $maxPosOpen+$turnValue;
 		  my $turnPosTilted = $maxPosTilted+$turnValue;
@@ -137,3 +136,4 @@ sub attrShutterTypeJalousie($$) {
 
 
 1;
+ 
