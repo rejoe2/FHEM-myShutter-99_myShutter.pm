@@ -87,14 +87,15 @@ sub winShutterAssociate($$$$) {
             fhem("attr $windowcontact ShutterAssociated $shutter");
               if(index($oldAttrRollo,"WindowContactAssociated") < 0) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactAssociated");
-                  $oldAttrRollo = AttrVal($shutter,'userattr',undef);
+                $oldAttrRollo = AttrVal($shutter,'userattr',undef);
             }
             fhem("attr $shutter WindowContactAssociated $windowcontact");
             if(index($oldAttrRollo,"WindowContactOnHoldState") < 0) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactOnHoldState");
-                  $oldAttrRollo = AttrVal($shutter,'userattr',undef);
+                $oldAttrRollo = AttrVal($shutter,'userattr',undef);
             }
             fhem("attr $shutter WindowContactOnHoldState none");
+			fhem("setreading $shutter WindowContactOnHoldState none");
             if(index($oldAttrRollo,"WindowContactOpenMaxClosed") < 0) {
                 fhem("attr $shutter userattr $oldAttrRollo WindowContactOpenMaxClosed");
             }
