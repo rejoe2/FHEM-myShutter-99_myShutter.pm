@@ -123,13 +123,13 @@ sub winOpenShutterTester($$) {
 					if ($maxPosTilted < $onHoldState) { 
 						fhem("set $shutter $onHoldState");
 						fhem("setreading $shutter WindowContactOnHoldState none");
+					}
+				}	
+				if ($position < $maxPosTilted) {
+					fhem("set $shutter $maxPosTilted");			  
+					if ($position > $onHoldState) {fhem("setreading $shutter WindowContactOnHoldState $position");}
 				}
-			}
-			if ($position < $maxPosTilted) {
-				fhem("set $shutter $maxPosTilted");			  
-				if ($position > $onHoldState) {fhem("setreading $shutter WindowContactOnHoldState $position");}
-			}
-			#} beim Formatieren auskommentiert, da ziemlich sicher zu viel...
+			} #beim Formatieren auskommentiert, da ziemlich sicher zu viel...
 			#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
 			elsif ($event eq "Window" && $winState eq "closed" && $onHoldState ne "none") {
 				fhem("set $shutter $onHoldState");
