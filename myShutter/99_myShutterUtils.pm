@@ -1,17 +1,17 @@
- package main;
- use strict;
- use warnings;
- use POSIX;
- sub
- myShutterUtils_Initialize($$)
- {
+package main;
+use strict;
+use warnings;
+use POSIX;
+sub
+myShutterUtils_Initialize($$)
+{
    my ($hash) = @_;
- }
+}
 
 sub myShutterUtils_MovementCheck($$) {
 	#Als Parameter muss der device-Name sowie der Event übergeben werden
 	#notify-Definitionen:
-	#defmod n_Rolladen_Move notify (Rolladen_.*|Jalousie_.*).(.*set_.*|motor..down.*) sleep 1;; { myShutterUtils_MovementCheck($NAME,$EVENT)}
+	#defmod n_Rolladen_CheckSet notify (Rolladen_.*|Jalousie_.*).(set_.*|motor..down.*) { myShutterUtils_MovementCheck($NAME,$EVENT)}
 	#Testnotify: (Rolladen_.*|Jalousie_.*).motor..down.* sleep 2;;{ myShutterUtils_MovementCheck($NAME,$EVENT)}
 	my ($dev, $rawEvent) = @_;
 	
@@ -35,7 +35,7 @@ sub myShutterUtils_MovementCheck($$) {
 	
 		else {       
 			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
-			my $position = ReadingsVal($shutter,'level',0);
+			my $position = ReadingsVal($shutter,'pct',0);
 			my $winState = Value($windowcontact);
 			my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
 			my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
@@ -47,7 +47,8 @@ sub myShutterUtils_MovementCheck($$) {
 			my $targetPosTilted = $maxPosTilted+$turnValue;
 			my $motorReading = ReadingsVal($shutter,'motor',0);
 			my $event = "none";
-		  
+		  	my $setPosition = $position;
+			
 			#Fahrbefehl über FHEM oder Tastendruck?
 			if(index($setPosition,"set_") > -1) { 
 				$setPosition = substr $setPosition, 4, ; #FHEM-Befehl
@@ -60,8 +61,8 @@ sub myShutterUtils_MovementCheck($$) {
 			else { $setPosition = 0;}
 		    
 			#Alte Option zur Auswertung von Zwischenereignissen
-			#if (ReadingsAge('Rolladendummy','state',60) < 10) {fhem ("set Rolladendummy $shutter wurde erst kürzlich verändert");return;}
-			fhem ("set Rolladendummy $shutter, setPosition: $setPosition, Age: $readingsAge!");return;
+			#if (ReadingsAge('Rolladendummy','state',60) < 10) {fhem ("set Rolladendummy $shutter wurde erst kürzlich verändert");} #return;
+			#fhem ("set Rolladendummy $shutter, setPosition: $setPosition, Age: $readingsAge!");return;
 		  		  
 			#Jetzt können wir nachsehen, ob der Rolladen zu weit nach unten soll
 			#(Fenster offen)...
@@ -83,16 +84,14 @@ sub myShutterUtils_MovementCheck($$) {
 			}
 		}	
 	}
+return undef;
 }
 
 
 sub winOpenShutterTester($$) {
 	#Als Parameter muss der device-Name übergeben werden
 	#notify-Definition:
-	#defmod n_Rolladen_Window notify .*(closed|open|tilted)..to.VCCU.|(Rolladen_.*|Jalousie_.*).motor:.stop.* { winOpenShutterTester($NAME,$EVENT)}
-	#Alt:
-	#defmod n_Rolladen_Window notify .*(closed|open|tilted)..to.VCCU. { winOpenShutterTester(AttrVal($NAME,'ShutterAssociated','none'), "Window") }
-	#defmod n_Rolladen_Stop notify .*:motor:.stop.* { winOpenShutterTester($NAME, "Rollo")}
+	#defmod n_Rolladen_Window notify .*(closed|open|tilted)|(Rolladen_.*|Jalousie_.*).motor:.stop.* { winOpenShutterTester($NAME,$EVENT) }
 	#Hint for window contacts: make sure to modify settings of device wrt. some delay in sending state changes to avoid unnecessary triggers
 	my ($dev, $event) = @_;
  
@@ -101,19 +100,19 @@ sub winOpenShutterTester($$) {
  
 		#Als erstes brauchen wir die Info, welcher Rolladen bzw. welcher Fenster- bzw. Türkontakt
 		#betroffen sind
-		my $shutter=$dev;
-		my $textEvent="Rollo";
+		my $shutter = $dev;
+		my $textEvent = "Rollo";
 		
 		if (AttrVal($shutter,'subType', undef) ne "blindActuator"){
 			$shutter = AttrVal($dev,'ShutterAssociated',undef);
-			$textEvent="Window";
+			$textEvent = "Window";
 		} 
 		my $windowcontact = AttrVal($shutter,'WindowContactAssociated',"none");
 		
 		unless (!$shutter) {  
 			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
-			my $position = ReadingsVal($shutter,'level',0);
-			return "set command, nothing meaningfull to do" if ($position =~ /set_/);  
+			my $position = ReadingsVal($shutter,'pct',0);
+			#return "set command, nothing meaningfull to do" if ($position =~ /set_/);  
 			my $winState = Value($windowcontact);
 			my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
 			my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
@@ -123,7 +122,8 @@ sub winOpenShutterTester($$) {
 			my $turnPosTilted = $maxPosTilted+$turnValue;
 			my $targetPosOpen = $maxPosOpen+$turnValue;
 			my $targetPosTilted = $maxPosTilted+$turnValue;
-					
+			my $readingsAge = ReadingsAge($shutter,'WindowContactOnHoldState',60);
+		
 			#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
 			if($position < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 				fhem("set $shutter $targetPosOpen");
@@ -136,8 +136,14 @@ sub winOpenShutterTester($$) {
 						fhem("set $shutter $onHoldState");
 						fhem("setreading $shutter WindowContactOnHoldState none");
 					}
+					else {
+						if ($readingsAge < 10) {return "Most likely we are triggering ourself";}
+						fhem("set $shutter $maxPosTilted");
+						fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+					}
 				}	
 				if ($position < $maxPosTilted) {
+					if ($readingsAge < 10) {return "Most likely we are triggering ourself";}
 					fhem("set $shutter $maxPosTilted");			  
 					if ($position > $onHoldState) {fhem("setreading $shutter WindowContactOnHoldState $position");}
 				}
