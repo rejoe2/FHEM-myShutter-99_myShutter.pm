@@ -66,7 +66,7 @@ sub HM_ShutterUtils_Notify($$) {
 				elsif ($setPosition eq "off") {$setPosition = 0;}
 				#dann war der Trigger über Tastendruck oder Motor-Bewegung
 				} 
-		    elsif ($rawEvent =~ /motor:.down/) { $setPosition = -1;}
+		    elsif ($motorReading =~ /down/) { $setPosition = -1;}
 			$winState = $rawEvent if ($rawEvent =~ /closed|open|tilted/);
 			
 			Log3 $dev, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
