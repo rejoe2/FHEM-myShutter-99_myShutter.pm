@@ -75,12 +75,20 @@ sub HM_ShutterUtils_Notify($$) {
 			if ($rawEvent =~ /motor:.down/ || $rawEvent =~ /set_/ ){
 				#Fahrbefehl über FHEM oder Tastendruck?
 				#Fährt der Rolladen aufwärts, gibt es nichts zu tun...
-				if ($setPosition >= $position) {return "Nothing to do, moving upwards";}
+				if ($setPosition >= $position) {
+					Log3 $dev, 4, "Nothing to do, moving upwards";
+					return;
+					}
 									  
 				#Jetzt können wir nachsehen, ob der Rolladen zu weit nach unten soll
 				#(Fenster offen)...
 				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
-					fhem("set $shutter $maxPosOpen");
+					if ($position > $maxPosOpen){
+						fhem("set $shutter $maxPosOpen");
+					} else {
+						fhem("set $shutter $targetPosOpen");
+					}
+					
 					if ($setPosition == -1){
 						fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
 					} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
@@ -90,8 +98,14 @@ sub HM_ShutterUtils_Notify($$) {
 					if($setPosition < $maxPosTilted ) { 
 						if ($setPosition == -1) {
 							fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
-						} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
-					fhem("set $shutter $maxPosTilted");
+						} else {
+							fhem("setreading $shutter WindowContactOnHoldState $setPosition");
+						}
+						if ($position > $maxPosTilted){
+							fhem("set $shutter $maxPosTilted");
+						} else {
+							fhem("set $shutter $targetPosTilted");
+						}
 					}
 					else {fhem("setreading $shutter WindowContactOnHoldState $onHoldState");}
 				}
