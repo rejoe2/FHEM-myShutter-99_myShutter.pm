@@ -1,12 +1,12 @@
-package main;
-use strict;
-use warnings;
-use POSIX;
-sub
-myShutterUtils_Initialize($$)
-{
+ package main;
+ use strict;
+ use warnings;
+ use POSIX;
+ sub
+ myShutterUtils_Initialize($$)
+ {
    my ($hash) = @_;
-}
+ }
 
 sub myShutterUtils_MovementCheck($$) {
 	#Als Parameter muss der device-Name sowie der Event übergeben werden
@@ -47,7 +47,7 @@ sub myShutterUtils_MovementCheck($$) {
 			my $targetPosTilted = $maxPosTilted+$turnValue;
 			my $motorReading = ReadingsVal($shutter,'motor',0);
 			my $event = "none";
-		  	my $setPosition = $position;
+		  	my $setPosition = Value($shutter);
 			
 			#Fahrbefehl über FHEM oder Tastendruck?
 			if(index($setPosition,"set_") > -1) { 
@@ -58,7 +58,7 @@ sub myShutterUtils_MovementCheck($$) {
 				if ($setPosition >= $position) {return "Nothing to do, moving upwards";}
 			}
 			#dann war der Trigger über Tastendruck oder Motor-Bewegung
-			else { $setPosition = 0;}
+			else { $setPosition = -1;}
 		    
 			#Alte Option zur Auswertung von Zwischenereignissen
 			#if (ReadingsAge('Rolladendummy','state',60) < 10) {fhem ("set Rolladendummy $shutter wurde erst kürzlich verändert");} #return;
@@ -68,12 +68,12 @@ sub myShutterUtils_MovementCheck($$) {
 			#(Fenster offen)...
 			if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 				fhem("set $shutter $maxPosOpen");
-				fhem("setreading $shutter WindowContactOnHoldState $setPosition");
+				unless ($setPosition = -1) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 			}
 			#...(gekippt)...
 			elsif($winState eq "tilted" && $windowcontact ne "none") {
 				if($setPosition < $maxPosTilted ) { 
-					fhem("setreading $shutter WindowContactOnHoldState $setPosition");
+					unless ($setPosition = -1) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 					fhem("set $shutter $maxPosTilted");
 				}
 				else {fhem("setreading $shutter WindowContactOnHoldState $onHoldState");}
@@ -113,6 +113,7 @@ sub winOpenShutterTester($$) {
 			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
 			my $position = ReadingsVal($shutter,'pct',0);
 			#return "set command, nothing meaningfull to do" if ($position =~ /set_/);  
+			my $motorReading = ReadingsVal($shutter,'motor',0);
 			my $winState = Value($windowcontact);
 			my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
 			my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
@@ -127,7 +128,9 @@ sub winOpenShutterTester($$) {
 			#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
 			if($position < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 				fhem("set $shutter $targetPosOpen");
-				if($onHoldState eq "none") { fhem("setreading $shutter WindowContactOnHoldState $position");}
+				if($onHoldState eq "none" && $motorReading =~ /stop/) { 
+					fhem("setreading $shutter WindowContactOnHoldState $position");
+				}
 			}
 			#...(gekippt)...
 			elsif($winState eq "tilted" && $windowcontact ne "none") {
@@ -145,7 +148,7 @@ sub winOpenShutterTester($$) {
 				if ($position < $maxPosTilted) {
 					if ($readingsAge < 10) {return "Most likely we are triggering ourself";}
 					fhem("set $shutter $maxPosTilted");			  
-					if ($position > $onHoldState) {fhem("setreading $shutter WindowContactOnHoldState $position");}
+					if ($position > $onHoldState && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $position");}
 				}
 			}
 			#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
