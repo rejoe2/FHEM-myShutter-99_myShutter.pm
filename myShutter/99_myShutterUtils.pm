@@ -18,7 +18,7 @@ sub HM_ShutterUtils_Notify($$) {
 	#Ein "set" löst zwei Events aus, einmal beim (logischen) Gerät direkt, und dann beim entsprechenden Aktor.
 	#Wir brauchen nur einen (den ersten).
 	if ($rawEvent =~ /level:/){
-		log3($dev, 4, "Doppelevent: $rawEvent");
+		Log3 $dev, 4, "Doppelevent: $rawEvent";
 		return; 
 	}
 	
@@ -40,7 +40,10 @@ sub HM_ShutterUtils_Notify($$) {
 		if (!$shutter) {}
         
 		#Ausfiltern von Selbsttriggern!
-		elsif ($readingsAge < 2) {return "Most likely we are triggering ourself";}
+		elsif ($readingsAge < 2) {
+			Log3 $dev, 4, "Most likely we are triggering ourself: $dev $rawEvent";
+			return;
+		}
 	
 		else {       
 			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
@@ -56,34 +59,36 @@ sub HM_ShutterUtils_Notify($$) {
 			my $targetPosTilted = $maxPosTilted+$turnValue;
 			my $motorReading = ReadingsVal($shutter,'motor',0);
 			my $event = "none";
-		  	my $setPosition = Value($shutter);
+		  	my $setPosition = $position;
+			if($rawEvent =~ /set_/) { 
+				$setPosition = substr $rawEvent, 4, ; #FHEM-Befehl
+				if ($setPosition eq "on") {$setPosition = 100;}
+				elsif ($setPosition eq "off") {$setPosition = 0;}
+				#dann war der Trigger über Tastendruck oder Motor-Bewegung
+				} 
+		    elsif ($rawEvent =~ /motor:.down/) { $setPosition = -1;}
+			$winState = $rawEvent if ($rawEvent =~ /closed|open|tilted/);
 			
+			Log3 $dev, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
+		  	
 			#Unterscheidung nach Event-Art: Fahrbefehl oder stop/FK
 			if ($rawEvent =~ /motor:.down/ || $rawEvent =~ /set_/ ){
 				#Fahrbefehl über FHEM oder Tastendruck?
-				if($setPosition =~ /set_/) { 
-					$setPosition = substr $setPosition, 4, ; #FHEM-Befehl
-					if ($setPosition eq "on") {$setPosition = 100;}
-					elsif ($setPosition eq "off") {$setPosition = 0;}
-					#Fährt der Rolladen aufwärts, gibt es nichts zu tun...
-					if ($setPosition >= $position) {return "Nothing to do, moving upwards";}
-				}
-				#dann war der Trigger über Tastendruck oder Motor-Bewegung
-				else { $setPosition = -1;}
-		    	log3($dev, 4, "set Rolladendummy $shutter, setPosition: $setPosition, Age: $readingsAge!");
-		  			  
+				#Fährt der Rolladen aufwärts, gibt es nichts zu tun...
+				if ($setPosition >= $position) {return "Nothing to do, moving upwards";}
+									  
 				#Jetzt können wir nachsehen, ob der Rolladen zu weit nach unten soll
 				#(Fenster offen)...
 				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 					fhem("set $shutter $maxPosOpen");
-					if ($setPosition = -1){
+					if ($setPosition == -1){
 						fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
 					} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 				}
 				#...(gekippt)...
 				elsif($winState eq "tilted" && $windowcontact ne "none") {
 					if($setPosition < $maxPosTilted ) { 
-						if ($setPosition = -1) {
+						if ($setPosition == -1) {
 							fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
 						} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 					fhem("set $shutter $maxPosTilted");
@@ -98,13 +103,12 @@ sub HM_ShutterUtils_Notify($$) {
 			
 			#stop/FH
 			elsif ($rawEvent =~ /motor:.stop/ || $rawEvent =~ /closed|open|tilted/ ){
-				$winState = $rawEvent if ($rawEvent =~ /closed|open|tilted/);
-				
+								
 				#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
-				if($position < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
+				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 					fhem("set $shutter $targetPosOpen");
 					if($onHoldState eq "none" && $motorReading =~ /stop/) { 
-						fhem("setreading $shutter WindowContactOnHoldState $position");
+						fhem("setreading $shutter WindowContactOnHoldState $setPosition");
 					}
 				}
 				#...(gekippt)...
@@ -115,15 +119,15 @@ sub HM_ShutterUtils_Notify($$) {
 							fhem("setreading $shutter WindowContactOnHoldState none");
 						}
 						else {
-							if ($readingsAge < 10) {return "Most likely we are triggering ourself";}
+							if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
 							fhem("set $shutter $maxPosTilted");
 							fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
 						}
 					}	
-					if ($position < $maxPosTilted) {
-						if ($readingsAge < 10) {return "Most likely we are triggering ourself";}
+					if ($setPosition < $maxPosTilted) {
+						if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
 						fhem("set $shutter $maxPosTilted");			  
-						if ($position > $onHoldState && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $position");}
+						if ($position > $onHoldState && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 					}
 				}
 				#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
