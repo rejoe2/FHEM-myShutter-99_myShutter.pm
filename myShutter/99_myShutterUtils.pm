@@ -127,7 +127,8 @@ sub HM_ShutterUtils_Notify($$) {
 					if ($setPosition < $maxPosTilted) {
 						if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
 						fhem("set $shutter $maxPosTilted");			  
-						if ($position > $onHoldState && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
+						if ($onHoldState eq "none" && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
+						elsif ($position > $onHoldState && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 					}
 				}
 				#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
