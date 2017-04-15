@@ -31,7 +31,7 @@ sub myShutterUtils_MovementCheck($$) {
 		if (!$shutter) {}
         
 		#Ausfiltern von Selbsttriggern!
-		elsif ($readingsAge < 10) {return "Most likely we are triggering ourself";}
+		elsif ($readingsAge < 6) {return "Most likely we are triggering ourself";}
 	
 		else {       
 			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
@@ -39,7 +39,7 @@ sub myShutterUtils_MovementCheck($$) {
 			my $winState = Value($windowcontact);
 			my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
 			my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
-			my $turnValue = ReadingsVal($shutter,'JalousieTurnValue',0);
+			my $turnValue = AttrVal($shutter,'JalousieTurnValue',0);
 			my $onHoldState = ReadingsVal($shutter,'WindowContactOnHoldState',"none");
 			my $turnPosOpen = $maxPosOpen+$turnValue;
 			my $turnPosTilted = $maxPosTilted+$turnValue;
@@ -50,7 +50,7 @@ sub myShutterUtils_MovementCheck($$) {
 		  	my $setPosition = Value($shutter);
 			
 			#Fahrbefehl über FHEM oder Tastendruck?
-			if(index($setPosition,"set_") > -1) { 
+			if($setPosition =~ /set_/) { 
 				$setPosition = substr $setPosition, 4, ; #FHEM-Befehl
 				if ($setPosition eq "on") {$setPosition = 100;}
 				elsif ($setPosition eq "off") {$setPosition = 0;}
@@ -68,12 +68,16 @@ sub myShutterUtils_MovementCheck($$) {
 			#(Fenster offen)...
 			if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 				fhem("set $shutter $maxPosOpen");
-				unless ($setPosition = -1) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
+				if ($setPosition = -1){
+					fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+				} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 			}
 			#...(gekippt)...
 			elsif($winState eq "tilted" && $windowcontact ne "none") {
 				if($setPosition < $maxPosTilted ) { 
-					unless ($setPosition = -1) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
+					if ($setPosition = -1) {
+						fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+					} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 					fhem("set $shutter $maxPosTilted");
 				}
 				else {fhem("setreading $shutter WindowContactOnHoldState $onHoldState");}
