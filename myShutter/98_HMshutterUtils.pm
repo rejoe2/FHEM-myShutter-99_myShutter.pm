@@ -45,22 +45,26 @@ sub HMshutterUtils_Notify($$) {
 	my $devName = $dev_hash->{NAME}; # Device that created the events
 	my $events = deviceEvents($dev_hash, 1);
 
+	my $rawEvent = $dev_hash;
+	Log3 $devName, 4 , "rawEvent: $rawEvent";
+
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events})) {
-		notifyRegexpChanged($ownName, "subType=(blindActuator|threeStateSensor)");
-		
-		readingsSingleUpdate($ownName, "state", "active",1);
+		#my $event_regex = ".*(closed|open|tilted)|(Rolladen_.*|Jalousie_.*).(motor:.stop.*|set_.*|motor..down.*)";
+		my $event_regex = "subType=(blindActuator|threeStateSensor)";
+		notifyRegexpChanged($dev_hash, $event_regex);
+		HMshutterUtils_updateTimer();
+		readingsSingleUpdate($own_hash, "state", "active",1);
 	#	 X_FunctionWhoNeedsAttr($hash);
-		return;
+		return undef;
 	}
 	
 	#Als Parameter muss der device-Name sowie der Event übergeben werden
 	#notify-Definition:
 	#defmod n_Rolladen_Window notify .*(closed|open|tilted)|(Rolladen_.*|Jalousie_.*).(motor:.stop.*|set_.*|motor..down.*) { HM_ShutterUtils_Notify($NAME,$EVENT) }
-	#my ($dev, $rawEvent) = @_;
 	
 	#Ein "set" löst zwei Events aus, einmal beim (logischen) Gerät direkt, und dann beim entsprechenden Aktor.
 	#Wir brauchen nur einen (den ersten).
-	elsif (grep(m/^level:/, @{$events})){
+	elsif (grep(m/^level:/, $rawEvent)){
 		Log3 $devName, 4, "Doppelevent: $events";
 		return; 
 	}
@@ -99,8 +103,8 @@ sub HMshutterUtils_Notify($$) {
 		my $motorReading = ReadingsVal($shutter,'motor',0);
 		my $event = "none";
 	  	my $setPosition = $position;
-		if(grep(m/^set_/, @{$events})) { 
-			$setPosition = substr grep(m/^set_/, @{$events}), 4, ; #FHEM-Befehl
+		if(grep(m/^set_/, $rawEvent)) { 
+			$setPosition = substr grep(m/^set_/, $rawEvent), 4, ; #FHEM-Befehl
 			if ($setPosition eq "on") {$setPosition = 100;}
 			elsif ($setPosition eq "off") {$setPosition = 0;}
 			#dann war der Trigger über Tastendruck oder Motor-Bewegung
@@ -111,7 +115,7 @@ sub HMshutterUtils_Notify($$) {
 		Log3 $devName, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
 	  	
 		#Unterscheidung nach Event-Art: Fahrbefehl oder stop/FK
-		if (grep(m/^motor:.down/, @{$events}) || grep(m/^set_/, @{$events})){
+		if (grep(m/^motor:.down/, $rawEvent) || grep(m/^set_/, $rawEvent)){
 			#Fahrbefehl über FHEM oder Tastendruck?
 			#Fährt der Rolladen aufwärts, gibt es nichts zu tun...
 			if ($setPosition >= $position) {
@@ -155,7 +159,7 @@ sub HMshutterUtils_Notify($$) {
 		} 
 			
 		#stop/FH
-		elsif (grep(m/^motor:.stop/, @{$events}) || grep(m/^closed|open|tilted/, @{$events})){
+		elsif (grep(m/^motor:.stop/, $rawEvent) || grep(m/^closed|open|tilted/, $rawEvent)){
 							
 			#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
 			if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
@@ -200,11 +204,14 @@ sub HMshutterUtils_Notify($$) {
 			}
 		}
 	}	
-return undef;
+	return undef;
 }
 
+sub HMshutterUtils_updateTimer(){
+	return undef;
+}
 
-sub softPeer($$;$;$) {
+sub HMshutterUtils_softPeer($$;$;$) {
 	#Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
 	#Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
 	my ($windowcontact, $shutter, $maxPosition, $maxPosTilted) = @_;
@@ -248,7 +255,7 @@ sub softPeer($$;$;$) {
 	else { return "One of the devices does not exist";}
 }
 
-sub setTypeJalousie($$) {
+sub HMshutterUtils_setTypeJalousie($$) {
 	#Als Parameter muss der Namen vom Rolladen übergeben werden sowie 
 	#der Wert, um den zum Drehen nach oben gefahren werden soll
 	#Call in FHEMWEB e.g.: { attrShutterTypeJalousie ("Jalousie_WZ",3) }
