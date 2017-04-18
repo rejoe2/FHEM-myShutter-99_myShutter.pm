@@ -26,32 +26,33 @@ sub HMshutterUtils_Define($$) {
 	my ($hash, $def) = @_;
 	my @a = split("[ \t][ \t]*", $def);
 #	Das funktioniert aus noch ungeklärten Gründen nicht:
-#	return "Wrong syntax: use define <name> HMshutterUtils" if(int(@a) != 2);
+	return "Wrong syntax: use define <name> HMshutterUtils" if(@a != 2);
 	readingsSingleUpdate($hash, "state", "initialized",1);
 	my $name   = $a[0];
 	my $module = $a[1];
 
-	$hash->{NOTIFYDEV} = "global"; #,subType=(blindActuator|threeStateSensor)";
+	$hash->{NOTIFYDEV} = "global,subType=(blindActuator|threeStateSensor)";
 	Log3($name, 4, "HM_ShutterUtils $name has been defined");
 	return undef; 	
 	}
 
 sub HMshutterUtils_Notify($$) {
-	my ($own_hash, $dev_hash) = @_;
-	my $ownName = $own_hash->{NAME}; # own name / hash
- 
-	return "" if(IsDisabled($ownName)); # Return without any further action if the module is disabled
- 
-	my $devName = $dev_hash->{NAME}; # Device that created the events
-	my $events = deviceEvents($dev_hash, 1);
+	my ($hash, $dev) = @_;
+	my $name = $hash->{NAME};
+	my $devName = $dev->{NAME};# Device that created the events
+	my $devtype = $dev->{TYPE};
+	my $devsubtype = $dev->{SUBTYPE};
+	return if (AttrVal($name,"disable",0) == 1);  # Return without any further action if the module is disabled
+	my $events = deviceEvents($dev,1);
+	return if (!$events);
 
 	my $rawEvent = $dev_hash;
 	Log3 $devName, 4 , "rawEvent: $rawEvent";
 
-	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events})) {
+	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG|MODIFIED$/, @{$events})) {
 		#my $event_regex = ".*(closed|open|tilted)|(Rolladen_.*|Jalousie_.*).(motor:.stop.*|set_.*|motor..down.*)";
-		my $event_regex = "subType=(blindActuator|threeStateSensor)";
-		notifyRegexpChanged($dev_hash, $event_regex);
+		#my $event_regex = "subType=(blindActuator|threeStateSensor)";
+		#notifyRegexpChanged($dev_hash, $event_regex);
 		HMshutterUtils_updateTimer();
 		readingsSingleUpdate($own_hash, "state", "active",1);
 	#	 X_FunctionWhoNeedsAttr($hash);
@@ -64,6 +65,7 @@ sub HMshutterUtils_Notify($$) {
 	
 	#Ein "set" löst zwei Events aus, einmal beim (logischen) Gerät direkt, und dann beim entsprechenden Aktor.
 	#Wir brauchen nur einen (den ersten).
+	
 	elsif (grep(m/^level:/, $rawEvent)){
 		Log3 $devName, 4, "Doppelevent: $events";
 		return; 
