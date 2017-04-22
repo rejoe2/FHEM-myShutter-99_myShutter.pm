@@ -18,7 +18,7 @@ sub HMshutterUtils_Initialize($) {
 	" defaultTiltedPosition" . 
 	" defaultJalousieTurnValue";
 	$hash->{parseParams} = 1;
-	$hash->{NotifyOrderPrefix} = "45-"  # Alle Definitionen des Moduls werden bei der Eventverarbeitung zuerst geprüft
+	$hash->{NotifyOrderPrefix} = "55-"  # Alle Definitionen des Moduls werden bei der Eventverarbeitung zuerst geprüft
 	}
 
 sub HMshutterUtils_Define($$) {
@@ -26,33 +26,31 @@ sub HMshutterUtils_Define($$) {
 	my ($hash, $def) = @_;
 	my @a = split("[ \t][ \t]*", $def);
 #	Das funktioniert aus noch ungeklärten Gründen nicht:
-	return "Wrong syntax: use define <name> HMshutterUtils" if(@a != 2);
+#	return "Wrong syntax: use define <name> HMshutterUtils" if (@a != 2);
 	readingsSingleUpdate($hash, "state", "initialized",1);
 	my $name   = $a[0];
 	my $module = $a[1];
 
-	$hash->{NOTIFYDEV} = "global,subType=(blindActuator|threeStateSensor)";
+	#$hash->{NOTIFYDEV} = "global"; #,subType=(blindActuator|threeStateSensor),.*(closed|open|tilted)|(Rolladen_.*|Jalousie_.*).(motor:.stop.*|set_.*|motor..down.*)";
 	Log3($name, 4, "HM_ShutterUtils $name has been defined");
 	return undef; 	
 	}
 
 sub HMshutterUtils_Notify($$) {
-	my ($hash, $dev) = @_;
-	my $name = $hash->{NAME};
-	my $devName = $dev->{NAME};# Device that created the events
-	my $devtype = $dev->{TYPE};
-	my $devsubtype = $dev->{SUBTYPE};
-	return if (AttrVal($name,"disable",0) == 1);  # Return without any further action if the module is disabled
-	my $events = deviceEvents($dev,1);
-	return if (!$events);
+	my ($own_hash, $dev_hash) = @_;
+	my $ownName = $own_hash->{NAME}; # own name / hash
+ 
+	return "" if(IsDisabled($ownName)); # Return without any further action if the module is disabled
+ 
+	my $devName = $dev_hash->{NAME}; # Device that created the events
+	my $events = deviceEvents($dev_hash, 1);
 
-	my $rawEvent = $dev_hash;
-	Log3 $devName, 4 , "rawEvent: $rawEvent";
-
+	#my $rawEvent = $dev_hash;
+	
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG|MODIFIED$/, @{$events})) {
 		#my $event_regex = ".*(closed|open|tilted)|(Rolladen_.*|Jalousie_.*).(motor:.stop.*|set_.*|motor..down.*)";
-		#my $event_regex = "subType=(blindActuator|threeStateSensor)";
-		#notifyRegexpChanged($dev_hash, $event_regex);
+		my $event_regex = "subType=(blindActuator|threeStateSensor)";
+		notifyRegexpChanged($own_hash, $event_regex);
 		HMshutterUtils_updateTimer();
 		readingsSingleUpdate($own_hash, "state", "active",1);
 	#	 X_FunctionWhoNeedsAttr($hash);
@@ -65,143 +63,152 @@ sub HMshutterUtils_Notify($$) {
 	
 	#Ein "set" löst zwei Events aus, einmal beim (logischen) Gerät direkt, und dann beim entsprechenden Aktor.
 	#Wir brauchen nur einen (den ersten).
-	
-	elsif (grep(m/^level:/, $rawEvent)){
+	elsif (grep(m/^level:.set_/, @{$events})){
 		Log3 $devName, 4, "Doppelevent: $events";
+		readingsSingleUpdate($own_hash, "state", "Doppelevent",1);
 		return; 
 	}
-	#Als erstes brauchen wir die Info, welcher Rolladen bzw. welcher Fenster- bzw. Türkontakt
-	#betroffen sind
-	my $shutter=$devName;
-	my $textEvent = "Rollo";
+	else {
+		#readingsSingleUpdate($own_hash, "state", "@{$events}",1);
 	
-	if (AttrVal($shutter,'subType', undef) ne "blindActuator"){
-		$shutter = AttrVal($devName,'ShutterAssociated',undef);
-		$textEvent = "Window";
-	} 
-	my $windowcontact = AttrVal($shutter,'WindowContactAssociated',"none");
-	my $readingsAge = ReadingsAge($shutter,'WindowContactOnHoldState',60);
+		#Als erstes brauchen wir die Info, welcher Rolladen bzw. welcher Fenster- bzw. Türkontakt
+		#betroffen sind
+
+		my $shutter = $devName;
+		my $textEvent = "Rollo";
 	
-	if (!$shutter) {}
-       
-	#Ausfiltern von Selbsttriggern!
-	elsif ($readingsAge < 2) {
-		Log3 $devName, 4, "Most likely we are triggering ourself: $devName $events";
-		return;
-	}
-	
-	else {       
-		#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
-		my $position = ReadingsVal($shutter,'pct',0);
-		my $winState = Value($windowcontact);
-		my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
-		my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
-		my $turnValue = AttrVal($shutter,'JalousieTurnValue',0);
-		my $onHoldState = ReadingsVal($shutter,'WindowContactOnHoldState',"none");
-		my $turnPosOpen = $maxPosOpen+$turnValue;
-		my $turnPosTilted = $maxPosTilted+$turnValue;
-		my $targetPosOpen = $maxPosOpen+$turnValue;
-		my $targetPosTilted = $maxPosTilted+$turnValue;
-		my $motorReading = ReadingsVal($shutter,'motor',0);
-		my $event = "none";
-	  	my $setPosition = $position;
-		if(grep(m/^set_/, $rawEvent)) { 
-			$setPosition = substr grep(m/^set_/, $rawEvent), 4, ; #FHEM-Befehl
-			if ($setPosition eq "on") {$setPosition = 100;}
-			elsif ($setPosition eq "off") {$setPosition = 0;}
-			#dann war der Trigger über Tastendruck oder Motor-Bewegung
-			} 
-	    elsif ($motorReading =~ /down/) { $setPosition = -1;}
-		#$winState = $rawEvent if (grep(m/^closed|open|tilted/, @{$events}));
-		
-		Log3 $devName, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
-	  	
-		#Unterscheidung nach Event-Art: Fahrbefehl oder stop/FK
-		if (grep(m/^motor:.down/, $rawEvent) || grep(m/^set_/, $rawEvent)){
-			#Fahrbefehl über FHEM oder Tastendruck?
-			#Fährt der Rolladen aufwärts, gibt es nichts zu tun...
-			if ($setPosition >= $position) {
-				Log3 $devName, 4, "Nothing to do, moving upwards";
-				return;
-			}
-								  
-			#Jetzt können wir nachsehen, ob der Rolladen zu weit nach unten soll
-			#(Fenster offen)...
-			if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
-				if ($position > $maxPosOpen){
-					fhem("set $shutter $maxPosOpen");
-				} else {
-					fhem("set $shutter $targetPosOpen");
-				}
-					
-				if ($setPosition == -1){
-					fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
-				} else {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
-			}
-			#...(gekippt)...
-			elsif($winState eq "tilted" && $windowcontact ne "none") {
-				if($setPosition < $maxPosTilted ) { 
-					if ($setPosition == -1) {
-						fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
-					} else {
-						fhem("setreading $shutter WindowContactOnHoldState $setPosition");
-					}
-					if ($position > $maxPosTilted){
-						fhem("set $shutter $maxPosTilted");
-					} else {
-						fhem("set $shutter $targetPosTilted");
-					}
-				}
-				else {fhem("setreading $shutter WindowContactOnHoldState $onHoldState");}
-			}
-			#...(geschlossen) = nur ReadingsAge-update, um Selbsttriggerung zu verhindern
-			elsif ($winState eq "closed") {
-				fhem("setreading $shutter WindowContactOnHoldState $onHoldState");  
-			}
+		if (AttrVal($shutter,'subType', undef) ne "blindActuator"){
+			$shutter = AttrVal($devName,'ShutterAssociated',undef);
+			$textEvent = "Window";
 		} 
+		my $windowcontact = AttrVal($shutter,'WindowContactAssociated',"none");
+		my $readingsAge = ReadingsAge($shutter,'WindowContactOnHoldState',60);
+	
+		if (!$shutter) {}
+       
+		#Ausfiltern von Selbsttriggern!
+		elsif ($readingsAge < 10) {
+			readingsSingleUpdate($own_hash, "state", "Readingage!",1);
+			Log3 $devName, 4, "Most likely we are triggering ourself: $devName $events";
+			return;
+		}
+	
+		elsif (AttrVal($shutter,'subType', undef) eq "blindActuator"){       
+			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
+			my $position = ReadingsVal($shutter,'pct',0);
+			my $winState = Value($windowcontact);
+			my $maxPosOpen = AttrVal($shutter,'WindowContactOpenMaxClosed',100)+0.5;
+			my $maxPosTilted = AttrVal($shutter,'WindowContactTiltedMaxClosed',100)+0.5;
+			my $turnValue = AttrVal($shutter,'JalousieTurnValue',0);
+			my $onHoldState = AttrVal($shutter,'WindowContactOnHoldState',"none");
+			my $turnPosOpen = $maxPosOpen+$turnValue;
+			my $turnPosTilted = $maxPosTilted+$turnValue;
+			my $targetPosOpen = $maxPosOpen+$turnValue;
+			my $targetPosTilted = $maxPosTilted+$turnValue;
+			my $motorReading = ReadingsVal($shutter,'motor',0);
+			my $event = "none";
+	  		my $setPosition = $position;
+			readingsSingleUpdate($own_hash, "state", "$devName: $position, $winState, OnHold: $onHoldState",1);
+			if(grep(m/^set_/, @{$events})) { 
+				$setPosition = substr grep(m/^set_/, @{$events}), 4, ; #FHEM-Befehl
+				if ($setPosition eq "on") {$setPosition = 100;}
+				elsif ($setPosition eq "off") {$setPosition = 0;}
+				#dann war der Trigger über Tastendruck oder Motor-Bewegung
+				} 
+	    	elsif ($motorReading =~ /down/) { $setPosition = -1;}
+			#$winState = $rawEvent if (grep(m/^closed|open|tilted/, @{$events}));
+		
+			Log3 $devName, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
+	  	
+			#Unterscheidung nach Event-Art: Fahrbefehl oder stop/FK
+			if (grep(m/^motor:.down/, @{$events}) || grep(m/^set_/, @{$events})){
+				#Fahrbefehl über FHEM oder Tastendruck?
+				#Fährt der Rolladen aufwärts, gibt es nichts zu tun...
+				if ($setPosition >= $position) {
+					Log3 $devName, 4, "Nothing to do, moving upwards";
+					return;
+				}
+								  
+				#Jetzt können wir nachsehen, ob der Rolladen zu weit nach unten soll
+				#(Fenster offen)...
+				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
+					if ($position > $maxPosOpen){
+						AnalyzeCommand(undef, set $shutter $maxPosOpen);
+					} else {
+						AnalyzeCommand(undef, set $shutter $targetPosOpen);
+					}
+					
+					if ($setPosition == -1){
+						readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$onHoldState",1);
+						#fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+					} else {readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$setPosition",1);}
+				}
+				#...(gekippt)...
+				elsif($winState eq "tilted" && $windowcontact ne "none") {
+					if($setPosition < $maxPosTilted ) { 
+						if ($setPosition == -1) {
+							readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$onHoldState",1);
+							#fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+						} else {
+							readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$setPosition",1);
+						}
+						if ($position > $maxPosTilted){
+							AnalyzeCommand(undef, set $shutter $maxPosTilted);
+						} else {
+							AnalyzeCommand(undef, set $shutter $targetPosTilted);
+						}
+					}
+					else {readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$onHoldState",1)}
+				}
+				#...(geschlossen) = nur ReadingsAge-update, um Selbsttriggerung zu verhindern
+				elsif ($winState eq "closed") {
+					readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$onHoldState",1);  
+				}
+			}	 
 			
-		#stop/FH
-		elsif (grep(m/^motor:.stop/, $rawEvent) || grep(m/^closed|open|tilted/, $rawEvent)){
+			#stop/FH
+			elsif (grep(m/^motor: stop/, @{$events}) || grep(m/^closed|open|tilted/, @{$events})){
 							
-			#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
-			if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
-				fhem("set $shutter $targetPosOpen");
-				if($onHoldState eq "none" && $motorReading =~ /stop/) { 
-					fhem("setreading $shutter WindowContactOnHoldState $setPosition");
-				}
-			}
-			#...(gekippt)...
-			elsif($winState eq "tilted" && $windowcontact ne "none") {
-				if($onHoldState ne "none") { 
-					if ($maxPosTilted < $onHoldState) { 
-						fhem("set $shutter $onHoldState");
-						fhem("setreading $shutter WindowContactOnHoldState none");
+				#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
+				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
+					AnalyzeCommand(undef, set $shutter $targetPosOpen);
+					if($onHoldState eq "none" && $motorReading =~ /stop/) { 
+						readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$setPosition",1);
 					}
-					else {
+				}
+				#...(gekippt)...
+				elsif($winState eq "tilted" && $windowcontact ne "none") {
+					if($onHoldState ne "none") { 
+						if ($maxPosTilted < $onHoldState) { 
+							AnalyzeCommand(undef, set $shutter $onHoldState);
+							readingsSingleUpdate($shutter, "WindowContactOnHoldState", "none",1);
+						}
+						else {
+							if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
+							AnalyzeCommand(undef, set $shutter $maxPosTilted);
+							readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$onHoldState",1);
+						}
+					}	
+					if ($setPosition < $maxPosTilted) {
 						if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
-						fhem("set $shutter $maxPosTilted");
-						fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+						AnalyzeCommand(undef, set $shutter $maxPosTilted);			  
+						if ($onHoldState eq "none" && $motorReading =~ /stop/) {readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$setPosition",1);}
+						elsif ($position > $onHoldState && $motorReading =~ /stop/) {readingsSingleUpdate($shutter, "WindowContactOnHoldState", "$setPosition",1);}
 					}
-				}	
-				if ($setPosition < $maxPosTilted) {
-					if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
-					fhem("set $shutter $maxPosTilted");			  
-					if ($onHoldState eq "none" && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
-					elsif ($position > $onHoldState && $motorReading =~ /stop/) {fhem("setreading $shutter WindowContactOnHoldState $setPosition");}
 				}
-			}
-			#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
-			elsif ($textEvent eq "Window" && $winState eq "closed" && $onHoldState ne "none") {
-				fhem("set $shutter $onHoldState");
-				fhem("setreading $shutter WindowContactOnHoldState none");  
-			}
-			#...oder ob es sich um einen Stop zum Drehen der Jalousielamellen handelt...
-			elsif ($textEvent eq "Rollo") {
-				if ($turnValue > 0 && $position == $turnPosOpen) {fhem("set $shutter $maxPosOpen");}
-				elsif ($turnValue > 0 && $position == $turnPosTilted) {fhem("set $shutter $maxPosTilted");}
-				#...oder die Positionsinfo wegen manueller Änderung gelöscht werden kann.
-				elsif ($position != $maxPosOpen && $position != $maxPosTilted && $onHoldState ne "none") {
-					fhem("setreading $shutter WindowContactOnHoldState none"); 
+				#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
+				elsif ($textEvent eq "Window" && $winState eq "closed" && $onHoldState ne "none") {
+					AnalyzeCommand(undef, set $shutter $onHoldState);
+					readingsSingleUpdate($shutter, "WindowContactOnHoldState", "none",1);  
+				}
+				#...oder ob es sich um einen Stop zum Drehen der Jalousielamellen handelt...
+				elsif ($textEvent eq "Rollo") {
+					if ($turnValue > 0 && $position == $turnPosOpen) {AnalyzeCommand(undef, set $shutter $maxPosOpen);}
+					elsif ($turnValue > 0 && $position == $turnPosTilted) {AnalyzeCommand(undef, set $shutter $maxPosTilted);}
+					#...oder die Positionsinfo wegen manueller Änderung gelöscht werden kann.
+					elsif ($position != $maxPosOpen && $position != $maxPosTilted && $onHoldState ne "none") {
+						readingsSingleUpdate($shutter, "WindowContactOnHoldState", "none",1);
+					}
 				}
 			}
 		}
