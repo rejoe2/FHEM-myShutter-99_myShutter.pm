@@ -26,7 +26,7 @@ sub HMshutterUtils_Define($$) {
 	my ($hash, $def) = @_;
 	my @a = split("[ \t][ \t]*", $def);
 #	Das funktioniert aus noch ungeklärten Gründen nicht:
-#	return "Wrong syntax: use define <name> HMshutterUtils" if (@a != 2);
+	return "Wrong syntax: use define <name> HMshutterUtils" if (@a != 1);
 	readingsSingleUpdate($hash, "state", "initialized",1);
 	my $name   = $a[0];
 	my $module = $a[1];
@@ -225,7 +225,7 @@ sub HMshutterUtils_updateTimer(){
 	return undef;
 }
 
-sub HMshutterUtils_set($$$) {
+sub HMshutterUtils_set(@) {
 	#Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
 	#Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
 	my ($hash, $setFunction, @param) = @_;
@@ -245,29 +245,23 @@ sub HMshutterUtils_set($$$) {
 				#Jetzt können wir sehen, ob und welche notwendigen userattr vorhanden sind
 				#und ggf. Werte zuweisen
 				if(index($oldAttrWin,"ShutterAssociated") < 0){
-					fhem("attr $windowcontact userattr $oldAttrWin ShutterAssociated");
+					readingsSingleUpdate($defs{$windowcontact}, "userattr", "$oldAttrWin ShutterAssociated:$shutter",1);
 				}
-				fhem("attr $windowcontact ShutterAssociated $shutter");
 				if(index($oldAttrRollo,"WindowContactAssociated") < 0) {
-					fhem("attr $shutter userattr $oldAttrRollo WindowContactAssociated");
+					readingsSingleUpdate($defs{$shutter}, "userattr", "$oldAttrRollo WindowContactAssociated:$windowcontact",1);
 					$oldAttrRollo = AttrVal($shutter,'userattr',undef);
             	}
-				fhem("attr $shutter WindowContactAssociated $windowcontact");
 				if(index($oldAttrRollo,"WindowContactOnHoldState") < 0) {
-					fhem("attr $shutter userattr $oldAttrRollo WindowContactOnHoldState");
+					readingsSingleUpdate($defs{$shutter}, "userattr", "$oldAttrRollo WindowContactOnHoldState:none",1);
 					$oldAttrRollo = AttrVal($shutter,'userattr',undef);
 				}
-				#fhem("attr $shutter WindowContactOnHoldState none");
-				fhem("setreading $shutter WindowContactOnHoldState none");
 				if(index($oldAttrRollo,"WindowContactOpenMaxClosed") < 0) {
-					fhem("attr $shutter userattr $oldAttrRollo WindowContactOpenMaxClosed");
+					readingsSingleUpdate($defs{$shutter}, "userattr", "$oldAttrRollo WindowContactOpenMaxClosed:$maxPosition",1);
+					$oldAttrRollo = AttrVal($shutter,'userattr',undef);
 				}
-				fhem("attr $shutter WindowContactOpenMaxOpen $maxPosition");
-				if(index($oldAttrRollo,"WindowContactTiltedMaxOpen") < 0) {
-					fhem("attr $shutter userattr $oldAttrRollo WindowContactTiltedMaxClosed");
+				if(index($oldAttrRollo,"WindowContactTiltedMaxClosed") < 0) {
+					readingsSingleUpdate($defs{$shutter}, "userattr", "$oldAttrRollo WindowContactTiltedMaxClosed:$maxPosTilted",1);	
 				}
-				fhem("attr $shutter WindowContactTiltedMaxClosed $maxPosTilted");
-
 			}
 			else { return "One of the devices has wrong subtype";}
 		}
@@ -284,10 +278,10 @@ sub HMshutterUtils_set($$$) {
             	#Jetzt können wir sehen, ob das notwendige userattr vorhanden ist
 				#und ggf. den Wert zuweisen
 				if(index($oldAttrRollo,"JalousieTurnLevel") < 0){
-                	fhem("attr $shutter userattr $oldAttrRollo JalousieTurnValue");
+					readingsSingleUpdate($defs{$shutter}, "userattr", "$oldAttrRollo JalousieTurnValue",1);	
             	}
 				$turnValue = AttrVal($hash,"defaultJalousieTurnValue",undef) if (!$turnValue);
-				fhem("attr $shutter JalousieTurnValue $turnValue");
+				readingsSingleUpdate($defs{$shutter}, "JalousieTurnValue", "$turnValue",1);
 			}
 			else { return "Device has wrong subtype";}
 		}	
