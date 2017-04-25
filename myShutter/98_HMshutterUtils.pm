@@ -1,3 +1,31 @@
+# $Id: 98_HMshutterTools.pm $
+####################################################################################################
+#
+#	98_HMshutterTools.pm
+#
+#	Tools for easier configuration of homematic shutter devices
+#	https://forum.fhem.de/index.php/topic,69704.0.html
+#	use forum contact to Beta-User if necessary
+#
+#	http://www.wiki.fhem.de
+#
+#	This file is free contribution and not part of fhem.
+#
+#	Fhem is free software: you can redistribute it and/or modify
+#	it under the terms of the GNU General Public License as published by
+#	the Free Software Foundation, either version 2 of the License, or
+#	(at your option) any later version.
+#
+#	Fhem is distributed in the hope that it will be useful,
+#	but WITHOUT ANY WARRANTY; without even the implied warranty of
+#	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#	GNU General Public License for more details.
+#
+#	You should have received a copy of the GNU General Public License
+#	along with fhem.  If not, see <http://www.gnu.org/licenses/>.
+#
+####################################################################################################
+
 package main;
 use strict;
 use warnings;
@@ -5,20 +33,20 @@ use POSIX;
 
 sub HMshutterUtils_Initialize($) {
    	my ($hash) = @_;	
-	$hash->{DefFn}         = "HMshutterUtils_Define";
-	#$hash->{UndefFn}       = "HMshutterUtils_Undef";
-	#$hash->{DeleteFn}      = "HMshutterUtils_Delete";
-#	$hash->{SetFn}         = "HMshutterUtils_Set";
-	#$hash->{GetFn}         = "HMshutterUtils_Get";
-	#$hash->{AttrFn}        = "HMshutterUtils_Attr";
-	#$hash->{ReadFn}        = "HMshutterUtils_Read";
-	#$hash->{ReadyFn}       = "HMshutterUtils_Ready";
-	$hash->{NotifyFn}      = "HMshutterUtils_Notify";
-	$hash->{AttrList} = " defaultOpenPosition" . 
-	" defaultTiltedPosition" . 
-	" defaultJalousieTurnValue";
+	$hash->{DefFn}	  = "HMshutterUtils_Define";
+	$hash->{UndefFn}  = "HMshutterUtils_Undef";
+	#$hash->{DeleteFn}  = "HMshutterUtils_Delete";
+	$hash->{SetFn}	  = "HMshutterUtils_Set";
+	#$hash->{GetFn}   = "HMshutterUtils_Get";
+	#$hash->{AttrFn}  = "HMshutterUtils_Attr";
+	#$hash->{ReadFn}  = "HMshutterUtils_Read";
+	#$hash->{ReadyFn} = "HMshutterUtils_Ready";
+	$hash->{NotifyFn} = "HMshutterUtils_Notify";
+	$hash->{AttrList} = 	" defaultOpenPosition" 
+				." defaultTiltedPosition" 
+				." defaultJalousieTurnValue";
 	$hash->{parseParams} = 1;
-	$hash->{NotifyOrderPrefix} = "55-"  # Alle Definitionen des Moduls werden bei der Eventverarbeitung zuerst geprüft
+	$hash->{NotifyOrderPrefix} = "45-"  # Alle Definitionen des Moduls werden bei der Eventverarbeitung zuerst geprüft
 	}
 
 sub HMshutterUtils_Define($$) {
@@ -36,6 +64,16 @@ sub HMshutterUtils_Define($$) {
 	return undef; 	
 	}
 
+sub HM_ShutterUtils_Undef($$) {
+    my ($hash, $arg) = @_;
+
+    RemoveInternalTimer($hash);
+    Log3 $hash->{NAME}, 4, "Instance :: Closed module 'HM_ShutterUtils': ".Dumper($hash);
+
+    return undef;
+}
+	
+	
 sub HMshutterUtils_Notify($$) {
 	my ($own_hash, $dev_hash) = @_;
 	my $ownName = $own_hash->{NAME}; # own name / hash
@@ -63,11 +101,11 @@ sub HMshutterUtils_Notify($$) {
 	
 	#Ein "set" löst zwei Events aus, einmal beim (logischen) Gerät direkt, und dann beim entsprechenden Aktor.
 	#Wir brauchen nur einen (den ersten).
-#	elsif (grep(m/^level:.set_/, @{$events})){
-#		Log3 $devName, 4, "Doppelevent: $events";
-#		readingsSingleUpdate($own_hash, "state", "Doppelevent",1);
-#		return; 
-#	}
+	elsif (grep(m/^level:.set_/, @{$events})){
+		Log3 $devName, 4, "Doppelevent: $events";
+		readingsSingleUpdate($own_hash, "state", "Doppelevent",1);
+		return; 
+	}
 	else {
 		#readingsSingleUpdate($own_hash, "state", "@{$events}",1);
 	
@@ -225,13 +263,49 @@ sub HMshutterUtils_updateTimer(){
 	return undef;
 }
 
-sub HMshutterUtils_set(@) {
+sub HMshutterUtils_set($$@) 
+{
 	#Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
 	#Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
 	my ($hash, $setFunction, @param) = @_;
+	my %sets = (inactive=>0, active=>0, Test=>0, softpeer=>0, setJalousieType=>0);
+	if($setFunction eq "?"){
+	return "Unknown argument $setFunction, choose one of ".join(" ", sort keys %sets)
+		if(!defined($sets{$setFunction}));
+	}
 	
 	#Erst mal prüfen, ob die Parameter sinnvoll sind
-	if ($setFunction = "softpeer"){
+	elsif ($setFunction == "Test"){
+		my ($shutter, $windowcontact, $maxPosition, $maxPosTilted) = @param;
+		readingsSingleUpdate($hash, "state", "Set aufgerufen, Parameter: @{$param} "); 
+	}
+	if($setFunction eq "inactive") {
+    readingsSingleUpdate($hash, "state", "inactive", 1);
+
+  }
+  elsif($setFunction eq "active") {
+    readingsSingleUpdate($hash, "state", "defined", 1)
+        if(!AttrVal($hash->{NAME}, "disable", undef));
+  }
+	elsif ($setFunction == "setTypeJalousie"){
+		my ($shutter, $turnValue) = @param;
+		if ($defs{$shutter}) {
+        	if (AttrVal($shutter,'subType', undef) eq "blindActuator") {
+            	my $oldAttrRollo = AttrVal($shutter,'userattr',undef);
+
+            	#Jetzt können wir sehen, ob das notwendige userattr vorhanden ist
+				#und ggf. den Wert zuweisen
+				if(index($oldAttrRollo,"JalousieTurnLevel") < 0){
+					readingsSingleUpdate($defs{$shutter}, "userattr", "$oldAttrRollo JalousieTurnValue",1);	
+            	}
+				$turnValue = AttrVal($hash,"defaultJalousieTurnValue",undef) if (!$turnValue);
+				readingsSingleUpdate($defs{$shutter}, "JalousieTurnValue", "$turnValue",1);
+			}
+			else { return "Device has wrong subtype";}
+		}	
+		else { return "Devices does not exist";}
+	}
+	elsif ($setFunction == "softpeer"){
 		my ($shutter, $windowcontact, $maxPosition, $maxPosTilted) = @param;
 	
 		if ($defs{$windowcontact} && $defs{$shutter}) {
@@ -269,7 +343,7 @@ sub HMshutterUtils_set(@) {
 	}	
 
 	#Erst mal prüfen, ob die Parameter sinnvoll sind
-	elsif ($setFunction = "setTypeJalousie"){
+	elsif ($setFunction == "setTypeJalousie"){
 		my ($shutter, $turnValue) = @param;
 		if ($defs{$shutter}) {
         	if (AttrVal($shutter,'subType', undef) eq "blindActuator") {
@@ -287,6 +361,7 @@ sub HMshutterUtils_set(@) {
 		}	
 		else { return "Devices does not exist";}
 	}
+	return undef;
 }
 
 1;
