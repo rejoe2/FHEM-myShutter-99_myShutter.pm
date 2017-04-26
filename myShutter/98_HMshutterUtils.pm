@@ -151,7 +151,9 @@ sub HMshutterUtils_Notify($$) {
 
 			if($setPosition =~ /set_/) { #FHEM-Befehl
 				$setPosition = substr $setPosition, 4, ;
-				$setFhem = 1 if ($setPosition != $turnPosOpen && $setPosition != $turnPosTilted && $setPosition != $targetPosOpenPosOpen && $setPosition != $targetPosOpenPosOpen && $setPosition != $onHoldState);
+				$setPosition = 100 if ($setPosition eq "on");
+				$setPosition = 0 if ($setPosition eq "off");
+				$setFhem = 1 if ($setPosition != $turnPosOpen && $setPosition != $turnPosTilted && $setPosition != $targetPosOpen && $setPosition != $targetPosTilted && $setPosition != $onHoldState);
 #			readingsSingleUpdate($own_hash, "state", "@{$events}; $devName: $setPosition; if für Value",1);
 #			return;
 			}
@@ -159,7 +161,7 @@ sub HMshutterUtils_Notify($$) {
 			$setPosition = 0 if ($setPosition eq "off");
 			 
 	    	#dann war der Trigger über Tastendruck oder Motor-Bewegung
-			if ($motorReading =~ /down/ && $setFhem == 0) { $setPosition = -1;}
+			$setPosition = -1 if ($motorReading =~ /down/ && $setFhem == 0);
 			readingsSingleUpdate($own_hash, "state", "@{$events}; $devName: $setPosition; OnHold: $onHoldState, Age: $readingsAge; $winState",1);
 			Log3 $devName, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
 #	  	return ;
@@ -170,7 +172,7 @@ sub HMshutterUtils_Notify($$) {
 				if ($setPosition >= $position) {
 #					readingsSingleUpdate($own_hash, "state", "Nothing to do, $devName moving upwards",1);
 					Log3 $devName, 4, "Nothing to do, $devName moving upwards";
-					return;
+					return undef;
 				}
 								  
 				#Jetzt können wir nachsehen, ob der Rolladen zu weit nach unten soll
@@ -182,7 +184,7 @@ sub HMshutterUtils_Notify($$) {
 						AnalyzeCommand($shutterHash,"set $shutter $targetPosOpen");
 					}
 					
-					if ($setPosition == -1){
+					if ($setPosition == -1 || $setFhem == 0 ){
 						readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$onHoldState",1);
 					} else {readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$setPosition",1);}
 				}
@@ -216,12 +218,16 @@ sub HMshutterUtils_Notify($$) {
 				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
 					AnalyzeCommand($shutterHash,"set $shutter $targetPosOpen");
 					if($onHoldState > -1 && $motorReading =~ /stop/) { 
+						if ($onHoldState<$setPosition) {
+						readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$onHoldState",1);
+						} else {
 						readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$setPosition",1);
+						}
 					}
 				}
 				#...(gekippt)...
 				elsif($winState eq "tilted" && $windowcontact ne "none") {
-					if($onHoldState > -1) { 
+					if($setPosition > -1) { 
 						if ($maxPosTilted < $onHoldState) { 
 							AnalyzeCommand($shutterHash,"set $shutter $onHoldState");
 							readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "-1",1);
@@ -235,7 +241,13 @@ sub HMshutterUtils_Notify($$) {
 					if ($setPosition < $maxPosTilted) {
 						if ($readingsAge < $readingsAgeLimit) {return "Most likely we are triggering ourself";}
 						AnalyzeCommand($shutterHash,"set $shutter $maxPosTilted");			  
-						if ($onHoldState > -1 && $motorReading =~ /stop/) {readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$setPosition",1);}
+						if ($onHoldState > -1 && $motorReading =~ /stop/) {
+							if ($onHoldState<$setPosition) {
+								readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$onHoldState",1);
+							} else {
+								readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$setPosition",1);
+							}	
+						}
 						elsif ($position > $onHoldState && $motorReading =~ /stop/) {readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$setPosition",1);}
 					}
 				}
