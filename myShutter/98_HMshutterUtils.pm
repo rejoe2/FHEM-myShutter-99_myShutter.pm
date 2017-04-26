@@ -151,7 +151,7 @@ sub HMshutterUtils_Notify($$) {
 
 			if($setPosition =~ /set_/) { #FHEM-Befehl
 				$setPosition = substr $setPosition, 4, ;
-				$setFhem = 1;
+				$setFhem = 1 if ($setPosition != $turnPosOpen && $setPosition != $turnPosTilted && $setPosition != $targetPosOpenPosOpen && $setPosition != $targetPosOpenPosOpen && $setPosition != $onHoldState);
 #			readingsSingleUpdate($own_hash, "state", "@{$events}; $devName: $setPosition; if für Value",1);
 #			return;
 			}
@@ -366,3 +366,58 @@ sub HMshutterUtils_set($$@)
 }
 
 1;
+
+=pod
+=item helper
+=item summary Offers additional functionality of Homematic shutter devices 
+=item summary_DE Stellt erweiterte Möglichkeiten der Konfiguration von Homematic Rolladenaktoren bereit
+=begin html
+<a name="HM_ShutterUtils"></a>
+<h3>HM_ShutterUtils</h3>
+<ul>
+<p>HM_ShutterUtils offer easy access to additional functionality for Homematic shutter actors as window contact based open- and close actions, timer settings and shadowing presets. The idea behind this module is to store all needed info as attributes of each shutter device. This allows easy configuration, especially when module readingsgroup is used. Other hardware is not supported (yet)<br />
+	
+</ul>
+=end html
+
+=begin html_DE
+<a name="HM_ShutterUtils"></a>
+<h3>HM_ShutterUtils</h3>
+<ul>
+<p>HM_ShutterUtils stellen auf einfachem Weg erweiterte Konfigurationsmoeglichkeiten und Funktionalitaet für Homematic Rolladenaktoren bereit, wie z.B. Positionsaenderungen abhaengig vom Status eines zugeordneten Fensterkontakts, Timer-gesteuerter Aktionen zum Oeffnen und Schließen oder zur Beschattung. Das Modulkonzept ist, alle relevanten Informationen als Attribute bei dem jeweiligen Aktor-Device zu hinterlegen, so dass auf andere Hilfskonstrukte wie Dummies usw. verzichtet werden kann. Das ermoeglichteine einfache Erstkonfiguration, gute Skalierbarkeit und simple Zugriffe auf die Einstellungen bei spaeteren Aenderungen, insbesondere, wenn das Modul "readingsgroup" zur Aenderung der Einstellungen verwendet wird. HM_ShutterUtils ist rein perl-basiert und benoetigt für den Betrieb keine anderen Abhaengigkeiten oder Module. Andere Hardware als Homematic wird derzeit nicht unterstützt.<br />
+<a name="HM_ShutterUtils_define"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; HM_ShutterUtils</code><br>
+    <br>
+    Erstellt ein Helper-Geraet. Dieses beinhaltet zum einen die erorderliche Notify-Funktionalität, um auf Tuer- oder Fensteroeffnungen zu reagieren und ermoeglicht, default-Werte für die weitere Konfiguration von Rolladenaktoren zu setzen. Ueber das Device koennen auch die zu verwaltenden Rolladenaktoren mit den Attributen versehen werden. Geplant ist außerdem, daraeber die interneren Timer zu setzen, die geplante Oeffnen-, Schließen- und Beschattungs-Funktionen ausfuehren.<br>
+  </ul>
+
+  <a name="HM_ShutterUtils_set"></a>
+  <b>Set </b>
+  <ul>
+    <li>inactive<br>
+        Deaktiviert das entsprechende Ger&auml;t. Beachte den leichten
+        semantischen Unterschied zum disable Attribut: "set inactive"
+        wird bei einem shutdown automatisch in fhem.state gespeichert, es ist
+        kein save notwendig.<br>
+        Der Einsatzzweck sind Skripte, um das notify tempor&auml;r zu
+        deaktivieren.<br>
+        Das gleichzeitige Verwenden des disable Attributes wird nicht empfohlen.
+        </li>
+    <li>active<br>
+        Aktiviert das entsprechende Ger&auml;t, siehe inactive.
+        </li>
+    <li>softpeer<br>
+        <code>set &lt;name&gt; softpeer &lt;Rolladenaktor&gt; &lt;Fensterkontakt&gt; &lt;Level Fenster offen&gt; &lt;Level Fenster gekippt&gt;</code><br>
+		Setzt die erforderlichen wechselseitigen Attribute, um automatisch auf Fensteroeffnung zu reagieren (Aussperrschutz und Lueftungsfunktion) und ein vollst&auml;ndiges Schließen des Rolladens bei geoeffnetem Fenster zu verhindern. Wird das Fenster geschlossen, wird der Rolladen automatisch weiter geschlossen, sofern dies noch der "Soll"-Position entspricht.<br>
+        </li>
+    <li>setTypeJalousie<br>
+        <code>set &lt;name&gt; setJalousieType &lt;Rolladenaktor&gt; &lt;Differenzwert&gt;</code><br>
+		Bewirkt das automatische Drehen für Jalousien nach automatischer nach-oben-Fahrt bei Lueftungsfunktionftungsfunktion.
+        </li>
+  </ul>
+  <br>
+</ul>
+=end html_DE
+=cut
