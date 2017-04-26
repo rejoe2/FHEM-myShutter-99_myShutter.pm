@@ -149,17 +149,17 @@ sub HMshutterUtils_Notify($$) {
 			my $setFhem = 0;
 			my $shutterHash = $defs{$shutter};
 
-			if($setPosition =~ /set_/) { 
-				$setPosition = substr $setPosition, 4, ; #FHEM-Befehl
-				if ($setPosition eq "on") {$setPosition = 100;}
-				elsif ($setPosition eq "off") {$setPosition = 0;}
-				
-			$setFhem = 1;
+			if($setPosition =~ /set_/) { #FHEM-Befehl
+				$setPosition = substr $setPosition, 4, ;
+				$setFhem = 1;
 #			readingsSingleUpdate($own_hash, "state", "@{$events}; $devName: $setPosition; if für Value",1);
 #			return;
-			} 
+			}
+			$setPosition = 100 if ($setPosition eq "on");
+			$setPosition = 0 if ($setPosition eq "off");
+			 
 	    	#dann war der Trigger über Tastendruck oder Motor-Bewegung
-			elsif ($motorReading =~ /down/ && $setFhem == 0) { $setPosition = -1;}
+			if ($motorReading =~ /down/ && $setFhem == 0) { $setPosition = -1;}
 			readingsSingleUpdate($own_hash, "state", "@{$events}; $devName: $setPosition; OnHold: $onHoldState, Age: $readingsAge; $winState",1);
 			Log3 $devName, 4, "$shutter setPosition: $setPosition, Age: $readingsAge; Window: $winState";
 #	  	return ;
@@ -267,6 +267,7 @@ sub HMshutterUtils_set($$@)
 {
 	#Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
 	#Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
+	my $param;
 	my ($hash, $setFunction, @param) = @_;
 	my %sets = (inactive=>0, active=>0, Test=>0, softpeer=>0, setJalousieType=>0);
 	if($setFunction eq "?"){
@@ -277,7 +278,7 @@ sub HMshutterUtils_set($$@)
 	#Erst mal prüfen, ob die Parameter sinnvoll sind
 	elsif ($setFunction == "Test"){
 		my ($shutter, $windowcontact, $maxPosition, $maxPosTilted) = @param;
-		readingsSingleUpdate($hash, "state", "Set aufgerufen, Parameter: @{$param} "); 
+		readingsSingleUpdate($hash, "state", "Set aufgerufen, Parameter: @{$param}",1); 
 	}
 	if($setFunction eq "inactive") {
     readingsSingleUpdate($hash, "state", "inactive", 1);
