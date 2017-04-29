@@ -92,7 +92,7 @@ sub HMshutterUtils_Notify($$) {
 		$own_hash->{STATE} = "active";	
 		#notifyRegexpChanged($own_hash, $event_regex);
 		HMshutterUtils_updateTimer();
-		#readingsSingleUpdate($own_hash, "state", "active",1);
+		readingsSingleUpdate($own_hash, "state", "active",1);
 	#	 X_FunctionWhoNeedsAttr($hash);
 		return undef;
 	}
@@ -133,7 +133,7 @@ sub HMshutterUtils_Notify($$) {
 			return;
 		}
 	
-		elsif (AttrVal($shutter,'subType', undef) eq "blindActuator"){       
+		elsif (AttrVal($shutter,'subType', undef) eq "blindActuator"){
 			#Wir speichern ein paar Infos, damit das nicht zu unübersichtlich wird
 			my $shutterHash = $defs{$shutter};
 			my $position = ReadingsVal($shutter,'pct',0);
@@ -175,7 +175,8 @@ sub HMshutterUtils_Notify($$) {
 
 			#Neu: im Folgenden nur noch nach dem Status des FK's Zielpositionen festlegen
 			#Auslöser: nur stop oder FK
-			if (grep(m/^motor:.stop/, @{$events}) || grep(m/^closed|open|tilted/, @{$events}) || $setFhem > -1){
+			if (grep(m/^motor:.stop/, @{$events}) || grep(m/^closed|open|tilted/, @{$events}) || $setFhem > -1)
+			{
 				if($winState eq "open" && $windowcontact ne "none") {
 					
 					#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
@@ -200,8 +201,7 @@ sub HMshutterUtils_Notify($$) {
 						if ($readingsAge < $readingsAgeLimit) {return "Most likely we are triggering ourself";}
 						AnalyzeCommand($shutterHash,"set $shutter $maxPosTilted");
 						readingsSingleUpdate($shutterHash, "WindowContactOnHoldState", "$onHoldState",1);
-						}
-					}	
+					}
 					if ($setPosition < $maxPosTilted) {
 						if ($readingsAge < $readingsAgeLimit) {return "Most likely we are triggering ourself";}
 						AnalyzeCommand($shutterHash,"set $shutter $maxPosTilted");			  
