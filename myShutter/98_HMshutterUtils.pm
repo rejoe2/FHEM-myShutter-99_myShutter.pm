@@ -1,4 +1,4 @@
-# $Id: 98_HMshutterTools.pm $
+# $Id: 98_HMshutterUtils.pm $
 ####################################################################################################
 #
 #	98_HMshutterTools.pm
@@ -44,7 +44,7 @@ sub HMshutterUtils_Initialize($) {
 	$hash->{NotifyFn} = "HMshutterUtils_Notify";
 	$hash->{AttrList} = 	" defaultOpenPosition" 
 				." defaultTiltedPosition" 
-				." defaultJalousieTurnValue";
+				." defaultJalousieTurnValue ".$readingFnAttributes;
 	$hash->{parseParams} = 1;
 	$hash->{NotifyOrderPrefix} = "45-"  # Alle Definitionen des Moduls werden bei der Eventverarbeitung zuerst geprüft
 	}
@@ -72,8 +72,7 @@ sub HM_ShutterUtils_Undef($$) {
 
     return undef;
 }
-	
-	
+
 sub HMshutterUtils_Notify($$) {
 	my ($own_hash, $dev_hash) = @_;
 	my $ownName = $own_hash->{NAME}; # own name / hash
@@ -92,8 +91,8 @@ sub HMshutterUtils_Notify($$) {
 		$own_hash->{STATE} = "active";	
 		#notifyRegexpChanged($own_hash, $event_regex);
 		HMshutterUtils_updateTimer();
-		readingsSingleUpdate($own_hash, "state", "active",1);
-	#	 X_FunctionWhoNeedsAttr($hash);
+		#readingsSingleUpdate($own_hash, "state", "active",1);
+		#X_FunctionWhoNeedsAttr($hash);
 		return undef;
 	}
 	
@@ -239,15 +238,17 @@ sub HMshutterUtils_updateTimer(){
 	return undef;
 }
 
-sub HMshutterUtils_set($$@) 
-{
+sub HMshutterUtils_Set($@) {
 	#Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
 	#Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
 	my $param;
-	my ($hash, $setFunction, @param) = @_;
+	my ($hash, @param) = @_;
 	my %sets = (inactive=>0, active=>0, Test=>0, softpeer=>0, setJalousieType=>0);
+ 	my $name = $hash->{NAME};
+	return "no value specified" if(int(@param) < 2);
+	my $setFunction = $param[1];
 	if($setFunction eq "?"){
-	return "Unknown argument $setFunction, choose one of ".join(" ", sort keys %sets)
+		return "Unknown argument $setFunction, choose one of ".join(" ", sort keys %sets)
 		if(!defined($sets{$setFunction}));
 	}
 	
@@ -261,7 +262,7 @@ sub HMshutterUtils_set($$@)
 
   }
   elsif($setFunction eq "active") {
-    readingsSingleUpdate($hash, "state", "defined", 1)
+    readingsSingleUpdate($hash, "state", "active", 1)
         if(!AttrVal($hash->{NAME}, "disable", undef));
   }
 	elsif ($setFunction == "setTypeJalousie"){
