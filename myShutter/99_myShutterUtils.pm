@@ -120,7 +120,7 @@ sub HM_ShutterUtils_Notify($$) {
 								
 				#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
 				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
-					fhem("set $shutter $targetPosOpen");
+					fhem("set $shutter $targetPosOpen") unless $motorReading =~ /up/;
 					if($onHoldState eq "none" && $motorReading =~ /stop/) { 
 						fhem("setreading $shutter WindowContactOnHoldState $setPosition");
 					}
@@ -129,13 +129,17 @@ sub HM_ShutterUtils_Notify($$) {
 				elsif($winState eq "tilted" && $windowcontact ne "none") {
 					if($onHoldState ne "none") { 
 						if ($maxPosTilted < $onHoldState) { 
-							fhem("set $shutter $onHoldState");
-							fhem("setreading $shutter WindowContactOnHoldState none");
+							unless $motorReading =~ /up/ {
+								fhem("set $shutter $onHoldState");
+								fhem("setreading $shutter WindowContactOnHoldState none");
+							}
 						}
 						else {
 							if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
-							fhem("set $shutter $maxPosTilted");
-							fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+							unless $motorReading =~ /up/ {
+								fhem("set $shutter $maxPosTilted");
+								fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
+							}
 						}
 					}	
 					if ($setPosition < $maxPosTilted) {
@@ -146,7 +150,7 @@ sub HM_ShutterUtils_Notify($$) {
 					}
 				}
 				#...oder ob eine alte Position wegen Schließung des Fensters angefahren werden soll...
-				elsif ($textEvent eq "Window" && $winState eq "closed" && $onHoldState ne "none") {
+				elsif ($textEvent eq "Window" && $winState eq "closed" && $onHoldState ne "none" && $motorReading !~ /up/) {
 					fhem("set $shutter $onHoldState");
 					fhem("setreading $shutter WindowContactOnHoldState none");  
 				}
