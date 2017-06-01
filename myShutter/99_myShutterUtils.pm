@@ -129,14 +129,14 @@ sub HM_ShutterUtils_Notify($$) {
 				elsif($winState eq "tilted" && $windowcontact ne "none") {
 					if($onHoldState ne "none") { 
 						if ($maxPosTilted < $onHoldState) { 
-							unless $motorReading =~ /up/ {
+							if ($motorReading !~ /up/) {
 								fhem("set $shutter $onHoldState");
 								fhem("setreading $shutter WindowContactOnHoldState none");
 							}
 						}
 						else {
 							if ($readingsAge < 2) {return "Most likely we are triggering ourself";}
-							unless $motorReading =~ /up/ {
+							if ($motorReading !~ /up/) {
 								fhem("set $shutter $maxPosTilted");
 								fhem("setreading $shutter WindowContactOnHoldState $onHoldState");
 							}
