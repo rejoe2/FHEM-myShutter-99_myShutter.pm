@@ -120,7 +120,7 @@ sub HM_ShutterUtils_Notify($$) {
 								
 				#Jetzt können wir nachsehen, ob der Rolladen zu weit unten ist (Fenster offen)...
 				if($setPosition < $maxPosOpen && $winState eq "open" && $windowcontact ne "none") {
-					fhem("set $shutter $targetPosOpen") unless $motorReading =~ /up/;
+					fhem("set $shutter $targetPosOpen") unless ($motorReading =~ /up/);
 					if($onHoldState eq "none" && $motorReading =~ /stop/) { 
 						fhem("setreading $shutter WindowContactOnHoldState $setPosition");
 					}
