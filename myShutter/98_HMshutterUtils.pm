@@ -275,7 +275,7 @@ sub HMshutterUtils_updateTimer(){
 	return undef;
 }
 
-sub HMshutterUtils_set($$@) 
+sub HMshutterUtils_Set($$@) 
 {
 	#Als Parameter müssen die Namen vom Fensterkontakt und Rolladen übergeben werden sowie der Maxlevel bei Fensteröffnung und tilted
 	#Call in FHEMWEB e.g.: { winShutterAssociate("Fenster_Wohnzimmer_SSW","Rolladen_WZ_SSW",90,20) }
