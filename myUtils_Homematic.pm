@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-01-18 06:17:44Z Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2019-01-21 08:30:44Z Beta-User $
 #
 
 package main;
@@ -71,8 +71,10 @@ my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
 my $state = ReadingsVal($name,"state","NACK");
 $symbol_string = "edit_settings" if $state eq "CMDs_pending";
 $symbol_string = "edit_settings" if $state eq "NACK";
-$symbol_string = "hm-cc-rt-dn" if $state eq "CMDs_done";
-$ret .= "<a href=\"/fhem?cmd.dummy=set $name getConfig&XHR=1\">" . FW_makeImage($symbol_string,"hm-cc-rt-dn") . "</a>$desired_temp°C";
+$symbol_string = "temp_control" if $state eq "CMDs_done";
+$ret .= "<a href=\"/fhem?cmd.dummy=set $name getConfig&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
+
+#$ret .= FW_widgetOverride($climaname,"selectnumbers,4.5,0.5,30.5,1,lin");
 
 return "<div>$ret</div>"
 ;
