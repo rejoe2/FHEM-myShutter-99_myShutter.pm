@@ -1,5 +1,3 @@
-
-
 ##############################################
 # $Id: myUtils_Homematic.pm 08-15 2019-01-21 08:30:44Z Beta-User $
 #
@@ -24,6 +22,7 @@ my $ret ="";
 my $climaname = $name."_Clima";
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
 $climaname = $name."_Climate" if $TC;
+my $state = ReadingsVal($name,"state","NACK");
 
 #Battery
 my $batval  = ReadingsVal($name,"battery","");
@@ -36,7 +35,7 @@ if ($state eq "CMDs_pending") {
   $command_string = "clear msgEvents"; 
 } elsif ($state eq "NACK") {
   $command_string = "clear msgEvents"; 
-  $symbol_string = "edit_settings@red" ;
+  $symbol_string = 'edit_settings@red' ;
 }
 $ret .= "<a href=\"/fhem?cmd.dummy=set $name clear msgEvents&XHR=1\">" . FW_makeImage($symbol_string,"measure_battery_50") . "</a>"; 
 
@@ -76,7 +75,6 @@ $ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
 
 #desired temperature: getConfig
 my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
-my $state = ReadingsVal($name,"state","NACK");
 $symbol_string = "temp_control" if $state eq "CMDs_done";
 $symbol_string = "sani_heating_boost" if $controlval =~ "boost";
 $ret .= "<a href=\"/fhem?cmd.dummy=set $name controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
@@ -95,6 +93,7 @@ my $name = $climaname;
 $name =~ tr/_Climate$//;
 $name =~ tr/_Clima$//;
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
+my $state = ReadingsVal($name,"state","NACK");
 
 #Battery
 my $batval  = ReadingsVal($name,"battery","");
@@ -107,7 +106,7 @@ if ($state eq "CMDs_pending") {
   $command_string = "clear msgEvents"; 
 } elsif ($state eq "NACK") {
   $command_string = "clear msgEvents"; 
-  $symbol_string = "edit_settings@red" ;
+  $symbol_string = 'edit_settings@red' ;
 }
 $ret .= "<a href=\"/fhem?cmd.dummy=set $name clear msgEvents&XHR=1\">" . FW_makeImage($symbol_string,"measure_battery_50") . "</a>"; 
 
@@ -147,7 +146,6 @@ $ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
 
 #desired temperature: getConfig
 my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
-my $state = ReadingsVal($name,"state","NACK");
 $symbol_string = "temp_control" if $state eq "CMDs_done";
 $symbol_string = "sani_heating_boost" if $controlval =~ "boost";
 $ret .= "<a href=\"/fhem?cmd.dummy=set $name controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
@@ -175,7 +173,7 @@ sub HM_TC_Holiday($$$$$$) {
   CommandSet (undef,"$climaname controlParty $temp $startDate $startTime $endDate $endTime");
 }
 
-sub easy_HM_TC_Holiday($$,$$) {
+sub easy_HM_TC_Holiday($$;$$) {
   my ($rt, $temp, $strt, $duration) = @_;
   my $climaname = $rt."_Clima";
   $climaname = $rt."_Climate" if (AttrVal($rt,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU");
@@ -192,8 +190,8 @@ sub sec2time_date($) {
   $year = sprintf("%02d", $year % 100); #shorten to 2 digits
   $mon   = $mon+1; #range in localtime is 0-11
   $mon   = "0" . $mon   if ( $mon < 10 );
-  $hour   = "0" . $hours   if ( $hour < 10 );
-  $min = "0" . $minutes if ( $minutes < 10 );
+  $hour   = "0" . $hour   if ( $hour < 10 );
+  $min = "0" . $min if ( $min < 10 );
   my $date = $mday.".".$mon.".".$year;
   my $time = $hour.":".$min;
   return "$date,$time";
