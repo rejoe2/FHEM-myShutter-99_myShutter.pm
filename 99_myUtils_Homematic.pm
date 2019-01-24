@@ -25,15 +25,15 @@ $climaname = $name."_Climate" if $TC;
 my $state = ReadingsVal($name,"state","NACK");
 
 #Battery
-my $batval  = ReadingsVal($name,"battery","");
+my $batval = ReadingsVal($name,"battery","");
 my $symbol_string = "measure_battery_0";
 my $command_string = "getConfig";
 $batval eq "ok" ? $symbol_string = "measure_battery_75" : $batval eq "low" ? $symbol_string = "measure_battery_25":undef;
 
-if ($state eq "CMDs_pending") {
+if ($state =~ /CMDs_p/) {
   $symbol_string = "edit_settings";
   $command_string = "clear msgEvents"; 
-} elsif ($state eq "NACK") {
+} elsif ($state =~ /CMDs_p|NACK/) {
   $command_string = "clear msgEvents"; 
   $symbol_string = 'edit_settings@red' ;
 }
@@ -90,8 +90,8 @@ sub devStateIcon_Clima($) {
 my $climaname = shift(@_);
 my $ret ="";
 my $name = $climaname;
-$name =~ tr/_Climate$//;
-$name =~ tr/_Clima$//;
+$name =~ s/_Climate$//;
+$name =~ s/_Clima$//;
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
 my $state = ReadingsVal($name,"state","NACK");
 
@@ -101,20 +101,22 @@ my $symbol_string = "measure_battery_0";
 my $command_string = "getConfig";
 $batval eq "ok" ? $symbol_string = "measure_battery_75" : $batval eq "low" ? $symbol_string = "measure_battery_25":undef;
 
-if ($state eq "CMDs_pending") {
+if ($state =~ /CMDs_p/) {
   $symbol_string = "edit_settings";
   $command_string = "clear msgEvents"; 
-} elsif ($state eq "NACK") {
+} elsif ($state =~ /RESPONSE|NACK/) {
   $command_string = "clear msgEvents"; 
   $symbol_string = 'edit_settings@red' ;
 }
-$ret .= "<a href=\"/fhem?cmd.dummy=set $name clear msgEvents&XHR=1\">" . FW_makeImage($symbol_string,"measure_battery_50") . "</a>"; 
+$ret .= "<a href=\"/fhem?cmd.dummy=set $name $command_string&XHR=1\">" . FW_makeImage($symbol_string,"measure_battery_50") . "</a>"; 
 
+unless ($TC) {
 #Lock Mode
 my $btnLockval = ReadingsVal($name,".R-btnLock","on") ;
 my $btnLockvalSet = $btnLockval eq "on" ? "off":"on";
 $symbol_string = $btnLockval eq "on"? "secur_locked": "secur_open";
 $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $name regSet btnLock $btnLockvalSet&XHR=1\">" . FW_makeImage($symbol_string, "locked")."</a>";
+}
 
 #ControlMode
 my $controlval = ReadingsVal($climaname,"controlMode","manual") ;
@@ -146,9 +148,10 @@ $ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
 
 #desired temperature: getConfig
 my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
-$symbol_string = "temp_control" if $state eq "CMDs_done";
-$symbol_string = "sani_heating_boost" if $controlval =~ "boost";
-$ret .= "<a href=\"/fhem?cmd.dummy=set $name controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
+$symbol_string = "temp_control";# if $state eq "CMDs_done";
+$symbol_string = "sani_heating_boost" if $controlval =~ /boost/;
+my $boostname = $TC ? $climaname : $name;
+$ret .= "<a href=\"/fhem?cmd.dummy=set $boostname controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
 
 #$ret .= FW_widgetOverride($climaname,"selectnumbers,4.5,0.5,30.5,1,lin");
 #https://forum.fhem.de/index.php/topic,26479.msg559170.html#msg559170
@@ -177,10 +180,13 @@ sub easy_HM_TC_Holiday($$;$$) {
   my ($rt, $temp, $strt, $duration) = @_;
   my $climaname = $rt."_Clima";
   $climaname = $rt."_Climate" if (AttrVal($rt,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU");
-  $strt = gettimeofday() unless defined $strt or $strt eq "now";
-  my ($startDate, $startTime) = sec2time_date($strt);
+  $strt = gettimeofday() unless defined $strt;
+  $strt = gettimeofday() if $strt eq "now";
+    my ($startDate, $startTime) = split(' ', sec2time_date($strt));
   $duration = 3*3600 unless defined $duration; # 3 hours
-  my ($endDate, $endTime) = sec2time_date($strt+$duration);
+  my ($endDate, $endTime) = split(' ', sec2time_date($strt+$duration));
+  #Log3 ($rt, 3, "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime");
+  #return "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime"
   HM_TC_Holiday($rt,$temp,$startDate,$startTime,$endDate,$endTime);
 }
 
@@ -194,6 +200,6 @@ sub sec2time_date($) {
   $min = "0" . $min if ( $min < 10 );
   my $date = $mday.".".$mon.".".$year;
   my $time = $hour.":".$min;
-  return "$date,$time";
+  return "$date $time";
 }
 1;
