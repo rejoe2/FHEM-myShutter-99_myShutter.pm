@@ -16,82 +16,13 @@ myUtils_Homematic($$)
 
 # Enter you functions below _this_ line.
 
-sub devStateIcon_RT_DN($) {
-my $name = shift(@_);
-my $ret ="";
-my $climaname = $name."_Clima";
-my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
-$climaname = $name."_Climate" if $TC;
-my $state = ReadingsVal($name,"state","NACK");
-
-#Battery
-my $batval = ReadingsVal($name,"battery","");
-my $symbol_string = "measure_battery_0";
-my $command_string = "getConfig";
-$batval eq "ok" ? $symbol_string = "measure_battery_75" : $batval eq "low" ? $symbol_string = "measure_battery_25":undef;
-
-if ($state =~ /CMDs_p/) {
-  $symbol_string = "edit_settings";
-  $command_string = "clear msgEvents"; 
-} elsif ($state =~ /CMDs_p|NACK/) {
-  $command_string = "clear msgEvents"; 
-  $symbol_string = 'edit_settings@red' ;
-}
-$ret .= "<a href=\"/fhem?cmd.dummy=set $name clear msgEvents&XHR=1\">" . FW_makeImage($symbol_string,"measure_battery_50") . "</a>"; 
-
-#Lock Mode
-my $btnLockval = ReadingsVal($name,".R-btnLock","on") ;
-my $btnLockvalSet = $btnLockval eq "on" ? "off":"on";
-$symbol_string = $btnLockval eq "on"? "secur_locked": "secur_open";
-$ret .= " " . "<a href=\"/fhem?cmd.dummy=set $name regSet btnLock $btnLockvalSet&XHR=1\">" . FW_makeImage($symbol_string, "locked")."</a>";
-
-#ControlMode
-my $controlval = ReadingsVal($climaname,"controlMode","manual") ;
-my $controlvalSet = ($controlval eq "manual")? "auto":"manual";
-$symbol_string = $controlval eq "manual" ? "sani_heating_manual" : "sani_heating_automatic";
-$ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname controlMode $controlvalSet&XHR=1\">" . FW_makeImage($symbol_string,"sani_heating_manual")."</a>";
-#my $symbol_mode = "<a href=\"/fhem?cmd.dummy=set $climaname controlMode $controlvalSet&XHR=1\">" . FW_makeImage($mode_symbol_string,"sani_heating_manual")."</a>";
-
-#Humidity or actuator
-if ($TC) {
-  my $humval = ReadingsVal($climaname,"humidity","") ;
-  #my $humcolor = "";
-  $symbol_string = "humidity";
-  $ret .= " " . FW_makeImage($symbol_string,"humidity") . " $humval%rH";
-} else {
-  my $actorval = ReadingsVal($name,"actuator","");
-  my $actor_rounded = int (($actorval +5)/10)*10;
-  $symbol_string = "sani_heating_level_$actor_rounded";
-  $ret .= " " . FW_makeImage($symbol_string,"sani_heating_level_40") ;
-}
-
-#measured temperature
-my $tempval = ReadingsVal($climaname,"measured-temp",0) ;
-my $tempcolor ="";
-my $symbol_string = "temp_temperature";
- $symbol_string .= "@".$tempcolor if ($tempcolor);
-$ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
-
-
-#desired temperature: getConfig
-my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
-$symbol_string = "temp_control" if $state eq "CMDs_done";
-$symbol_string = "sani_heating_boost" if $controlval =~ "boost";
-$ret .= "<a href=\"/fhem?cmd.dummy=set $name controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
-
-#$ret .= FW_widgetOverride($climaname,"selectnumbers,4.5,0.5,30.5,1,lin");
-#https://forum.fhem.de/index.php/topic,26479.msg559170.html#msg559170
-
-return "<div><p style=\"text-align:right\">$ret</p></div>"
-;
-}
-
 sub devStateIcon_Clima($) {
 my $climaname = shift(@_);
 my $ret ="";
 my $name = $climaname;
 $name =~ s/_Climate$//;
 $name =~ s/_Clima$//;
+$name = InternalVal($climaname,"device",$name);
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
 my $state = ReadingsVal($name,"state","NACK");
 
@@ -110,13 +41,11 @@ if ($state =~ /CMDs_p/) {
 }
 $ret .= "<a href=\"/fhem?cmd.dummy=set $name $command_string&XHR=1\">" . FW_makeImage($symbol_string,"measure_battery_50") . "</a>"; 
 
-unless ($TC) {
 #Lock Mode
 my $btnLockval = ReadingsVal($name,".R-btnLock","on") ;
 my $btnLockvalSet = $btnLockval eq "on" ? "off":"on";
 $symbol_string = $btnLockval eq "on"? "secur_locked": "secur_open";
 $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $name regSet btnLock $btnLockvalSet&XHR=1\">" . FW_makeImage($symbol_string, "locked")."</a>";
-}
 
 #ControlMode
 my $controlval = ReadingsVal($climaname,"controlMode","manual") ;
@@ -145,6 +74,14 @@ my $symbol_string = "temp_temperature";
  $symbol_string .= "@".$tempcolor if ($tempcolor);
 $ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
 
+#progSelect
+if ($TC) {
+#Reading: R-weekProgSel  (z.B. prog1) Bild: rc_1 usw., 
+my $progVal = ReadingsVal($climaname,"R-weekPrgSel","none") ;
+my $progValSet = $progVal =~ /prog1/ ? "prog2" : $progVal =~ /prog2/ ? "prog3":"prog1" ;
+$symbol_string = $progVal =~ /prog1/ ? "rc_1" : $progVal =~ /prog2/ ? "rc_2": $progVal =~ /prog3/ ?"rc_3":"unknown" ;
+$ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname regSet weekPrgSel $progValSet&XHR=1\">" . FW_makeImage($symbol_string, "rc_1")."</a> ";
+}
 
 #desired temperature: getConfig
 my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
