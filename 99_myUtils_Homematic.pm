@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-01-21 08:30:44Z Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2019-02-14 10:30:44Z Beta-User $
 #
 
 package main;
@@ -9,7 +9,7 @@ use warnings;
 use POSIX;
 
 sub
-myUtils_Homematic($$)
+myUtils_Homematic_Initialize($$)
 {
   my ($hash) = @_;
 }
@@ -43,19 +43,27 @@ $ret .= "<a href=\"/fhem?cmd.dummy=set $name $command_string&XHR=1\">" . FW_make
 
 #Lock Mode
 my $btnLockval = ReadingsVal($name,".R-btnLock","on") ;
-my $btnLockvalSet = $btnLockval eq "on" ? "off":"on";
-$symbol_string = $btnLockval eq "on"? "secur_locked": "secur_open";
+#$btnLockval = InternalVal($name,".R-btnLock","on") if ($TC);
+my $btnLockvalSet = $btnLockval =~ /on/ ? "off":"on";
+$symbol_string = $btnLockval =~ /on/ ? "secur_locked": "secur_open";
 $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $name regSet btnLock $btnLockvalSet&XHR=1\">" . FW_makeImage($symbol_string, "locked")."</a>";
 
 #ControlMode
 my $controlval = ReadingsVal($climaname,"controlMode","manual") ;
-my $controlvalSet = ($controlval eq "manual")? "auto":"manual";
-$symbol_string = $controlval eq "manual" ? "sani_heating_manual" : "sani_heating_automatic";
+my $controlvalSet = ($controlval =~ /manual/)? "auto":"manual";
+$symbol_string = $controlval =~ /manual/ ? "sani_heating_manual" : "sani_heating_automatic";
 $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname controlMode $controlvalSet&XHR=1\">" . FW_makeImage($symbol_string,"sani_heating_manual")."</a>";
 #my $symbol_mode = "<a href=\"/fhem?cmd.dummy=set $climaname controlMode $controlvalSet&XHR=1\">" . FW_makeImage($mode_symbol_string,"sani_heating_manual")."</a>";
 
-#Humidity or actuator
+#Humidity/program or actuator
 if ($TC) {
+  #progSelect
+  #Reading: R-weekProgSel  (z.B. prog1) Bild: rc_1 usw., 
+  my $progVal = ReadingsVal($climaname,"R-weekPrgSel","none") ;
+  my $progValSet = $progVal =~ /prog1/ ? "prog2" : $progVal =~ /prog2/ ? "prog3":"prog1" ;
+  $symbol_string = $progVal =~ /prog1/ ? "rc_1" : $progVal =~ /prog2/ ? "rc_2": $progVal =~ /prog3/ ?"rc_3":"unknown" ;
+  $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname regSet weekPrgSel $progValSet&XHR=1\">" . FW_makeImage($symbol_string, "rc_1")."</a> ";
+  #humidity
   my $humval = ReadingsVal($climaname,"humidity","") ;
   #my $humcolor = "";
   $symbol_string = "humidity";
@@ -74,24 +82,12 @@ my $symbol_string = "temp_temperature";
  $symbol_string .= "@".$tempcolor if ($tempcolor);
 $ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
 
-#progSelect
-if ($TC) {
-#Reading: R-weekProgSel  (z.B. prog1) Bild: rc_1 usw., 
-my $progVal = ReadingsVal($climaname,"R-weekPrgSel","none") ;
-my $progValSet = $progVal =~ /prog1/ ? "prog2" : $progVal =~ /prog2/ ? "prog3":"prog1" ;
-$symbol_string = $progVal =~ /prog1/ ? "rc_1" : $progVal =~ /prog2/ ? "rc_2": $progVal =~ /prog3/ ?"rc_3":"unknown" ;
-$ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname regSet weekPrgSel $progValSet&XHR=1\">" . FW_makeImage($symbol_string, "rc_1")."</a> ";
-}
-
 #desired temperature: getConfig
 my $desired_temp = ReadingsVal($name,"desired-temp","21") ;
 $symbol_string = "temp_control";# if $state eq "CMDs_done";
 $symbol_string = "sani_heating_boost" if $controlval =~ /boost/;
 my $boostname = $TC ? $climaname : $name;
 $ret .= "<a href=\"/fhem?cmd.dummy=set $boostname controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
-
-#$ret .= FW_widgetOverride($climaname,"selectnumbers,4.5,0.5,30.5,1,lin");
-#https://forum.fhem.de/index.php/topic,26479.msg559170.html#msg559170
 
 return "<div><p style=\"text-align:right\">$ret</p></div>"
 ;
@@ -115,12 +111,12 @@ sub HM_TC_Holiday($$$$$$) {
 
 sub easy_HM_TC_Holiday($$;$$) {
   my ($rt, $temp, $strt, $duration) = @_;
-  my $climaname = $rt."_Clima";
-  $climaname = $rt."_Climate" if (AttrVal($rt,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU");
-  $strt = gettimeofday() unless defined $strt;
-  $strt = gettimeofday() if $strt eq "now";
-    my ($startDate, $startTime) = split(' ', sec2time_date($strt));
   $duration = 3*3600 unless defined $duration; # 3 hours
+  $strt = gettimeofday() unless defined $strt;
+  $duration = 0 if $strt eq "stop";
+  $strt = gettimeofday() if $strt eq "now";
+  $strt = gettimeofday() if $strt eq "stop";
+    my ($startDate, $startTime) = split(' ', sec2time_date($strt));
   my ($endDate, $endTime) = split(' ', sec2time_date($strt+$duration));
   #Log3 ($rt, 3, "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime");
   #return "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime"
@@ -140,3 +136,4 @@ sub sec2time_date($) {
   return "$date $time";
 }
 1;
+
