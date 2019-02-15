@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-02-14 10:30:44Z Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2019-02-15 09:30:42Z Beta-User $
 #
 
 package main;
@@ -19,18 +19,15 @@ myUtils_Homematic_Initialize($$)
 sub devStateIcon_Clima($) {
 my $climaname = shift(@_);
 my $ret ="";
-my $name = $climaname;
-$name =~ s/_Climate$//;
-$name =~ s/_Clima$//;
-$name = InternalVal($climaname,"device",$name);
+my $name = InternalVal($climaname,"device",$climaname);
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
 my $state = ReadingsVal($name,"state","NACK");
 
 #Battery
-my $batval  = ReadingsVal($name,"battery","");
-my $symbol_string = "measure_battery_0";
+my $batval  = ReadingsVal($name,"batteryLevel","");
+my $symbol_string = "measure_battery_";
 my $command_string = "getConfig";
-$batval eq "ok" ? $symbol_string = "measure_battery_75" : $batval eq "low" ? $symbol_string = "measure_battery_25":undef;
+if ($batval >=3) {$symbol_string .= "100"} elsif ($batval >2.6) {$symbol_string .= "75"} elsif ($batval >2.4) {$symbol_string .= "50"} elsif ($batval >2.1) {$symbol_string .= "25"} else {$symbol_string .= '0@red'};
 
 if ($state =~ /CMDs_p/) {
   $symbol_string = "edit_settings";
@@ -136,4 +133,3 @@ sub sec2time_date($) {
   return "$date $time";
 }
 1;
-
