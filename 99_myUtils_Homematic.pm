@@ -133,3 +133,38 @@ sub sec2time_date($) {
   return "$date $time";
 }
 1;
+
+=pod
+=begin html
+
+<a name="myUtils_Homematic"></a>
+<h3>myUtils_Homematic</h3>
+<ul>
+  <b>devStateIcon_Clima</b>
+  <br>
+  Use this to get a multifunctional iconset to control HM-CC-RT-DN or HM-TC-IT-WM-W-EU devices<br>
+  Examples: 
+  <ul>
+   <code>attr Thermostat_Esszimmer_Gang_Clima devStateIcon {devStateIcon_Clima($name)}<br> attr Thermostat_Esszimmer_Gang_Clima webCmd desired-temp</code><br>
+  </ul>
+  <b>HM_TC_Holiday</b>
+  <br>
+  Use this to set one RT or WT device in party mode<br>
+  Parameters: Device, Temperature, start date, start time, end date, end time<br>
+  NOTE: as these devices only accept time settings to 00 minutes and 30 minutes, all other figures will be rounded down to 00 or 30 minutes. Don't bother to do it by yourself, but note, effectively, the result could be a shorter periode of party mode.<br>
+  Example: 
+  <ul>
+   <code>{HM_TC_Holiday ("Thermostat_Esszimmer_Gang","16", "14.02.19", "16:30", "15.02.19" ,"05:00")}</code><br>
+  </ul>
+  <b>easy_HM_TC_Holiday</b>
+  <br>
+  Use this to set one RT or WT device in party mode (or end it) without doing muck calculation in advance<br>
+  Parameters: Device, Temperature. Optional: starttime in seconds - may also be "now" (default, when no argument is given), and duration in seconds (defaults to 3 hours).<br>
+    NOTE: rounding is applied as described at HM_TC_Holiday.<br>
+  Example: 
+  <ul>
+   <code>{easy_HM_TC_Holiday(<Thermostat>,"16" [,<startsec>,<duration in sec>])}</code><br>
+  </ul>
+</ul>
+=end html
+=cut
