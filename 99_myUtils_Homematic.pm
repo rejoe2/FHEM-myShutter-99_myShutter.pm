@@ -161,9 +161,13 @@ sub sec2time_date($) {
   Use this to set one RT or WT device in party mode (or end it) without doing muck calculation in advance<br>
   Parameters: Device, Temperature. Optional: starttime in seconds - may also be "now" (default, when no argument is given), and duration in seconds (defaults to 3 hours).<br>
     NOTE: rounding is applied as described at HM_TC_Holiday.<br>
-  Example: 
+  Examples: 
   <ul>
-   <code>{easy_HM_TC_Holiday(<Thermostat>,"16" [,<startsec>,<duration in sec>])}</code><br>
+   <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","16")}</code><br>
+   <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","16","now")}</code><br>
+   <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","16","stop")}</code><br>
+   <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","16","now","9000"])}</code><br>
+   <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","21.5","3600","9000")}</code><br>
   </ul>
 </ul>
 =end html
