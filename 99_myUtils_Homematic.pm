@@ -97,12 +97,14 @@ sub HM_TC_Holiday($$$$$$) {
   my $climaname = $rt."_Clima";
   $climaname = $rt."_Climate" if (AttrVal($rt,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU");
 
-  # HM-CC-RT-DN and HM-TC-IT-WM-W-EU accept time arguments only in HH:00 or HH:30 format
+  # HM-CC-RT-DN and HM-TC-IT-WM-W-EU accept time arguments only as plain five minutes
   # So we have to round down $startTime und $endTime
-  $startTime =~ s/\:[0-2].$/:00/;
-  $startTime =~ s/\:[3-5].$/:30/;
-  $endTime =~ s/\:[0-2].$/:00/;
-  $endTime =~ s/\:[3-5].$/:30/;
+  $startTime = roundTime2fiveMinutes($startTime);
+  $endTime = roundTime2fiveMinutes($endTime);
+  #$startTime =~ s/\:[0-2].$/:00/;
+  #$startTime =~ s/\:[3-5].$/:30/;
+  #$endTime =~ s/\:[0-2].$/:00/;
+  #$endTime =~ s/\:[3-5].$/:30/;
   CommandSet (undef,"$climaname controlParty $temp $startDate $startTime $endDate $endTime");
 }
 
@@ -113,7 +115,13 @@ sub easy_HM_TC_Holiday($$;$$) {
   $duration = 0 if $strt eq "stop";
   $strt = gettimeofday() if $strt eq "now";
   $strt = gettimeofday() if $strt eq "stop";
-    my ($startDate, $startTime) = split(' ', sec2time_date($strt));
+  if ($strt =~ /^(\d+):(\d+)$/) {
+    $strt = $1*DAYSECONDS + $2*HOURSECONDS;
+  };
+  if ($duration =~ /^(\d+):(\d+)$/) {
+    $duration = $1*DAYSECONDS + $2*HOURSECONDS;
+  };
+  my ($startDate, $startTime) = split(' ', sec2time_date($strt));
   my ($endDate, $endTime) = split(' ', sec2time_date($strt+$duration));
   #Log3 ($rt, 3, "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime");
   #return "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime"
@@ -132,6 +140,20 @@ sub sec2time_date($) {
   my $time = $hour.":".$min;
   return "$date $time";
 }
+
+sub roundTime2fiveMinutes($)
+{
+  my ($time) = @_;
+  if ($time =~ /^([0-2]\d):(\d)(\d)$/)
+  {
+    my $n = $3;
+    $n = "0" if ($n<5);
+    $n = "5" if ($n>5);
+    return "$1:$2$n";
+  }
+  return undef;
+}
+
 1;
 
 =pod
@@ -158,8 +180,8 @@ sub sec2time_date($) {
   </ul>
   <b>easy_HM_TC_Holiday</b>
   <br>
-  Use this to set one RT or WT device in party mode (or end it) without doing muck calculation in advance<br>
-  Parameters: Device, Temperature. Optional: starttime in seconds - may also be "now" (default, when no argument is given), and duration in seconds (defaults to 3 hours).<br>
+  Use this to set one RT or WT device in party mode (or end it) without doing much calculation in advance<br>
+  Parameters: Device, Temperature. Optional: starttime in seconds or as days:hours - may also be "now" (default, when no argument is given), and duration in seconds or as days:hours (defaults to 3 hours).<br>
     NOTE: rounding is applied as described at HM_TC_Holiday.<br>
   Examples: 
   <ul>
@@ -168,6 +190,7 @@ sub sec2time_date($) {
    <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","16","stop")}</code><br>
    <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","16","now","9000"])}</code><br>
    <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","21.5","3600","9000")}</code><br>
+   <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","21.5","1:5","32:14")}</code><br>
   </ul>
 </ul>
 =end html
