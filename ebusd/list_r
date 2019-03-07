@@ -1,0 +1,72 @@
+define MQTT2_ebusd MQTT2_DEVICE ebusd
+attr MQTT2_ebusd IODev ebusMQTT
+attr MQTT2_ebusd readingList ebusd\.8/global/running:.* running\
+ebusd\.8/global/version:.* version\
+ebusd\.8/global/updatecheck:.* updatecheck\
+ebusd/global/version:.* version\
+ebusd/global/running:.* running\
+ebusd/global/updatecheck:.* updatecheck\
+ebusd/global/uptime:.* uptime
+attr MQTT2_ebusd room MQTT2_DEVICE
+
+define MQTT2_ebusd_430 MQTT2_DEVICE ebusd_430
+attr MQTT2_ebusd_430 IODev ebusMQTT
+attr MQTT2_ebusd_430 readingList ebusd/430/Hc1HeatCurve/get:.* get\
+ebusd/430/HwcTempDesired/get:.* get\
+ebusd/430/Hc1HeatCurve:.* { json2nameValue($EVENT, 'Hc1HeatCurve_', $JSONMAP) }\
+ebusd/430/HwcTempDesired:.* { json2nameValue($EVENT, 'HwcTempDesired_', $JSONMAP) }
+attr MQTT2_ebusd_430 room MQTT2_DEVICE
+
+define MQTT2_ebusd_bai MQTT2_DEVICE ebusd_bai
+attr MQTT2_ebusd_bai IODev ebusMQTT
+attr MQTT2_ebusd_bai readingList ebusd/broadcast/vdatetime:.* { json2nameValue($EVENT, 'vdatetime_', $JSONMAP) }\
+ebusd/bai/WaterPressure/get:.* get\
+ebusd/bai/FlowTemp/get:.* get\
+ebusd/bai/ReturnTemp/get:.* get\
+ebusd/bai/OutdoorstempSensor/get:.* get\
+ebusd/bai/WaterPressure:.* { json2nameValue($EVENT, 'WaterPressure_', $JSONMAP) }\
+ebusd/bai/FlowTemp:.* { json2nameValue($EVENT, 'FlowTemp_', $JSONMAP) }\
+ebusd/bai/ReturnTemp:.* { json2nameValue($EVENT, 'ReturnTemp_', $JSONMAP) }\
+ebusd/bai/OutdoorstempSensor:.* { json2nameValue($EVENT, 'OutdoorstempSensor_', $JSONMAP) }
+attr MQTT2_ebusd_bai room MQTT2_DEVICE
+
+define MQTT2_mosqCLIENT MQTT2_DEVICE mosqCLIENT
+attr MQTT2_mosqCLIENT IODev ebusMQTT
+attr MQTT2_mosqCLIENT readingList mosqCLIENT:tele/sonoff_keller/LWT:.* LWT
+attr MQTT2_mosqCLIENT room MQTT2_DEVICE
+
+define MQTT2_mosqCLIENT3 MQTT2_DEVICE mosqCLIENT_brige
+attr MQTT2_mosqCLIENT3 IODev ebusMQTT
+attr MQTT2_mosqCLIENT3 autocreate 1
+attr MQTT2_mosqCLIENT3 bridgeRegexp (ebus.)[^/]*/(bai|broadcast)/.*:.* "$1_bai"\
+(ebus.)[^/]*/([\d]+)/.*:.* "$1_$2"\
+(ebus.)[^/]*[/][^b][a-zA-Z]+[/].*:.* "$1"
+attr MQTT2_mosqCLIENT3 model A_00_MQTT2_CLIENT_general_bridge
+attr MQTT2_mosqCLIENT3 room MQTT2_DEVICE
+attr MQTT2_mosqCLIENT3 setStateList on off
+attr MQTT2_mosqCLIENT3 verbose 5
+
+setstate MQTT2_ebusd 2019-03-07 10:12:06 associatedWith MQTT2_mosqCLIENT3
+setstate MQTT2_ebusd 2019-03-07 10:11:56 running true
+setstate MQTT2_ebusd 2019-03-07 10:11:56 updatecheck "version 3.3 available, broadcast.csv: different version available, vaillant/15.430.csv: different version available, vaillant/bai.0010006101.inc: different version available, vaillant/broadcast.csv: different version available, vaillant/errors.inc: different version available, vaillant/hcmode.inc: different version available"
+setstate MQTT2_ebusd 2019-03-07 10:12:22 uptime 69952
+setstate MQTT2_ebusd 2019-03-07 10:11:56 version "ebusd 3.2.v3.2-30-gb2c63ac"
+
+setstate MQTT2_ebusd_430 2019-03-07 10:12:05 Hc1HeatCurve_curve_value 1.10
+setstate MQTT2_ebusd_430 2019-03-07 10:12:05 HwcTempDesired_temp1_value 55.0
+setstate MQTT2_ebusd_430 2019-03-07 10:12:05 associatedWith MQTT2_mosqCLIENT3
+setstate MQTT2_ebusd_430 2019-03-07 10:12:04 get 
+
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 FlowTemp_sensor_value ok
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 FlowTemp_temp_value 24.50
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 OutdoorstempSensor_sensor_value ok
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 OutdoorstempSensor_temp_value 21.62
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 ReturnTemp_sensor_value ok
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 ReturnTemp_temp_value 24.69
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 ReturnTemp_tempmirror_value 65140
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 WaterPressure_press_value 1.683
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 WaterPressure_sensor_value ok
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 associatedWith MQTT2_mosqCLIENT3
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:05 get 
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:00 vdatetime_date_value 07.03.2019
+setstate MQTT2_ebusd_bai 2019-03-07 10:12:00 vdatetime_time_value 11:10:30
