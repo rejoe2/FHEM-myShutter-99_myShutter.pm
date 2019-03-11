@@ -828,11 +828,11 @@ sub onInternalMessage($$) {
     $type == I_HEARTBEAT_RESPONSE and do {
         readingsSingleUpdate($hash, "heartbeat", "last", 0);
         refreshInternalMySTimer($hash,"Alive") if $hash->{timeoutAlive};
-        if $hash->{nowSleeping} {
+        if ($hash->{nowSleeping}) {
           $hash->{nowSleeping} = 0 ;
-          sendRetainedMessages();
-       }
-       #$hash->{$typeStr} = $msg->{payload};
+          sendRetainedMessages($hash);
+        }
+        #$hash->{$typeStr} = $msg->{payload};
     last;
     };
     $type == I_LOCKED and do {
@@ -905,7 +905,7 @@ sub onInternalMessage($$) {
         refreshInternalMySTimer($hash,"Asleep");
         refreshInternalMySTimer($hash,"Alive") if $hash->{timeoutAlive};
         MYSENSORS::Timer($hash);
-        sendRetainedMessages() ;
+        sendRetainedMessages($hash) ;
         last;
     };
     $type == I_POST_SLEEP_NOTIFICATION and do {
@@ -928,10 +928,10 @@ sub sendClientMessage($%) {
       sendMessage($hash->{IODev},%msg);
       refreshInternalMySTimer($hash,"Ack") if (($msg{ack} or $hash->{IODev}->{ack}) and $hash->{timeoutAck});
       Log3 ($name,5,"$name is not sleeping, sending message!");
-       if $hash->{nowSleeping} {
-	   $hash->{nowSleeping} = 0 ;
-	   sendRetainedMessages();
-	}
+      if ($hash->{nowSleeping}) {
+        $hash->{nowSleeping} = 0 ;
+        sendRetainedMessages($hash);
+      }
       $hash->{retainedMessages}=scalar(@$messages) if (defined $hash->{retainedMessages});
     } else {
       Log3 ($name,5,"$name is sleeping, enqueing message! ");
@@ -1131,7 +1131,9 @@ sub timeoutMySTimer($) {
     }
 }
 
-sub sendRetainedMessages() {
+sub sendRetainedMessages($) {
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
     my $retainedMsg;
     while (ref ($retainedMsg = shift @{$hash->{retainedMessagesForRadioId}->{messages}}) eq 'HASH') {
        sendClientMessage($hash,%$retainedMsg);
