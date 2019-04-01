@@ -63,7 +63,6 @@ sub MYSENSORS_Initialize($) {
     last-sensorid
     stateFormat
     OTA_firmwareConfig
-    mapNode0Id:0,[257-299]
   );
   $hash->{AttrList} = $hash->{AttrList} = join(" ", @attrList)
 }
@@ -335,6 +334,7 @@ sub onPresentationMsg($$) {
     if ($hash->{'inclusion-mode'}) {
       $clientname = "MYSENSOR_$msg->{radioId}";
       CommandDefine(undef,"$clientname MYSENSORS_DEVICE $msg->{radioId}");
+      CommandAttr(undef,"$clientname IODev $hash->{NAME}");
       $client = $main::defs{$clientname};
       return unless ($client);
     } else {
@@ -390,10 +390,8 @@ sub onInternalMsg($$) {
       };
       $type == I_HEARTBEAT_RESPONSE and do {
          RemoveInternalTimer($hash,"MYSENSORS::Start"); ## Reset reconnect because timeout was not reached
-         readingsSingleUpdate($hash, "heartbeat", "last", 0);
-         if defined $hash->{mapNode0Id}  {
-           MYSENSORS::DEVICE::onInternalMessage($client,$msg) if (my $client = matchClient($hash,$msg)) ;
-         }
+         readingsSingleUpdate($hash, "heartbeat", "alive", 0);
+         MYSENSORS::DEVICE::onInternalMessage($client,$msg) if (my $client = matchClient($hash,$msg)) ;
       };
       $type == I_VERSION and do {
         $hash->{version} = $msg->{payload};
@@ -673,10 +671,6 @@ sub matchChan76GWClient($$) {
            <dd>a description / comment for the firmware</dd>
          </dl></p>
     </li>
-    <li>
-      <p><code>attr &lt;name&gt; mapNode0Id</code><br/>
-         enables forwarding heartbeat messages to the GW's sensor Node</p>
-    </li>  
   </ul>
 </ul>
 
