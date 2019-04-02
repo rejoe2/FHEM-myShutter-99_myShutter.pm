@@ -333,8 +333,10 @@ sub onPresentationMsg($$) {
   unless ($client) {
     if ($hash->{'inclusion-mode'}) {
       $clientname = "MYSENSOR_$msg->{radioId}";
+      $clientname = "$hash->{NAME}_DEVICE_0"if defined $main::defs{$clientname}; 
       CommandDefine(undef,"$clientname MYSENSORS_DEVICE $msg->{radioId}");
       CommandAttr(undef,"$clientname IODev $hash->{NAME}");
+      CommandAttr(undef,"$clientname room AttrVal($clientname,"room","MYSENSORS_DEVICE");
       $client = $main::defs{$clientname};
       return unless ($client);
     } else {
