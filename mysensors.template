@@ -53,7 +53,7 @@ attr DEVICE model A_03a_bed_occupancy
 
 name:A_17a_Motion
 filter:TYPE=MYSENSORS_DEVICE
-desc:Applies to standard bed occupancy sketch (MPR121) <br>NOTE: Sketch is still in MySensors 1.x format and has to be changed for use with recent arduino libs.NOTE: Untested first template version
+desc:Applies to standard motion sketch
 attr DEVICE stateFormat Motion: motion1
 attr DEVICE model A_17a_Motion
 
