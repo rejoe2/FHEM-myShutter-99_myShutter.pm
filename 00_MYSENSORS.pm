@@ -56,18 +56,15 @@ sub MYSENSORS_Initialize($) {
   $hash->{AttrFn}   = "MYSENSORS::Attr";
   $hash->{NotifyFn} = "MYSENSORS::Notify";
 
-   my @attrList = qw(
-    autocreate:1
-    requestAck:1
-    first-sensorid
-    last-sensorid
-    stateFormat
-    OTA_firmwareConfig
-  );
-  $hash->{AttrList} = $hash->{AttrList} = join(" ", @attrList)
+  $hash->{AttrList} = 
+    "autocreate:1 ".
+    "requestAck:1 ".
+    "first-sensorid ".
+    "last-sensorid ".
+    "stateFormat ".
+    "OTA_firmwareConfig";
 }
 
-  
 package MYSENSORS;
 
 use Exporter ('import');
@@ -333,10 +330,7 @@ sub onPresentationMsg($$) {
   unless ($client) {
     if ($hash->{'inclusion-mode'}) {
       $clientname = "MYSENSOR_$msg->{radioId}";
-      $clientname = "$hash->{NAME}_DEVICE_0"if defined $main::defs{$clientname}; 
       CommandDefine(undef,"$clientname MYSENSORS_DEVICE $msg->{radioId}");
-      CommandAttr(undef,"$clientname IODev $hash->{NAME}");
-      CommandAttr(undef,"$clientname room AttrVal($clientname,"room","MYSENSORS_DEVICE");
       $client = $main::defs{$clientname};
       return unless ($client);
     } else {
@@ -391,9 +385,8 @@ sub onInternalMsg($$) {
         last;
       };
       $type == I_HEARTBEAT_RESPONSE and do {
-         RemoveInternalTimer($hash,"MYSENSORS::Start"); ## Reset reconnect because timeout was not reached
-         readingsSingleUpdate($hash, "heartbeat", "alive", 0);
-         MYSENSORS::DEVICE::onInternalMessage($client,$msg) if (my $client = matchClient($hash,$msg)) ;
+        RemoveInternalTimer($hash,"MYSENSORS::Start"); ## Reset reconnect because timeout was not reached
+	readingsSingleUpdate($hash, "heartbeat", "last", 0);
       };
       $type == I_VERSION and do {
         $hash->{version} = $msg->{payload};
