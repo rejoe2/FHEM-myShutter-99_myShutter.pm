@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-02-15 09:30:42Z Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2019-04-04 Beta-User $
 #
 
 package main;
@@ -99,12 +99,12 @@ sub HM_TC_Holiday($$$$$$) {
 
   # HM-CC-RT-DN and HM-TC-IT-WM-W-EU accept time arguments only as plain five minutes
   # So we have to round down $startTime und $endTime
-  $startTime = roundTime2fiveMinutes($startTime);
-  $endTime = roundTime2fiveMinutes($endTime);
-  #$startTime =~ s/\:[0-2].$/:00/;
-  #$startTime =~ s/\:[3-5].$/:30/;
-  #$endTime =~ s/\:[0-2].$/:00/;
-  #$endTime =~ s/\:[3-5].$/:30/;
+  #$startTime = roundTime2fiveMinutes($startTime);
+  #$endTime = roundTime2fiveMinutes($endTime);
+  $startTime =~ s/\:[0-2].$/:00/;
+  $startTime =~ s/\:[3-5].$/:30/;
+  $endTime =~ s/\:[0-2].$/:00/;
+  $endTime =~ s/\:[3-5].$/:30/;
   CommandSet (undef,"$climaname controlParty $temp $startDate $startTime $endDate $endTime");
 }
 
