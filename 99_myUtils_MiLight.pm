@@ -82,7 +82,7 @@ sub milight_dimm($) {
 =begin html
 
 <a name="myUtils_MiLight"></a>
-<h3>myUtils_myUtils_MiLight</h3>
+<h3>myUtils_MiLight</h3>
 <ul>
   <b>General remarks on the other functions</b><br>
   milight_dimm_indirect($$) and milight_toggle_indirect($) are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
@@ -93,7 +93,7 @@ sub milight_dimm($) {
 </code><br>
   </ul>
   <ul>
-   <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
+   <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br><br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
   </ul>
 </ul>
 =end html
