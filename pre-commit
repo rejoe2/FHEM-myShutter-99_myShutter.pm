@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+echo "Executing pre-commit hook at $(pwd)"
+
+controls_file="controls_echodevice.txt"
+changed_file="CHANGED"
+
+# my $ModulVersion     = "0.0.51h";
+current_version=$(perl -0777 -ne 'print "$1" if /\$ModulVersion\s*=\s*\"(.+\..+\..+)\"\;/' FHEM/37_echodevice.pm)
+
+find . -type f -iname '.DS_Store' -delete
+
+test -e "${controls_file}" && rm "${controls_file}"
+find -type f \( -path "./FHEM/*" -o -path './www/*' \) -print0 | while IFS= read -r -d '' f;
+do
+    echo "DEL ${f}" >> ${controls_file}
+    out="UPD "$(stat -c %y  $f | cut -d. -f1 | awk '{printf "%s_%s",$1,$2}')" "$(stat -c %s $f)" ${f}"
+    echo ${out//.\//} >> ${controls_file}
+done
+
+rm ${changed_file}
+echo "Current version: ${current_version} from $(date +%d.%m.%Y)" > ${changed_file}
+
+
+git add $controls_file
+git add $changed_file
