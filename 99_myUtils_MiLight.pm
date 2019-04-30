@@ -84,8 +84,7 @@ sub milight_dimm($) {
 <a name="myUtils_MiLight"></a>
 <h3>myUtils_MiLight</h3>
 <ul>
-  <b>General remarks on the other functions</b><br>
-  milight_dimm_indirect($$) and milight_toggle_indirect($) are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
+  <b>milight_dimm_indirect($$)</b> and <b>milight_toggle_indirect($)</b> are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
   To get the logical link, e.g. from a button to a specific bulb, a userattr value is used, multiple bulbs have to be comma-separated.<br>
   Examples: 
   <ul>
