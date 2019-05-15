@@ -26,6 +26,22 @@ myHHMMSS2sec($)
   return $seconds;
 }
 
+######## sendEmail für den Emailversand verwenden ############ 
+#adopted version from https://wiki.fhem.de/wiki/E-Mail_senden#Raspberry_Pi
+sub 
+sendemail ($$$;$)
+{ 
+ my ($rcpt, $subject, $text, $attach) = @_; 
+ my $sender = 'absender@account.de'; 
+ my $konto = 'kontoname@account.de';
+ my $passwrd = "passwrd";
+ my $provider = "smtp.provider.de:587";
+ Log3 1, "sendemail RCP: $rcpt, Subject: $subject, Text: $text";
+ Log3 1, "sendemail Anhang: $attach" if defined $attach;
+ my $ret .= qx(sendemail -f '$sender' -t '$rcpt' -u '$subject' -m '$text' -a $attach -s '$provider' -xu '$konto' -xp '$passwrd' -o tls=auto -o message-charset=utf-8);
+ $ret =~ s,[\r\n]*,,g;    # remove CR from return-string 
+ Log3 1, "sendemail returned: $ret"; 
+}
 
 #found: https://forum.fhem.de/index.php/topic,85958.msg791048.html#msg791048
 sub listInternalTimer(;$) {
