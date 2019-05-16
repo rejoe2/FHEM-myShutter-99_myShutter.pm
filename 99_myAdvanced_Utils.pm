@@ -29,18 +29,18 @@ myHHMMSS2sec($)
 ######## sendEmail für den Emailversand verwenden ############ 
 #adopted version from https://wiki.fhem.de/wiki/E-Mail_senden#Raspberry_Pi
 sub 
-sendemail ($$$;$)
+mySendEmail ($$$;$)
 { 
  my ($rcpt, $subject, $text, $attach) = @_; 
- my $sender = 'absender@account.de'; 
- my $konto = 'kontoname@account.de';
- my $passwrd = "passwrd";
- my $provider = "smtp.provider.de:587";
- Log3 1, "sendemail RCP: $rcpt, Subject: $subject, Text: $text";
- Log3 1, "sendemail Anhang: $attach" if defined $attach;
+ my $sender = getKeyValue("myEmailAddress"); # use {setKeyValue("myEmailAddress",'absender@account.de')} once in commandline to store the parameter 
+ my $konto = getKeyValue("myEmailAccount"); # like before: {setKeyValue("myEmailAccount",'absender@account.de')} 
+ my $passwrd = getKeyValue("myEmailPasswrd"); # like before: {setKeyValue("myEmailPasswrd","passwrd")}
+ my $provider = "myEmailServer"; # like before: {setKeyValue("myEmailServer",'smtp.provider.de:587')}
+ Log3 1, "mySendEmail RCP: $rcpt, Subject: $subject, Text: $text";
+ Log3 1, "mySendEmail Anhang: $attach" if defined $attach;
  my $ret .= qx(sendemail -f '$sender' -t '$rcpt' -u '$subject' -m '$text' -a $attach -s '$provider' -xu '$konto' -xp '$passwrd' -o tls=auto -o message-charset=utf-8);
  $ret =~ s,[\r\n]*,,g;    # remove CR from return-string 
- Log3 1, "sendemail returned: $ret"; 
+ Log3 1, "mySendEmail returned: $ret"; 
 }
 
 #found: https://forum.fhem.de/index.php/topic,85958.msg791048.html#msg791048
