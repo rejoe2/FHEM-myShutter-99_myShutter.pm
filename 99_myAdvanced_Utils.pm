@@ -34,7 +34,7 @@ mySendEmail ($$$;$) {
  my $sender = getKeyValue("myEmailAddress"); # use {setKeyValue("myEmailAddress",'absender@account.de')} once in commandline to store the parameter 
  my $konto = getKeyValue("myEmailAccount"); # like before: {setKeyValue("myEmailAccount",'absender@account.de')} 
  my $passwrd = getKeyValue("myEmailPasswrd"); # like before: {setKeyValue("myEmailPasswrd","passwrd")}
- my $provider = "myEmailServer"; # like before: {setKeyValue("myEmailServer",'smtp.provider.de:587')}
+ my $provider = getKeyValue("myEmailServer"); # like before: {setKeyValue("myEmailServer",'smtp.provider.de:587')}
  Log3 1, "mySendEmail RCP: $rcpt, Subject: $subject, Text: $text";
  Log3 1, "mySendEmail Anhang: $attach" if defined $attach;
  my $ret ="";
