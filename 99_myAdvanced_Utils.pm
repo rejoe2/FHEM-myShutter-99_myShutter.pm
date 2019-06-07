@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myAdvanced_Utils.pm 2019-05-15 Beta-User $
+# $Id: myAdvanced_Utils.pm 2019-06-07 Beta-User $
 #
 
 package main;
@@ -22,7 +22,7 @@ myHHMMSS2sec($)
   my ($h,$m,$s) = split(":", shift);
   $m = 0 if(!$m);
   $s = 0 if(!$s);
-  my $seconds = 3600*$h+60*$m+$s;
+  my $seconds = HOURSECONDS*$h+MINUTESECONDS*$m+$s;
   return $seconds;
 }
 
@@ -35,8 +35,8 @@ mySendEmail ($$$;$) {
  my $konto = getKeyValue("myEmailAccount"); # like before: {setKeyValue("myEmailAccount",'absender@account.de')} 
  my $passwrd = getKeyValue("myEmailPasswrd"); # like before: {setKeyValue("myEmailPasswrd","passwrd")}
  my $provider = getKeyValue("myEmailServer"); # like before: {setKeyValue("myEmailServer",'smtp.provider.de:587')}
- Log3 1, "mySendEmail RCP: $rcpt, Subject: $subject, Text: $text";
- Log3 1, "mySendEmail Anhang: $attach" if defined $attach;
+ Log 1, "mySendEmail RCP: $rcpt, Subject: $subject, Text: $text";
+ Log 1, "mySendEmail Anhang: $attach" if defined $attach;
  my $ret ="";
  if ($attach) { 
    $ret .= qx(sendemail -f $sender -t $rcpt -u $subject -m $text -a $attach -s $provider -xu $konto -xp $passwrd -o tls=auto -o message-charset=utf-8);
@@ -44,7 +44,7 @@ mySendEmail ($$$;$) {
    $ret .= qx(sendemail -f $sender -t $rcpt -u $subject -m $text -s $provider -xu $konto -xp $passwrd -o tls=auto -o message-charset=utf-8);
  }
  $ret =~ s,[\r\n]*,,g;    # remove CR from return-string 
- Log3 1, "mySendEmail returned: $ret"; 
+ Log 1, "mySendEmail returned: $ret"; 
 }
 
 
@@ -130,4 +130,3 @@ sub listInternalTimer(;$) {
 </ul>
 =end html
 =cut
-
