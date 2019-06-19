@@ -29,7 +29,7 @@ my $slatlevel= ReadingsNum($slatname,"state",0);
 #levelicon
 my $symbol_string = "fts_shutter_";
 my $command_string = "dim 99";
-$command_string = "dim 0" if $dimlevel > 50;
+$command_string = "off" if $dimlevel > 50;
 $symbol_string .= int ((109 - $dimlevel)/10)*10;
 $ret .= "<a href=\"/fhem?cmd.dummy=set $levelname $command_string&XHR=1\">" . FW_makeImage($symbol_string,"fts_shutter_10") . "</a> "; 
 
