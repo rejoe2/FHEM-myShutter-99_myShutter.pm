@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm test version 2019-06-27 Beta-User $
+# $Id: 98_WeekdayTimer.pm 19567 2019-06-07 10:25:25Z Beta-User $
 ##############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -316,18 +316,11 @@ sub WeekdayTimer_getListeDerTage($$) {
     #Log 3, "echteZeit---$i---->>>$relativeDay<<<----->".FmtDateTime($echteZeit);
      ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($echteZeit);
 
-    my $noWeekEnd = 0;
     foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
       if($h2we) {
-	    my $ergebnis = 'none';
-        if (InternalVal($h2we, 'TYPE', '') eq "holiday" && !$noWeekEnd) {
-          $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday))
-		  if ($ergebnis ne 'none') {
-		    if ($h2we eq "noWeekEnd") {
-			  $ergebnis = 'none';
-			  $noWeekEnd = 1;
-			}
-		  }
+        my $ergebnis = 'none';
+        if (InternalVal($h2we, 'TYPE', '') eq "holiday") {
+          $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday));
         } elsif ($wday==$nowWday ){
           $ergebnis = "is_true" if IsWe();
         }elsif ( $wday==$nowWday+1){
