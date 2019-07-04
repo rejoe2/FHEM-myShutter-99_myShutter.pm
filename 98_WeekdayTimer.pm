@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 19567 2019-06-07 10:25:25Z Beta-User $
+# $Id: 98_WeekdayTimer.pm test version 2019-07-04 Beta-User $
 ##############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -109,7 +109,11 @@ sub WeekdayTimer_Set($@) {
 
   if ($v eq "enable") {
     Log3 ($hash, 3, "[$name] set $name $v");
-    CommandAttr(undef, "$name disable 0");
+    if (AttrVal($name, "disable", 0)) {
+      CommandAttr(undef, "$name disable 0");
+    } else {
+      WeekdayTimer_SetTimerOfDay({ HASH => $hash});
+    }
   } elsif ($v eq "disable") {
     Log3 $hash, 3, "[$name] set $name $v";
      CommandAttr(undef, "$name disable 1");
@@ -194,7 +198,7 @@ sub WeekdayTimer_Define($$) {
 
   $hash->{NAME}            = $name;
   $hash->{DEVICE}          = $device;
-
+  
   my @switchingtimes       = WeekdayTimer_gatherSwitchingTimes ($hash, \@a);
   my $conditionOrCommand   = join (" ", @a);
 
@@ -254,9 +258,13 @@ sub WeekdayTimer_Profile($) {
         push  (@listeDerTage, WeekdayTimer_getListeDerTage($d, $time)) if ($d>=7);
 
         map { my $day = $_;
-           my $dayOfEchteZeit = $day;
-              $dayOfEchteZeit = ($wday>=1&&$wday<=5) ? 6 : $wday  if ($day==7); # ggf. Samstag $wday ~~ [1..5]
+            my $dayOfEchteZeit = $day;
+            unless (WeekdayTimer_isGlobalWeekEnd() || $day > 6 ) {
               $dayOfEchteZeit = ($wday==0||$wday==6) ? 1 : $wday  if ($day==8); # ggf. Montag  $wday ~~ [0, 6]
+              $dayOfEchteZeit = ($wday>=1&&$wday<=5) ? 6 : $wday  if ($day==7); # ggf. Samstag $wday ~~ [1..5]
+            } else {
+              $dayOfEchteZeit = $wday;
+            }
             my $echtZeit = WeekdayTimer_EchteZeit($hash, $dayOfEchteZeit, $time);
             $hash->{profile}    {$day}{$echtZeit} = $parameter;
             $hash->{profile_IDX}{$day}{$echtZeit} = $idx;
@@ -298,9 +306,12 @@ sub WeekdayTimer_getListeDerTage($$) {
   my ($d, $time) = @_;
 
   my %hdays=();
-  @hdays{(0, 6)} = undef  if ($d==7); # sa,so   ( $we)
-  @hdays{(1..5)} = undef  if ($d==8); # mo-fr   (!$we)
-
+  unless (WeekdayTimer_isGlobalWeekEnd()) {
+    @hdays{(0, 6)} = undef  if ($d==7); # sa,so   ( $we)
+    @hdays{(1..5)} = undef  if ($d==8); # mo-fr   (!$we)
+  } else {
+    @hdays{(0..6)} = undef  if ($d==8); # mo-fr   (!$we)
+  }
   my $wday;
   my $now = time();
   my ($sec,$min,$hour,$mday,$mon,$year,$nowWday,$yday,$isdst) = localtime($now);
@@ -308,30 +319,39 @@ sub WeekdayTimer_getListeDerTage($$) {
   my @realativeWdays  = (0..6);
   for (my $i=0;$i<=6;$i++) {
 
-     my $relativeDay = $i-$nowWday;
+    my $relativeDay = $i-$nowWday;
     #Log 3, "relativeDay------------>$relativeDay";
-     my ($stunde, $minute, $sekunde) = split (":",$time);
+    my ($stunde, $minute, $sekunde) = split (":",$time);
 
-     my $echteZeit = WeekdayTimer_zeitErmitteln ($now, $stunde, $minute, $sekunde, $relativeDay);
+    my $echteZeit = WeekdayTimer_zeitErmitteln ($now, $stunde, $minute, $sekunde, $relativeDay);
     #Log 3, "echteZeit---$i---->>>$relativeDay<<<----->".FmtDateTime($echteZeit);
-     ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($echteZeit);
+    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($echteZeit);
 
-    foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
-      if($h2we) {
-        my $ergebnis = 'none';
-        if (InternalVal($h2we, 'TYPE', '') eq "holiday") {
-          $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday));
-        } elsif ($wday==$nowWday ){
-          $ergebnis = "is_true" if IsWe();
-        }elsif ( $wday==$nowWday+1){
-          $ergebnis = "is_true" if IsWe("tomorrow");
-        }
-        if ($ergebnis ne 'none') {
-          #Log 3, "ergebnis-------$i----->$ergebnis";
-          $hdays{$i} = undef if ($d==7); #  $we Tag aufnehmen
-          delete $hdays{$i} if ($d==8); # !$we Tag herausnehmen
+    my $noWeekEnd = 0;
+    my $ergebnis = 'none';
+    if ($wday==$nowWday ){
+      $ergebnis = "is_true" if IsWe();
+    } elsif ( $wday==$nowWday+1) {
+      $ergebnis = "is_true" if IsWe("tomorrow");
+    } elsif ($ergebnis eq 'none') { 
+      foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
+        if($h2we) {
+          if (InternalVal($h2we, 'TYPE', '') eq "holiday" && !$noWeekEnd) {
+            $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday));
+            if ($ergebnis ne 'none') {
+              if ($h2we eq "noWeekEnd") {
+                $ergebnis = 'none';
+                $noWeekEnd = 1;
+              }
+            }
+          }
         }
       }
+    }
+    if ($ergebnis ne 'none') {
+      #Log 3, "ergebnis-------$i----->$ergebnis";
+      $hdays{$i} = undef if ($d==7||WeekdayTimer_isGlobalWeekEnd()); #  $we Tag aufnehmen
+      delete $hdays{$i} if ($d==8); # !$we Tag herausnehmen
     }
   }
 
@@ -904,7 +924,9 @@ sub WeekdayTimer_FensterOffen ($$$) {
   Log3 $hash, 4, "[$name] delayedExecutionCond:$verzoegerteAusfuehrungCond";
 
   my $verzoegerteAusfuehrung = eval($verzoegerteAusfuehrungCond);
-  Log3 $hash, 4, "[$name] result of delayedExecutionCond:$verzoegerteAusfuehrung";
+
+  my $logtext =  $verzoegerteAusfuehrung // 'no condition attribute set';
+  Log3 $hash, 4, "[$name] result of delayedExecutionCond: $logtext";
 
   if ($verzoegerteAusfuehrung) {
      if (!defined($hash->{VERZOEGRUNG})) {
@@ -1152,6 +1174,14 @@ sub WeekdayTimer_SetAllParms(;$) {            # {WeekdayTimer_SetAllParms()}
   Log3 undef,  3, "WeekdayTimer_SetAllParms() done on: ".join(" ",@wdtNames );
 }
 
+################################################################################
+sub WeekdayTimer_isGlobalWeekEnd() {
+  my $globalWeekEnd = 0;
+  foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
+    $globalWeekEnd = 1 if($h2we eq "weekEnd");
+  }
+  return $globalWeekEnd;
+}
 1;
 
 =pod
@@ -1214,7 +1244,8 @@ sub WeekdayTimer_SetAllParms(;$) {            # {WeekdayTimer_SetAllParms()}
         <li>7,$we  weekend  ($we)</li>
         <li>8,!$we weekday  (!$we)</li>
         </ul><br>
-         It is possible to define $we or !$we in daylist to easily allow weekend an holiday. $we !$we are coded as 7 8, when using a numeric daylist.<br><br>
+         It is possible to define $we or !$we in daylist to easily allow weekend an holiday. $we !$we are coded as 7 8, when using a numeric daylist. <br>
+         Note: $we will use general IsWe() function to determine $we handling for today and tomorrow. The complete daylist for all other days will reflect the results of holiday devices listed as holiday2we devices in global, including weekEnd and noWeekEnd (see global - holiday2we attribute).<br><br>
       <u>time:</u>define the time to switch, format: HH:MM:[SS](HH in 24 hour format) or a Perlfunction like {sunrise_abs()}. Within the {} you can use the variable $date(epoch) to get the exact switchingtimes of the week. Example: {sunrise_abs_dat($date)}<br><br>
       <u>parameter:</u>the parameter to be set, using any text value like <b>on</b>, <b>off</b>, <b>dim30%</b>, <b>eco</b> or <b>comfort</b> - whatever your device understands.<br>
       NOTE: Use ":" to replace blanks in parameter and escape ":" in case you need it. So e.g. <code>on-till:06\:00</code> will be a valid parameter.
@@ -1290,6 +1321,7 @@ sub WeekdayTimer_SetAllParms(;$) {            # {WeekdayTimer_SetAllParms()}
     <pre>
     <b>disable</b>               # disables the Weekday_Timer
     <b>enable</b>                # enables  the Weekday_Timer
+    <ul>NOTE: enable will also initiate a recalculation of the switching times. You may use this e.g. in case one of your global holiday2we devices has changed since 5 seconds past midnight.</ul>
     <b>WDT_Params [one of: single, WDT_Group or all]</b></pre>
     <br>
     <b>Examples</b>:
