@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm test version 2019-07-04 Beta-User $
+# $Id: 98_WeekdayTimer.pm test version 2019-07-05 Beta-User $
 ##############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -102,7 +102,7 @@ sub WeekdayTimer_Set($@) {
   my ($hash, @a) = @_;
 
   return "no set value specified" if(int(@a) < 2);
-  return "Unknown argument $a[1], choose one of enable disable WDT_Params:single,WDT_Group,all" if($a[1] eq "?");
+  return "Unknown argument $a[1], choose one of enable:noArg disable:noArg WDT_Params:single,WDT_Group,all" if($a[1] eq "?");
 
   my $name = shift @a;
   my $v = join(" ", @a);
@@ -259,7 +259,7 @@ sub WeekdayTimer_Profile($) {
 
         map { my $day = $_;
             my $dayOfEchteZeit = $day;
-            unless (WeekdayTimer_isGlobalWeekEnd() || $day > 6 ) {
+            unless (AttrVal('global', 'holiday2we', '') =~ m,\bweekEnd\b,|| $day > 6 ) {
               $dayOfEchteZeit = ($wday==0||$wday==6) ? 1 : $wday  if ($day==8); # ggf. Montag  $wday ~~ [0, 6]
               $dayOfEchteZeit = ($wday>=1&&$wday<=5) ? 6 : $wday  if ($day==7); # ggf. Samstag $wday ~~ [1..5]
             } else {
@@ -306,7 +306,7 @@ sub WeekdayTimer_getListeDerTage($$) {
   my ($d, $time) = @_;
 
   my %hdays=();
-  unless (WeekdayTimer_isGlobalWeekEnd()) {
+  unless (AttrVal('global', 'holiday2we', '') =~ m,\bweekEnd\b,) {
     @hdays{(0, 6)} = undef  if ($d==7); # sa,so   ( $we)
     @hdays{(1..5)} = undef  if ($d==8); # mo-fr   (!$we)
   } else {
@@ -350,7 +350,7 @@ sub WeekdayTimer_getListeDerTage($$) {
     }
     if ($ergebnis ne 'none') {
       #Log 3, "ergebnis-------$i----->$ergebnis";
-      $hdays{$i} = undef if ($d==7||WeekdayTimer_isGlobalWeekEnd()); #  $we Tag aufnehmen
+      $hdays{$i} = undef if ($d==7||AttrVal('global', 'holiday2we', '') =~ m,\bweekEnd\b,); #  $we Tag aufnehmen
       delete $hdays{$i} if ($d==8); # !$we Tag herausnehmen
     }
   }
@@ -1174,14 +1174,7 @@ sub WeekdayTimer_SetAllParms(;$) {            # {WeekdayTimer_SetAllParms()}
   Log3 undef,  3, "WeekdayTimer_SetAllParms() done on: ".join(" ",@wdtNames );
 }
 
-################################################################################
-sub WeekdayTimer_isGlobalWeekEnd() {
-  my $globalWeekEnd = 0;
-  foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
-    $globalWeekEnd = 1 if($h2we eq "weekEnd");
-  }
-  return $globalWeekEnd;
-}
+
 1;
 
 =pod
