@@ -333,17 +333,13 @@ sub WeekdayTimer_getListeDerTage($$) {
       $ergebnis = "is_true" if IsWe();
     } elsif ( $wday==$nowWday+1) {
       $ergebnis = "is_true" if IsWe("tomorrow");
-    } elsif ($ergebnis eq 'none') { 
+    } else { 
       foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
-        if($h2we) {
-          if (InternalVal($h2we, 'TYPE', '') eq "holiday" && !$noWeekEnd) {
-            $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday));
-            if ($ergebnis ne 'none') {
-              if ($h2we eq "noWeekEnd") {
-                $ergebnis = 'none';
-                $noWeekEnd = 1;
-              }
-            }
+        if($h2we && ( $ergebnis eq 'none' || $h2we eq "noWeekEnd" )  && InternalVal($h2we, 'TYPE', '') eq "holiday" && !$noWeekEnd) {
+          $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday));
+          if ($ergebnis ne 'none' && $h2we eq "noWeekEnd") {
+            $ergebnis = 'none';
+            $noWeekEnd = 1;
           }
         }
       }
