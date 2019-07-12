@@ -1,0 +1,64 @@
+=for :application/json;q=META.json 00_MYSENSORS.pm
+{
+  "description": "IO module to connect FHEM to a network of MySensors nodes. Nodes will be represented as MYSENSORS_DEVICE ",
+  "x_lang": {
+    "de": {
+      "description": "IO-Modul zur Anbindung von Nodes eines MySensors-Netzwerks. MYSENSORS_DEVICE-Geräte repräsentieren die einzelnen Nodes des angebundenen Netzwerks."
+    }
+  },
+  "release_status": "stable",
+  "author": [
+    "Beta-User "
+  ],
+  "x_fhem_maintainer": [
+    "Beta-User"
+  ],
+  "keywords": [
+    "Arduino",
+    "Sensor",
+    "Interface",
+    "Homebrew",
+    "I2C",
+    "RS485"
+  ],
+  "resources": {
+    "x_wiki": {
+      "web": "https://wiki.fhem.de/wiki/MySensors_Starter_Guide"
+    }
+  }
+}
+=end :application/json;q=META.json
+
+
+=for :application/json;q=META.json 10_MYSENSORS_DEVICE.pm
+{
+  "description": "Represents a single MySensors node within a MySensors network. To connect a MySensors network to FHEM use 00_MYSENSORS.pm.",
+  "x_lang": {
+    "de": {
+      "description": "Repräsentiert eine einzelne Node eines MySensors-Netzwerks. Jedes MySensors-Netzwerk benötigt ein Interface-Gerät des Typs MYSENSORS."
+    }
+  },
+  "release_status": "stable",
+  "author": [
+    "Beta-User "
+  ],
+  "x_fhem_maintainer": [
+    "Beta-User"
+  ],
+  "keywords": [
+    "Arduino",
+    "Sensor",
+    "Interface",
+    "Homebrew",
+    "I2C",
+    "RS485",
+    "SetExtensions"
+  ],
+  "resources": {
+    "x_wiki": {
+      "web": "https://wiki.fhem.de/wiki/MySensors_Starter_Guide"
+    },
+    "homepage": "https://www.mysensors.org",
+  }
+}
+=end :application/json;q=META.json
