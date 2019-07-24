@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myAdvanced_Utils.pm 2019-06-07 Beta-User $
+# $Id: myAdvanced_Utils.pm 2019-07-24 Beta-User $
 #
 
 package main;
@@ -16,17 +16,7 @@ myAdvanced_Utils_Initialize($$)
 
 # Enter you functions below _this_ line.
 
-sub
-myHHMMSS2sec($)
-{
-  my ($h,$m,$s) = split(":", shift);
-  $m = 0 if(!$m);
-  $s = 0 if(!$s);
-  my $seconds = HOURSECONDS*$h+MINUTESECONDS*$m+$s;
-  return $seconds;
-}
-
-######## sendEmail für den Emailversand verwenden ############ 
+######## sendemail für den Emailversand verwenden ############ 
 #adopted version from https://wiki.fhem.de/wiki/E-Mail_senden#Raspberry_Pi
 sub 
 mySendEmail ($$$;$) { 
@@ -79,11 +69,11 @@ sub listInternalTimer(;$) {
         my $function = sprintf("%-25s %-25s", $name, $e->{FN});
         my $line = "<td>".$e->{atNr}."</td><td>".$time."</td><td>".$function."</td>";
 
-        if ('f' eq $p)
+        if ($p && $ p eq 'f')
         {
             $cop{$function} = $line;
 	}
-        elsif ('t' eq $p)
+        elsif ($p && $ p eq 't')
         {
             $cop{$time} = $line;
 	}
