@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-04-04 Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2019-09-03 17:13:42Z Beta-User $
 #
 
 package main;
@@ -75,7 +75,7 @@ if ($TC) {
 #measured temperature
 my $tempval = ReadingsVal($climaname,"measured-temp",0) ;
 my $tempcolor ="";
-my $symbol_string = "temp_temperature";
+ $symbol_string = "temp_temperature";
  $symbol_string .= "@".$tempcolor if ($tempcolor);
 $ret .= FW_makeImage($symbol_string,"temp_temperature") . "$tempval°C ";
 
@@ -127,6 +127,75 @@ sub easy_HM_TC_Holiday($$;$$) {
   #return "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime"
   HM_TC_Holiday($rt,$temp,$startDate,$startTime,$endDate,$endTime);
 }
+
+sub hm_firmware_update_httpmod_stateFormat ($) {	
+  my $name = shift @_;
+  my $lastCheck = ReadingsTimestamp($name,"MATCHED_READINGS","???"); 	
+  my $ret .= '<div style="text-align:left">last <a title="eq3-downloads" href="http://www.eq-3.de/service/downloads.html">homematic</a>-fw-check => '.$lastCheck; 	
+  $ret .= '<br><br><pre>'; 	
+  $ret .= "| device                  | model                   | cur_fw | new_fw | release    |<br>"; 	
+  $ret .= "------------------------------------------------------------------------------------<br>"; 	
+  my $check = ReadingsVal($name,"newFwForDevices","error => no or wrong data from eq3-server!"); 	
+  if($check eq "no fw-updates needed!") {
+    $ret .= '| ';
+    $ret .= '<b style="color:green">';
+    $ret .= sprintf("%-80s",$check);
+    $ret .= '</b> |';
+  } elsif($check eq "error => no or wrong data from eq3-server!") {
+    $ret .= '| <b style="color:red">';
+    $ret .= sprintf("%-80s",$check);
+    $ret .= '</b> |';
+  } else { 		
+    my @devices = split(',',$check); 		
+    foreach my $devStr (@devices) { 			
+      my ($dev,$md,$ofw,$idx,$nfw,$date) = $devStr =~ m/^([^\s]+)\s\(([^\s]+)\s\|\sfw_(\d+\.\d+)\s=>\sfw(\d\d)_([\d\.]+)\s\|\s([^\)]+)\)$/; 			
+      my $link = ReadingsVal($name,"fw_link-".$idx,"???"); 			
+      $ret .= '| <a href="/fhem?detail='.$dev.'">';  			
+      $ret .= sprintf("%-23s",$dev); 			
+      $ret .= '</a> | <b';  			
+      $ret .= (($md eq "?")?' title="missing attribute model => set device in teach mode to receive missing data" style="color:yellow"':' style="color:lightgray"').'>';  			
+      $ret .= sprintf("%-23s",$md); 			
+      $ret .= '</b> | <b'.(($ofw eq "0.0")?' title="missing attribute firmware => set device in teach mode to receive missing data" style="color:yellow"':' style="color:lightgray"').'>';  			
+      $ret .= sprintf("%6s",$ofw); 			
+      $ret .= '</b> | <a title="eq3-firmware.tgz" href="'.$link.'"><b style="color:red">';  			
+      $ret .= sprintf("%6s",$nfw); 			
+      $ret .= '</b></a> | ';  			
+      $ret .= sprintf("%-10s",$date); 			
+      $ret .= " |<br>";  	
+    } 	
+  } 	
+  $ret .= '</pre></div>'; 	
+  return $ret;
+}
+
+sub hm_firmware_update_httpmod_newFwForDevices ($) {	
+  my $name = shift @_;
+	my $ret = "";
+	my @data;
+	if (ReadingsVal($name,"UNMATCHED_READINGS","?") eq "") {
+		my @eq3FwList = map{@data = ReadingsVal($name,"fw_link-".$_,"?") =~ m/firmware\/(.*?)_update_[vV]([\d_]+)_(\d\d)(\d\d)(\d\d)/;
+							$data[0] =~ s/_/-/g;
+							sprintf("%s:%s:%s.%s.%s:%s",$data[0],$data[1],$data[4],$data[3],"20".$data[2],$_);
+							} ReadingsVal($name,"MATCHED_READINGS","?") =~ m/fw_link-(\d\d)/g;
+
+		foreach my $dev (devspec2array("TYPE=CUL_HM:FILTER=DEF=......:FILTER=subType!=(virtual|)")) {
+			my $md = AttrVal($dev,"model","?");
+			my $v = AttrVal($dev,"firmware","0.0");
+			my ($h,$l) = split('\.',$v);
+			foreach my $newFw (grep m/^${md}:/i,@eq3FwList) {
+				my ($nh,$nl,$no,$date,$idx) = $newFw =~ m/^[^:]+:(\d+)_(\d+)_?(\d*):([^:]+):(\d\d)$/;
+				if(($nh > $h) || (($nh == $h) && ($nl > $l))) {
+					$ret .= "," if($ret ne "");
+					$ret .= $dev." (".$md." | fw_".$v." => fw".$idx."_".$nh.".".$nl.($no?sprintf(".%d",$no):"")." | ".$date.")";
+				}
+			}
+		}
+	} else {
+		$ret = "error => no or wrong data from eq3-server!";
+	}
+	return ($ret eq "")?"no fw-updates needed!":$ret;
+}
+
 
 sub sec2time_date($) {
   my ($seconds) = @_;
