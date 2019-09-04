@@ -84,7 +84,7 @@ sub milight_FUT_to_RGBW($$) {
     my $command = lc ($Event);
     CommandSet(undef, "$name $command");
   } elsif ($Event =~ /brightness|hue/)  {
-    $Event =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice")); 
+    $Event =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
     CommandSet(undef, "$name $Event");
   } elsif ($Event =~ /bulb_mode.*white/)  {
     my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
