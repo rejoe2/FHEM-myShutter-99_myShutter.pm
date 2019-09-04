@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2019-04-29 Beta-User $
+# $Id: myUtils_MiLight.pm 2019-09-04 Beta-User $
 #
 
 package main;
@@ -76,7 +76,57 @@ sub milight_dimm($) {
   readingsSingleUpdate($defs{$Target_Device}, "myLastdimmLevel",$dimmLevel, 0);
 }
 
+sub milight_FUT_to_RGBW($$) {
+  my ($name,$Event) = @_;
+  #return "" if ReadingsVal($name,"presence","absent") eq "absent";
+  $Event =~ s/://g;
+  if($Event =~ /OFF|ON/) {
+    my $command = lc ($Event);
+    CommandSet(undef, "$name $command");
+  } elsif ($Event =~ /brightness|hue/)  {
+     CommandSet(undef, "$name $Event");
+  } elsif ($Event =~ /bulb_mode.*white/)  {
+    my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
+    CommandSet(undef, "$name command Weiss");
+  } else {
+
+  }  
+}
+
+sub milight_to_MPD($$) {
+  my ($name,$Event) = @_;
+  return "" if ReadingsVal($name,"presence","absent") eq "absent";
+  if($Event =~ /ON/) {
+    CommandSet(undef, "$name play") if ReadingsVal($name,"state","play") =~ /pause|stop/;
+  } elsif ($Event =~ /OFF/) {
+    my $command = (ReadingsVal($name,"state","play") eq "pause" ) ? "stop" : "pause";
+    CommandSet(undef, "$name $command");
+  } elsif ($Event =~ /brightness/)  {
+    my ($reading,$value) = split (/ /,$Event);
+    my $volume = int (round ($value/2,55)); 
+    CommandSet(undef, "$name volume $volume");
+  } elsif ($Event =~ /mode_speed_down/)  {
+    CommandSet(undef, "$name previous");
+
+  } elsif ($Event =~ /mode_speed_up/)  {
+    CommandSet(undef, "$name next");
+
+  } elsif ($Event =~ /scene/)  {
+    my $gainmode = CommandSet(undef, "$name mpdCMD replay_gain_status") =~ /album/ ? "auto" : "album"; 
+    
+    CommandSet(undef, "$name mpdCMD replay_gain_mode $gainmode");
+ 	
+  } elsif ($Event =~ /bulb_mode.*white/)  {
+    my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
+    CommandSet(undef, "$name mpdCMD consume $consumer");
+
+  } else {
+
+  }  
+}
+
 1;
+
 
 =pod
 =begin html
@@ -84,7 +134,8 @@ sub milight_dimm($) {
 <a name="myUtils_MiLight"></a>
 <h3>myUtils_MiLight</h3>
 <ul>
-  <b>milight_dimm_indirect($$)</b> and <b>milight_toggle_indirect($)</b> are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
+  <b>General remarks on the other functions</b><br>
+  milight_dimm_indirect($$) and milight_toggle_indirect($) are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
   To get the logical link, e.g. from a button to a specific bulb, a userattr value is used, multiple bulbs have to be comma-separated.<br>
   Examples: 
   <ul>
@@ -92,7 +143,7 @@ sub milight_dimm($) {
 </code><br>
   </ul>
   <ul>
-   <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br><br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
+   <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
   </ul>
 </ul>
 =end html
