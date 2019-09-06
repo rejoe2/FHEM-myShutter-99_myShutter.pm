@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2019-09-04 Beta-User $
+# $Id: myUtils_MiLight.pm 2019-09-06 Beta-User $
 #
 
 package main;
@@ -112,7 +112,7 @@ sub milight_to_MPD($$) {
   } elsif ($Event =~ /mode_speed_up/)  {
     CommandSet(undef, "$name next");
 
-  } elsif ($Event =~ /scene/)  {
+  } elsif ($Event =~ /mode: [0-8]/)  {
     my $gainmode = CommandSet(undef, "$name mpdCMD replay_gain_status") =~ /album/ ? "auto" : "album"; 
     
     CommandSet(undef, "$name mpdCMD replay_gain_mode $gainmode");
@@ -124,6 +124,27 @@ sub milight_to_MPD($$) {
   } else {
 
   }  
+}
+
+sub milight_Deckenlichter ($) {
+  my $Event = shift @_;
+  my @ondevs = devspec2array("Licht_WoZi_(Hinten|Vorn)_(Aussen|Mitte):FILTER=state=on");
+  #my $num_on = @ondevs; 
+  if (@ondevs) {
+    CommandSet(undef, "Licht_WoZi_(Hinten|Vorn)_(Aussen|Mitte):FILTER=state=on off") if ($Event eq "OFF");
+	if ($Event =~ /mode_speed_up/){
+      CommandSet(undef, "Licht_WoZi_Hinten_Aussen toggle");
+	} elsif ($Event =~ /mode_speed_down/){
+      CommandSet(undef, "Licht_WoZi_Vorn_Aussen toggle");
+	} elsif ($Event =~ /command: set_white/){
+      CommandSet(undef, "Licht_WoZi_Vorn_Mitte toggle");
+	} elsif ($Event =~ /mode: [0-8]/){
+      CommandSet(undef, "Licht_WoZi_Hinten_Mitte toggle");
+	} 
+# hue: 343
+  } else {
+    CommandSet(undef, "Licht_WoZi_Vorn_Aussen on");
+  } 
 }
 
 1;
