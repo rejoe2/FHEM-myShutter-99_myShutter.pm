@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2019-09-06 Beta-User $
+# $Id: myUtils_MiLight.pm 2019-09-08 Beta-User $
 #
 
 package main;
@@ -86,8 +86,7 @@ sub milight_FUT_to_RGBW($$) {
   } elsif ($Event =~ /brightness|hue/)  {
     $Event =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
     CommandSet(undef, "$name $Event");
-  } elsif ($Event =~ /bulb_mode.*white/)  {
-    my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
+  } elsif ($Event =~ /command set_white/)  {
     CommandSet(undef, "$name command Weiss");
   } else {
 
@@ -124,6 +123,47 @@ sub milight_to_MPD($$) {
   } else {
 
   }  
+}
+
+sub milight_to_shutter($$) {
+  #foreach my $setdevice (split (/ /,$Target_Devices)) {
+  my ($name,$event) = @_;
+  my $type = InternalVal($name,"TYPE","MQTT2_DEVICE"); 
+  my $moving = ReadingsVal($name,"motor","stop") =~ /stop/ ? 0 : 1;
+  $moving = 1 if (ReadingsNum($name,"power",0) > 1 && $type eq "ZWave");
+  
+  my $com = lc($event);
+  my $now = gettimeofday;
+  if (!$moving && $event =~ m/ON|OFF/) {
+    if ($now - ReadingsVal($name, "myLastRCOnOff",$now) < 5) {
+	  CommandSet(undef,"$name $com");
+      CommandSetReading(undef,"$name myLastRCOnOff $now");
+	} else {
+      CommandSetReading(undef,"$name myLastRCOnOff $now");
+	} 
+  } elsif ($event =~ m/ON|OFF/) { 
+    CommandSet(undef,"$name stop");
+	CommandSetReading(undef,"$name myLastRCOnOff $now");
+  } elsif ($event =~ /brightness/) {
+	my ($reading,$value) = split (/ /,$event);
+    my $level = int (round ($value/2,55));
+    $com = $type eq "ZWave" ? "dim" : "pct"; 
+	$level = 99 if ($level == 100 && $type eq "ZWave");
+    CommandSet(undef, "$name $com $level");
+  } elsif ($event =~ /saturation/) {
+	my ($reading,$value) = split (/ /,$event);
+    my $slatname = $name;
+	my $slatlevel = 100 - $value;
+    $com = $type eq "ZWave" ? "dim" : "slats"; 
+	$slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
+    my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
+    $defnr++;
+    my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
+    $slatname = shift @slatnames;
+    
+	CommandSet(undef, "$slatname $com $slatlevel");
+	
+  } 
 }
 
 sub milight_Deckenlichter ($) {
