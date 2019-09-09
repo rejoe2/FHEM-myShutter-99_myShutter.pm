@@ -198,54 +198,55 @@ sub milight_Deckenlichter ($) {
   <b>Routines to handle remote control signals in MiLight context</b><br> 
   All MiLight hardware (bulbs and remotes) are represented by MQTT2_DEVICE using a esp8266_milight_hub as described here: https://github.com/sidoh/esp8266_milight_hub.<br>
   This pieces of code offer options to build links between MiLight@MQTT2_DEVICE and "other" FHEM devices (e.g. HUE bulbs, shutter devices, Homematic remotes) and can also be used to built an indirect bridge between V6 remotes and V5 bulbs.
-  <ul>
-    <b>Routines to use MiLight remotes as input device</b><br>
-	NOTE: As one has to press the "on" button to activate a specific layer of the remote, often the first "on" command received will be ignored. You have to press the key twice within a few seconds in these cases. This is especially the case, when controlling other devices than lights to avoid unexpected or unintended behaviour (like starting a music player when only reduction of volume is intended as first step).  <br><br>
-	All remote keys are configured as seperate MQTT2_DEVICE instances like this one:<br>
-	<code>defmod MiLight_RC1_0 MQTT2_DEVICE milight_0xABCD_0
-    attr MiLight_RC1_0 readingList milight/updates/0xABCD/fut089/0:.* { json2nameValue($EVENT) }\
-    milight/states/0xABCD/fut089/0:.* {}</code><br><br>
-	The Perl routines typically are called from within a notify listining to just one of the MQTT2_DEVICEs, not all of the buttons might be used:<br>
-	<code>defmod n_MiLight_RC1_1 notify MiLight_RC1_1:(ON|OFF|(brightness|command|bulb_mode|hue|mode|saturation).*) {milight_to_MPD("myHueDevice",$EVENT)}</code><br>
-	<code>defmod n_MiLight_RC1_0 notify MiLight_RC1_0:(ON|OFF|(brightness|command|bulb_mode|mode).*) {milight_to_MPD("myMPD",$EVENT)}</code><br>
-		Typically the device to switch and the $EVENT are handed over to the routines, in case it's just one parameter, it's $EVENT only.<br><br>
-	<ul>
-      <b>milight_FUT_to_RGBW($$)</b><br>
-	  Allows indirect control of 
-	  <li>other MiLight devices using a different protocol or </li> 
-	  <li>other light devices. Especially HUEDevice should work also for brightness and hue commands.</li> 
-	  <code>milight_dimm_indirect($$)</code> and <code>milight_toggle_indirect($)</code> are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
-    </ul>
-	<ul>
-      <b>milight_to_shutter($$)</b><br>
-	  Allows control of shutter devices. Tested with following devices:<br>
-	  <li>HM-LC-Bl1PBU-FM as CUL_HM, shutters only</li> 
-	  <li>ZWave actor FGR-223 in venetian mode - lamella position can be controlled via saturation slider</li> <br>
-    </ul>
-	<ul>
-      <b>milight_Deckenlichter ($)</b><br>
-	  Allows control of a group of 4 channels of on/off devices.<br>
-    </ul>
-	<ul>
-      <b>milight_to_MPD($$)</b><br>
-	  Allows control of a MusicPlayerDeamon - basics like play, pause, stop and volume.<br>
-	  Additionally toggle two replay gain modes and "consumer" setting.
-    </ul>
-  </ul>
+</ul>
+<ul>
+  <b>Routines to use MiLight remotes as input device</b><br>
+  NOTE: As one has to press the "on" button to activate a specific layer of the remote, often the first "on" command received will be ignored. You have to press the key twice within a few seconds in these cases. This is especially the case, when controlling other devices than lights to avoid unexpected or unintended behaviour (like starting a music player when only reduction of volume is intended as first step).  <br><br>
+  All remote keys are configured as seperate MQTT2_DEVICE instances like this one:<br>
+  <code>defmod MiLight_RC1_0 MQTT2_DEVICE milight_0xABCD_0<br>
+  attr MiLight_RC1_0 readingList milight/updates/0xABCD/fut089/0:.* { json2nameValue($EVENT) }\<br>
+  milight/states/0xABCD/fut089/0:.* {}</code><br><br>
+  The Perl routines typically are called from within a notify listining to just one of the MQTT2_DEVICEs, not all of the buttons might be used:<br>
+  <code>defmod n_MiLight_RC1_1 notify MiLight_RC1_1:(ON|OFF|(brightness|command|bulb_mode|hue|mode|saturation).*) {milight_to_MPD("myHueDevice",$EVENT)}</code><br>
+  <code>defmod n_MiLight_RC1_0 notify MiLight_RC1_0:(ON|OFF|(brightness|command|bulb_mode|mode).*) {milight_to_MPD("myMPD",$EVENT)}</code><br>
+  Typically the device to switch and the $EVENT are handed over to the routines, in case it's just one parameter, it's $EVENT only.<br><br>
+<ul>
+  <b>milight_FUT_to_RGBW($$)</b><br>
+  Allows indirect control of 
+  <li>other MiLight devices using a different protocol or </li> 
+  <li>other light devices. Especially HUEDevice should work also for brightness and hue commands.</li> 
+</ul><br>
+<ul>
+  <b>milight_to_shutter($$)</b><br>
+  Allows control of shutter devices. Tested with following devices:<br>
+  <li>HM-LC-Bl1PBU-FM as CUL_HM, shutters only</li> 
+  <li>ZWave actor FGR-223 in venetian mode - lamella position can be controlled via saturation slider</li> <br>
+</ul><br>
+<ul>
+  <b>milight_Deckenlichter ($)</b><br>
+  Allows control of a group of 4 channels of on/off devices.<br>
+</ul>
+<ul>
+  <b>milight_to_MPD($$)</b><br>
+  Allows control of a MusicPlayerDeamon - basics like play, pause, stop and volume.<br>
+  Additionally toggle two replay gain modes and "consumer" setting.
+</ul>
+<ul>
   <br><br>
-  <ul>
   <b>Routines to use other remote types to control MiLight bulbs</b><br>
   <code>milight_dimm_indirect($$)</code> and <code>milight_toggle_indirect($)</code> are intended for the use in notify code to derive commands to one or multiple bulbs. Parameter typically is $NAME or $EVTPART0.<br>
   To get the logical link, e.g. from a button to a specific bulb, a userattr value is used, multiple bulbs have to be comma-separated.<br>
-  Examples: 
-  <ul>
-   <code>attr Schalter_Spuele_Btn_04 userattr Target_Device<br>attr Schalter_Spuele_Btn_04 Target_Device Licht_Essen</code><br>
-   This way, one notify can be used to derive actions on various devices
-  </ul>
-    <ul>
-     <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
-    </ul>
-  </ul>
+</ul>
+<ul>
+ Examples: 
+</ul>
+<ul>
+  <code>attr Schalter_Spuele_Btn_04 userattr Target_Device<br>attr Schalter_Spuele_Btn_04 Target_Device Licht_Essen</code><br>
+  This way, one notify can be used to derive actions on various devices
+</ul>
+<ul>
+  <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
+</ul>
 </ul>
 =end html
 =cut
