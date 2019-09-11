@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 18592 2019-02-14 06:27:39Z Beta-User $
+# $Id: httpmod.template 20144 2019-09-11 05:51:25Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -415,8 +415,10 @@ attr DEVICE model C_01a_resol_solar
 name:X_01a_CUL_HM_firmware_update_downloader
 filter:TYPE=HTTPMOD
 desc: Check eQ3 homepage for available new firmware files; provides also links for direct downloads<br>Define a HTTPMOD device like <br>define eq3 HTTPMOD https://www.eq-3.de/ajax/downloads/downloads_eq3.php 604800<br><a href="https://https://forum.fhem.de/index.php/topic,78501.msg972144.html#msg972144">Source: Forum</a><br><a href="https://wiki.fhem.de/wiki/HomeMatic_Firmware_Update#Basis-Definitionen_f.C3.BCr_Device_eq3">Wiki</a>
-defmod DEVICE HTTPMOD https://www.eq-3.de/ajax/downloads/downloads_eq3.php 86400
-deleteattr DEVICE reading02Format 
+par:WHICHROOM;Room of the calling device; {AttrVal("DEVICE","room","CUL_HM" )} 
+defmod DEVICE HTTPMOD https://www.eq-3.de/ajax/downloads/downloads_eq3.php 604800
+attr DEVICE userattr enableControlSet event-on-change-reading event-on-update-reading reading01AutoNumLen reading01Format reading01Name reading01RegOpt reading01RegOpt:s,i,g reading01Regex readingMaxAge readingMaxAgeReplacementMode readingMaxAgeReplacementMode:text,expression,delete readingMaxAgeReplacementMode:text,reading,internal,expression,delete requestData.* showError showMatched stateFormat userReadings webCmd
+attr DEVICE alignTime 00:45
 attr DEVICE enableControlSet 1
 attr DEVICE event-on-change-reading .*
 attr DEVICE event-on-update-reading LAST_ERROR,MATCHED_READINGS
@@ -434,7 +436,7 @@ attr DEVICE reading02Regex (.{300})<a.href="\/downloads\/software\/firmware\/hm[
 attr DEVICE readingMaxAge 10
 attr DEVICE readingMaxAgeReplacementMode delete
 attr DEVICE requestData.* suchbegriff=&quelle=29&suchkategorie=3&themenbereich=1
-attr DEVICE room eq3
+attr DEVICE room WHICHROOM
 attr DEVICE showError 1
 attr DEVICE showMatched 1
 attr DEVICE stateFormat {\
@@ -495,30 +497,30 @@ attr DEVICE stateFormat {\
 	return $ret;; \
 }
 attr DEVICE userReadings newFwForDevices:MATCHED_READINGS.* {\
-	my $ret = "";;\
-	my @data;;\
-	if (ReadingsVal($name,"UNMATCHED_READINGS","?") eq "") {\
-		my @eq3FwList = map{\
-			@data = ReadingsVal($name,"fw_link-".$_,"?") =~ m/firmware\/(.*?)_update_v([\d_]+)_(\d\d)(\d\d)(\d\d)/i;; \
-			$data[0] =~ s/_/-/g;;\
-			sprintf("%s:%s:%s.%s.%s:%s",$data[0],$data[1],$data[4],$data[3],"20".$data[2],$_);;\
-		} ReadingsVal($name,"MATCHED_READINGS","?") =~ m/fw_link-(\d\d)/g;;\
+  my $ret = "";;\
+  my @data;;\
+  if (ReadingsVal($name,"UNMATCHED_READINGS","?") eq "") {\
+    my @eq3FwList = map{\
+      @data = ReadingsVal($name,"fw_link-".$_,"?") =~ m/firmware\/(.*?)_update_v([\d_]+)_(\d\d)(\d\d)(\d\d)/i;;\
+      $data[0] =~ s/_/-/g;;\
+      sprintf("%s:%s:%s.%s.%s:%s",$data[0],$data[1],$data[4],$data[3],"20".$data[2],$_);;\
+    } ReadingsVal($name,"MATCHED_READINGS","?") =~ m/fw_link-(\d\d)/g;;\
 \
-		foreach my $dev (devspec2array("TYPE=CUL_HM:FILTER=DEF=......:FILTER=subType!=(virtual|)")) {\
-			my $md = AttrVal($dev,"model","?");;\
-			my $v = AttrVal($dev,"firmware","0.0");;\
-			my ($h,$l) = split('\.',$v);;\
-			foreach my $newFw (grep m/^${md}:/i,@eq3FwList) {\
-				my ($nh,$nl,$no,$date,$idx) = $newFw =~ m/^[^:]+:(\d+)_(\d+)_?(\d*):([^:]+):(\d\d)$/;;\
-				if(($nh > $h) || (($nh == $h) && ($nl > $l))) {\
-					$ret .= "," if($ret ne "");;\
-					$ret .= $dev." (".$md." | fw_".$v." => fw".$idx."_".$nh.".".$nl.($no?sprintf(".%d",$no):"")." | ".$date.")";;\
-				}\
-			}\
-		}\
-	} else {\
-		$ret = "error => no or wrong data from eq3-server!";;\
-	}\
-	return ($ret eq "")?"no fw-updates needed!":$ret;;\
+    foreach my $dev (devspec2array("TYPE=CUL_HM:FILTER=DEF=......:FILTER=subType!=(virtual|)")) {\
+      my $md = AttrVal($dev,"model","?");;\
+      my $v = AttrVal($dev,"firmware","0.0");;\
+      my ($h,$l) = split('\.',$v);;\
+      foreach my $newFw (grep m/^${md}:/i,@eq3FwList) {\
+        my ($nh,$nl,$no,$date,$idx) = $newFw =~ m/^[^:]+:(\d+)_(\d+)_?(\d*):([^:]+):(\d\d)$/;;\
+        if(($nh > $h) || (($nh == $h) && ($nl > $l))) {\
+          $ret .= "," if($ret ne "");;\
+          $ret .= $dev." (".$md." | fw_".$v." => fw".$idx."_".$nh.".".$nl.($no?sprintf(".%d",$no):"")." | ".$date.")";;\
+        }\
+      }\
+    }\
+  } else {\
+    $ret = "error => no or wrong data from eq3-server!";;\
+  }\
+  return ($ret eq "")?"no fw-updates needed!":$ret;;\
 }
 attr DEVICE webCmd reread
