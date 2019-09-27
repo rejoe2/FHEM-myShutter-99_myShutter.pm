@@ -1375,7 +1375,7 @@ attr DEVICE model eBus_daemon_splitter
 #Atm there are no furter commands to be set to the esp itself
 name:esp_milight_hub_bridge
 filter:TYPE=MQTT2_DEVICE
-desc:use this with Chris Mullins ESP-Milight-Hub. for further details visit https://github.com/sidoh/esp8266_milight_hub <br>#recommended structure of the topic pattern milight/:device_id/:device_type/:group_id as set in the settings section in the bridge's web interface.
+desc:use this with Chris Mullins ESP-Milight-Hub. for further details visit https://github.com/sidoh/esp8266_milight_hub <br>Recommended structure of the topic pattern milight/:device_id/:device_type/:group_id as set in the settings section in the bridge's web interface.
 order:X_01
 par:BASE_ID;BASE_ID typically is milight;{ AttrVal("DEVICE","readingList","") =~ m,([^/]+)[/][^/]*at[^/]+[/].*:, ? $1 : undef }
 attr DEVICE bridgeRegexp BASE_ID/[^/]*at[^/]+/(0x[0-9a-fA-F]{1,4})/.*/([0-8])?.*:.* "milight_$1_$2"
@@ -1408,8 +1408,8 @@ attr DEVICE readingList \
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/GROUP_ID:.* { json2nameValue($EVENT) }\
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/0:.* { json2nameValue($EVENT) }
 attr DEVICE setList\
-  on BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
-  off BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
+  on:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
+  off:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
   brightness:colorpicker,BRI,0,15,255 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   hue:colorpicker,HUE,0,1,359 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   command:uzsuSelectRadio,Weiss,Nacht BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}
@@ -1437,8 +1437,8 @@ attr milight_REMOTE_ID_0 readingList \
   BASE_ID/states/REMOTE_ID/BULB_TYPE/0:.* { json2nameValue($EVENT) }\
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/0:.* { json2nameValue($EVENT) }
 attr milight_REMOTE_ID_0 setList\
-  on BASE_ID/REMOTE_ID/BULB_TYPE/0 {"status":"ON"}\
-  off BASE_ID/REMOTE_ID/BULB_TYPE/0_ID {"status":"OFF"}\
+  on:noArg BASE_ID/REMOTE_ID/BULB_TYPE/0 {"status":"ON"}\
+  off:noArg BASE_ID/REMOTE_ID/BULB_TYPE/0_ID {"status":"OFF"}\
   brightness:colorpicker,BRI,0,15,255 BASE_ID/REMOTE_ID/BULB_TYPE/0 {"$EVTPART0":"$EVTPART1"}\
   hue:colorpicker,HUE,0,1,359 BASE_ID/REMOTE_ID/BULB_TYPE/0 {"$EVTPART0":"$EVTPART1"}\
   command:uzsuSelectRadio,Weiss,Nacht BASE_ID/REMOTE_ID/BULB_TYPE/0 {"$EVTPART0":"$EVTPART1"}
@@ -1466,8 +1466,8 @@ attr DEVICE readingList \
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/GROUP_ID:.* { json2nameValue($EVENT) }\
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/0:.* { json2nameValue($EVENT) }
 attr DEVICE setList\
-  on BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
-  off BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
+  on:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
+  off:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
   brightness:colorpicker,BRI,0,15,255 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   hue:colorpicker,HUE,0,1,359 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   color_temp:colorpicker,CT,153,1,370 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
@@ -1506,8 +1506,8 @@ attr DEVICE readingList \
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/GROUP_ID:.* { json2nameValue($EVENT) }\
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/0:.* { json2nameValue($EVENT) }
 attr DEVICE setList\
-  on BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
-  off BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
+  on:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
+  off:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
   brightness:colorpicker,BRI,0,15,255 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   command:uzsuSelectRadio,Weiss,Nacht BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   program:uzsuSelectRadio,Mode,Faster,Slower BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"command":"$EVTPART1"}\
@@ -1539,8 +1539,8 @@ attr DEVICE readingList \
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/0:.* { json2nameValue($EVENT) }
 attr DEVICE setExtensionsEvent 1
 attr DEVICE setList \
-  on BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
-  off BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
+  on:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"ON"}\
+  off:noArg BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"status":"OFF"}\
   brightness:colorpicker,BRI,0,15,255 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   hue:colorpicker,HUE,0,1,359 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
   color_temp:colorpicker,CT,153,1,370 BASE_ID/REMOTE_ID/BULB_TYPE/GROUP_ID {"$EVTPART0":"$EVTPART1"}\
@@ -1574,3 +1574,31 @@ attr DEVICE readingList \
   BASE_ID/states/REMOTE_ID/BULB_TYPE/GROUP_ID:.* { }\
   BASE_ID/updates/REMOTE_ID/BULB_TYPE/GROUP_ID:.* { json2nameValue($EVENT) }
 attr DEVICE model esp_milight_hub_remote_events_only
+
+###############
+#OpenMQTTGateway
+#use this with an OpenMQTTGateway. For further details visit https://github.com/1technophile/OpenMQTTGateway/wiki
+#recommended structure of the topic pattern home/OpenMQTTGateway/.*
+#as set in the settings section in the GW's web interface 
+#
+#OpenMQTTGateway
+#Atm there are no furter commands to be set to the esp itself
+name:OpenMQTTGateway_simple_RF433
+filter:TYPE=MQTT2_DEVICE
+desc:use this with an OpenMQTTGateway. For further details visit https://github.com/1technophile/OpenMQTTGateway/wiki<br>Recommended structure of the topic pattern home/OpenMQTTGateway/.*.<br>NOTE: Initial version, not yet tested, just build according to https://forum.fhem.de/index.php/topic,103737.0.html<br>Adopt 
+order:X_02
+par:BASE_ID;BASE_ID typically is home;{ AttrVal("DEVICE","readingList","") =~ m,([^:]+)[/]OpenMQTTGateway[/].*:, ? $1 : undef }
+attr DEVICE autocreate 1
+attr DEVICE setStateList on off
+attr DEVICE readingList\
+  BASE_ID/OpenMQTTGateway/LWT online\
+  BASE_ID/OpenMQTTGateway/433toMQTT:.* { $EVENT =~ m,..value..(13027392|13519216|12585648|13349168)..protocol..\d..length..\d+..delay..\d+.,? {"state"=>"on"} : $EVENT =~ m,..value..(13381408|13226144|13381408|13599888)..protocol..\d..length..\d+..delay..\d+., ? {"state"=>"off"}:undef }\
+  BASE_ID/OpenMQTTGateway/433toMQTT:.* { $EVENT =~ m,..value..([\d]+)..protocol..\d..length..\d+..delay..\d+.,? {"received_code"=>"$1"}:undef }
+attr DEVICE setList\
+  on:noArg BASE_ID/OpenMQTTGateway/commands/433toMQTT {"value":"13027392","protocol":4,"length":24,"delay":350}\
+  off:noArg BASE_ID/OpenMQTTGateway/commands/433toMQTT {"value":"13381408","protocol":4,"length":24,"delay":350}
+attr DEVICE stateFormat online\
+state\
+Version: version
+attr DEVICE devStateIcon Online:10px-kreis-gruen Offline.*:10px-kreis-rot
+attr DEVICE model OpenMQTTGateway_simple_RF433
