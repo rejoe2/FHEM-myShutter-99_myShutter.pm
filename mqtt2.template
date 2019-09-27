@@ -1579,26 +1579,52 @@ attr DEVICE model esp_milight_hub_remote_events_only
 #OpenMQTTGateway
 #use this with an OpenMQTTGateway. For further details visit https://github.com/1technophile/OpenMQTTGateway/wiki
 #recommended structure of the topic pattern home/OpenMQTTGateway/.*
-#as set in the settings section in the GW's web interface 
+#as set in the settings section in the GW's web interface
 #
 #OpenMQTTGateway
 #Atm there are no furter commands to be set to the esp itself
-name:OpenMQTTGateway_simple_RF433
+name:OpenMQTTGateway_MCU
 filter:TYPE=MQTT2_DEVICE
-desc:use this with an OpenMQTTGateway. For further details visit https://github.com/1technophile/OpenMQTTGateway/wiki<br>Recommended structure of the topic pattern home/OpenMQTTGateway/.*.<br>NOTE: Initial version, not yet tested, just build according to https://forum.fhem.de/index.php/topic,103737.0.html<br>Adopt 
+desc:use this with an OpenMQTTGateway. For further details visit https://github.com/1technophile/OpenMQTTGateway/wiki<br>Recommended structure of the topic pattern home/OpenMQTTGateway/.*.<br>NOTE: Initial version, not yet tested, just build according to https://forum.fhem.de/index.php/topic,103737.0.html<br>Adopt
 order:X_02
-par:BASE_ID;BASE_ID typically is home;{ AttrVal("DEVICE","readingList","") =~ m,([^:]+)[/]OpenMQTTGateway[/].*:, ? $1 : undef }
-attr DEVICE autocreate 1
-attr DEVICE setStateList on off
+attr DEVICE bridgeRegexp\
+  BASE_ID/OpenMQTTGateway/BTtoMQTT/([0-9A-Z]+):.* "oMQTTgw_BT_$1"\
+  BASE_ID/OpenMQTTGateway/433toMQTT:.* "oMQTTgw_433"
 attr DEVICE readingList\
-  BASE_ID/OpenMQTTGateway/LWT online\
-  BASE_ID/OpenMQTTGateway/433toMQTT:.* { $EVENT =~ m,..value..(13027392|13519216|12585648|13349168)..protocol..\d..length..\d+..delay..\d+.,? {"state"=>"on"} : $EVENT =~ m,..value..(13381408|13226144|13381408|13599888)..protocol..\d..length..\d+..delay..\d+., ? {"state"=>"off"}:undef }\
-  BASE_ID/OpenMQTTGateway/433toMQTT:.* { $EVENT =~ m,..value..([\d]+)..protocol..\d..length..\d+..delay..\d+.,? {"received_code"=>"$1"}:undef }
+  BASE_ID/OpenMQTTGateway/LWT:.* LWT\
+  BASE_ID/OpenMQTTGateway/version:.* version\
+  BASE_ID/OpenMQTTGateway/LWT online
 attr DEVICE setList\
-  on:noArg BASE_ID/OpenMQTTGateway/commands/433toMQTT {"value":"13027392","protocol":4,"length":24,"delay":350}\
-  off:noArg BASE_ID/OpenMQTTGateway/commands/433toMQTT {"value":"13381408","protocol":4,"length":24,"delay":350}
+  BT_scan_now:noArg BASE_ID/OpenMQTTGateway/commands/MQTTtoBT/set {"interval":0}\
+  BT_scan_interval:textField BASE_ID/OpenMQTTGateway/commands/MQTTtoBT/set {"interval":$EVTPART1}\
+  BT_blacklist:textField BASE_ID/OpenMQTTGateway/commands/MQTTtoBT/set {"black-list":[$EVTPART1]}\
+  BT_whitelist:textField BASE_ID/OpenMQTTGateway/commands/MQTTtoBT/set {"white-list":[$EVTPART1]}
 attr DEVICE stateFormat online\
-state\
 Version: version
-attr DEVICE devStateIcon Online:10px-kreis-gruen Offline.*:10px-kreis-rot
-attr DEVICE model OpenMQTTGateway_simple_RF433
+attr DEVICE devStateIcon online:10px-kreis-gruen offline.*:10px-kreis-rot
+attr DEVICE model OpenMQTTGateway_MCU
+
+
+name:OpenMQTTGateway_simple_RF433_switch
+filter:TYPE=MQTT2_DEVICE
+desc:use this with an OpenMQTTGateway. For further details visit https://github.com/1technophile/OpenMQTTGateway/wiki<br>Recommended structure of the topic pattern home/OpenMQTTGateway/.*.<br>NOTE: Initial version, not yet tested, just build according to https://forum.fhem.de/index.php/topic,103737.0.html<br>Adopt settings to your needs.<br>NOTE: this might create a new device!
+order:X_02a
+par:BASE_ID;BASE_ID typically is home;{ AttrVal("DEVICE","readingList","") =~ m,([^:]+)[/]OpenMQTTGateway[/].*:, ? $1 : undef }
+par:ONCOMMANDREGEX;ONCOMMANDREGEX typically is one or more Codes like 13027392|13519216|12585648|13349168;undef
+par:ON_COMMAND;ON_COMMAND typically is a set of parameters like "value":"13027392","protocol":4,"length":24,"delay":350;undef
+par:OFFCOMMANDREGEX;OFFCOMMANDREGEX typically is one or more Codes like 13381408|13226144|13381408|13599888;undef
+par:OFF_COMMAND;ON_COMMAND typically is a set of parameters like "value":"13381408","protocol":4,"length":24,"delay":350;undef
+par:BASE_ID;BASE_ID typically is home;undef
+defmod DEVICE_NEW MQTT2_\DEVICE
+attr DEVICE_NEW autocreate 0
+attr DEVICE_NEW readingList\
+  BASE_ID/OpenMQTTGateway/433toMQTT:.* { $EVENT =~ m,..value..(ONCOMMANDREGEX)..protocol..\d..length..\d+..delay..\d+.,? {"state"=>"on"} : $EVENT =~ m,..value..(OFFCOMMANDREGEX)..protocol..\d..length..\d+..delay..\d+., ? {"state"=>"off"}:undef }\
+  BASE_ID/OpenMQTTGateway/433toMQTT:.* { $EVENT =~ m,..value..([\d]+)..protocol..\d..length..\d+..delay..\d+.,? {"received_code"=>"$1"}:undef }
+attr DEVICE_NEW setList\
+  on:noArg BASE_ID/OpenMQTTGateway/commands/433toMQTT {ON_COMMAND}\
+  off:noArg BASE_ID/OpenMQTTGateway/commands/433toMQTT {OFF_COMMAND}
+{ fhem "trigger $FW_wname JS:location.href='$FW_ME?detail=DEVICE_NEW'" if($cl && $cl->{TYPE} eq "FHEMWEB") }
+farewell:template has been applied successfully.
+attr DEVICE_NEW model OpenMQTTGateway_simple_RF433_switch
+
+#par:NEWUSERATTR;userattr of the calling device; {AttrVal("DEVICE","userattr","none" ) =~ /priceDevice/ ? 1 : addToDevAttrList("DEVICE", "priceDevice")} 
