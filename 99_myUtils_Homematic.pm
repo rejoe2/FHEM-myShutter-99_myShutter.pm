@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-09-03 17:13:42Z Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2019-10-08 11:55:42Z Beta-User $
 #
 
 package main;
@@ -15,6 +15,39 @@ myUtils_Homematic_Initialize($$)
 }
 
 # Enter you functions below _this_ line.
+
+sub myWinContactNotify ($$;$) {
+  my ($window, $event, $timeout) = @_;
+  $timeout = 90 unless $timeout;
+  my @virtuals = devspec2array("TYPE=CUL_HM:FILTER=model=VIRTUAL:FILTER=myRealFK=.*$window.*");
+  foreach my $virtual (@virtuals) {
+    my $myreals = AttrVal($virtual,"myRealFK","");
+	if ($event =~ /open|tilted/) {
+	  my $checktime = gettimeofday()+$timeout;
+      InternalTimer($checktime,"myTimeoutWinContact",$virtual);	
+	} else {
+	  my @wcs = split(',',$myreals); 
+      my $openwc = 0;
+      foreach my $wc (@wcs) {
+	    $openwc++ if (ReadingsVal($wc,"state","closed") ne "closed");
+	  }
+	  CommandSet (undef,"$virtual geschlossen") unless ( $openwc );
+	}	
+  }	
+}	
+
+sub myTimeoutWinContact ($) {
+  my $name = shift(@_);
+  #my $name = $hash{NAME};
+  return unless (ReadingsVal("Heizperiode","state","off") eq "on");
+  my $myreals = AttrVal($name,"myRealFK","");
+  my @wcs = split(',',$myreals); 
+  my $openwc = 0;
+  foreach my $wc (@wcs) {
+    $openwc++ if (ReadingsVal($wc,"state","closed") ne "closed");
+  }
+  CommandSet (undef,"$name offen") if ( $openwc );
+}
 
 sub devStateIcon_Clima($) {
 my $climaname = shift(@_);
