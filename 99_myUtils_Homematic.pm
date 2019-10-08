@@ -18,12 +18,12 @@ myUtils_Homematic_Initialize($$)
 
 sub myWinContactNotify ($$;$) {
   my ($window, $event, $timeout) = @_;
-  $timeout = 90 unless $timeout;
   my @virtuals = devspec2array("TYPE=CUL_HM:FILTER=model=VIRTUAL:FILTER=myRealFK=.*$window.*");
   foreach my $virtual (@virtuals) {
     my $myreals = AttrVal($virtual,"myRealFK","");
 	if ($event =~ /open|tilted/) {
-	  my $checktime = gettimeofday()+$timeout;
+	  $timeouteff = $timeout//AttrVal($virtual,"myTimeout",90);
+	  my $checktime = gettimeofday()+$timeouteff;
       InternalTimer($checktime,"myTimeoutWinContact",$virtual);	
 	} else {
 	  my @wcs = split(',',$myreals); 
@@ -264,6 +264,21 @@ sub roundTime2fiveMinutes($)
 <a name="myUtils_Homematic"></a>
 <h3>myUtils_Homematic</h3>
 <ul>
+  <b>myWinContactNotify</b><br>
+  Helper function to be called from a notify, reacting on an arbitrary number of door or window contacts. You'll additionally need some virtual contacts to publish the open and close events.<br>
+  Example: 
+  <ul>
+   <code>defmod n_FK_TK_event ((Dachf|F)enster|.*tuer)_.*:contact:.(open|tilted|closed)..to.CVVU. {myWinContactNotify($NAME,$EVENT,30)}</code><br>
+   Last argument is optional. If not set, either a timeout per virtual contact is used (Attribute myTimeout), defaults to 90 seconds.
+   <code>defmod n_FK_TK_event ((Dachf|F)enster|.*tuer)_.*:contact:.(open|tilted|closed)..to.CVVU. {myWinContactNotify($NAME,$EVENT)}</code><br>
+   Code for virtual window contact (base CUL_HM device is also needed):
+   <code>defmod Virtueller_FK_SZ CUL_HM 33221101
+   attr Virtueller_FK_SZ userattr myRealFK myTimeout
+   attr Virtueller_FK_SZ myRealFK FensterSchlafzimmer1,FensterSchlafzimmer2</code><br>
+  </ul>
+  After timeout has passed, all myRealFK devices will be checked and in case still at least one is open, an open info is issued.<br>
+  Closing events will be sent out immediately if all myRealFK's are closed.<br>
+  
   <b>devStateIcon_Clima</b>
   <br>
   Use this to get a multifunctional iconset to control HM-CC-RT-DN or HM-TC-IT-WM-W-EU devices<br>
