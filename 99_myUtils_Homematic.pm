@@ -268,9 +268,9 @@ sub roundTime2fiveMinutes($)
   Helper function to be called from a notify, reacting on an arbitrary number of door or window contacts. You'll additionally need some virtual contacts to publish the open and close events.<br>
   Example: 
   <ul>
-   <code>defmod n_FK_TK_event ((Dachf|F)enster|.*tuer)_.*:contact:.(open|tilted|closed)..to.CVVU. {myWinContactNotify($NAME,$EVENT,30)}</code><br>
+   <code>defmod n_FK_TK_event ((Dachf|F)enster|.*tuer)_.*:contact:.(open|tilted|closed)..to.VCCU. {myWinContactNotify($NAME,$EVENT,30)}</code><br>
    Last argument is optional. If not set, either a timeout per virtual contact is used (Attribute myTimeout), defaults to 90 seconds.
-   <code>defmod n_FK_TK_event ((Dachf|F)enster|.*tuer)_.*:contact:.(open|tilted|closed)..to.CVVU. {myWinContactNotify($NAME,$EVENT)}</code><br>
+   <code>defmod n_FK_TK_event ((Dachf|F)enster|.*tuer)_.*:contact:.(open|tilted|closed)..to.VCCU. {myWinContactNotify($NAME,$EVENT)}</code><br>
    Code for virtual window contact (base CUL_HM device is also needed):
    <code>defmod Virtueller_FK_SZ CUL_HM 33221101
    attr Virtueller_FK_SZ userattr myRealFK myTimeout
