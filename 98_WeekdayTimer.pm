@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm Testversion 2019-10-10 16:30 Beta-User $
+# $Id: 98_WeekdayTimer.pm Testversion 2019-10-28 Beta-User $
 ##############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -272,7 +272,7 @@ sub WeekdayTimer_Profile($) {
      foreach  my $d (@{$tage}) {
 
         my    @listeDerTage = ($d);
-        push  (@listeDerTage, WeekdayTimer_getListeDerTage($d, $time)) if ($d>=7);
+        push  (@listeDerTage, WeekdayTimer_getListeDerTage($hash, $d, $time)) if ($d>=7);
 
         map { my $day = $_;
            my $dayOfEchteZeit = $day;
@@ -315,9 +315,8 @@ sub WeekdayTimer_Profile($) {
   delete $hash->{profile};
 }
 ################################################################################
-sub WeekdayTimer_getListeDerTage($$) {
-  my ($d, $time) = @_;
-
+sub WeekdayTimer_getListeDerTage($$$) {
+  my ($hash, $d, $time) = @_;
   my %hdays=();
   unless (AttrVal('global', 'holiday2we', '') =~ m,\bweekEnd\b,) {
     @hdays{(0, 6)} = undef  if ($d==7); # sa,so   ( $we)
@@ -325,40 +324,11 @@ sub WeekdayTimer_getListeDerTage($$) {
   } else {
     @hdays{(0..6)} = undef  if ($d==8); # mo-fr   (!$we)
   }
-  my $wday;
-  my $now = time();
-  my ($sec,$min,$hour,$mday,$mon,$year,$nowWday,$yday,$isdst) = localtime($now);
-
-  my @realativeWdays  = (0..6);
+  my ($sec,$min,$hour,$mday,$mon,$year,$nowWday,$yday,$isdst) = localtime(time());
   for (my $i=0;$i<=6;$i++) {
-
-    my $relativeDay = $i-$nowWday;
-    #Log 3, "relativeDay------------>$relativeDay";
-    my ($stunde, $minute, $sekunde) = split (":",$time);
-
-    my $echteZeit = WeekdayTimer_zeitErmitteln ($now, $stunde, $minute, $sekunde, $relativeDay);
-    #Log 3, "echteZeit---$i---->>>$relativeDay<<<----->".FmtDateTime($echteZeit);
-    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($echteZeit);
-
-    my $noWeekEnd = 0;
-    my $ergebnis = 'none';
-    if ($wday==$nowWday ){
-      $ergebnis = "is_true" if IsWe();
-    } elsif ( $wday==$nowWday+1) {
-      $ergebnis = "is_true" if IsWe("tomorrow");
-    } else { 
-      foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
-        if($h2we && ( $ergebnis eq 'none' || $h2we eq "noWeekEnd" )  && InternalVal($h2we, 'TYPE', '') eq "holiday" && !$noWeekEnd) {
-          $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$mon+1,$mday));
-          if ($ergebnis ne 'none' && $h2we eq "noWeekEnd") {
-            $ergebnis = 'none';
-            $noWeekEnd = 1;
-          }
-        }
-      }
-    }
-    if ($ergebnis ne 'none') {
-      #Log 3, "ergebnis-------$i----->$ergebnis";
+    my $relativeDay = $i - $nowWday; 
+    $relativeDay = $relativeDay + 7 if $relativeDay < 0 ;
+    if ($hash->{helper}{WEDAYS}{$relativeDay}) {
       $hdays{$i} = undef if ($d==7);#||AttrVal('global', 'holiday2we', '') =~ m,\bweekEnd\b,); #  $we Tag aufnehmen
       delete $hdays{$i} if ($d==8); # !$we Tag herausnehmen
     }
@@ -620,6 +590,45 @@ sub WeekdayTimer_SetTimerOfDay($) {
     my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time());
     my $secSinceMidnight = 3600*$hour + 60*$min + $sec;
 
+    my %wedays =();
+    
+    my $iswe = IsWe();
+    $wedays{(0)} = $iswe if $iswe;
+    $iswe = IsWe("tomorrow");
+    $wedays{(1)} = $iswe if $iswe;
+    
+    for (my $i=2;$i<=6;$i++) {
+      my $noWeekEnd = 0;
+      my $ergebnis = 'none';
+      my $izeit = time() + DAYSECONDS * $i;
+      my ($isec,$imin,$ihour,$imday,$imon,$iyear,$iwday,$iyday,$iisdst) = localtime($izeit);
+          
+      foreach my $h2we (split(',', AttrVal('global', 'holiday2we', ''))) {
+        if($h2we && ( $ergebnis eq 'none' || $h2we eq "noWeekEnd" )  && InternalVal($h2we, 'TYPE', '') eq "holiday" && !$noWeekEnd) {
+          $ergebnis = CommandGet(undef,$h2we . ' ' . sprintf("%02d-%02d",$imon+1,$imday));
+          if ($ergebnis ne 'none' && $h2we eq "noWeekEnd") {
+            $ergebnis = 'none';
+            $noWeekEnd = 1;
+          }
+        }
+      }
+      if ($ergebnis ne 'none') {
+        $wedays{$i} = $ergebnis ;
+      } else {
+        if (AttrVal('global', 'holiday2we', '') =~ m,\bweekEnd\b, && ($iwday == 0 || $iwday == 6)) { 
+          delete $wedays{$i};
+        } elsif ( $iwday == 0 || $iwday == 6) {
+          $wedays{$i} = 1 ;
+        } else {
+          delete $wedays{$i};
+        }
+      }
+    }
+    $hash->{helper}{WEDAYS} = \%wedays;
+    
+    
+  
+    
     $hash->{SETTIMERATMIDNIGHT} = $myHash->{SETTIMERATMIDNIGHT};
     WeekdayTimer_DeleteTimer($hash);
     WeekdayTimer_Profile    ($hash);
@@ -789,10 +798,12 @@ sub WeekdayTimer_searchAktNext($$) {
 		my $wend = 0;
 		my $tage = $hash->{profil}{$nextIdx}{TAGE}[0];
 		if ($wday==$relWday) {
-		  $wend = IsWe();
+		  $wend = $hash->{helper}{WEDAYS}{0};
+		  #$wend = IsWe();
 		  $ignore = (($tage == 7 && !$wend ) || ($tage == 8 && $wend ));
 		} elsif ( $wday==$relWday+1) {
-		  $wend = IsWe("tomorrow");
+		  $wend = $hash->{helper}{WEDAYS}{1};
+		  #$wend = IsWe("tomorrow");
 	      $ignore = (($tage == 7 && !$wend ) || ($tage == 8 && $wend ));
 		}
         if (!$ignore && $nextTime >= $now ) {
@@ -839,7 +850,8 @@ sub WeekdayTimer_Update($) {
      return;
   }
 
-  my $dieGanzeWoche = IsWe() ? 7:8 ; ## Test, Benennung ist dann irreführend...
+  my $dieGanzeWoche = $hash->{helper}{WEDAYS}{0} ? [7]:[8];
+  #my $dieGanzeWoche = IsWe() ? [7]:[8] ; ## Test, Benennung ist dann irreführend...
   #my $dieGanzeWoche = [7,8];
 
   my ($activeTimer, $activeTimerState);
@@ -980,6 +992,7 @@ sub WeekdayTimer_FensterOffen ($$$) {
                     "ZWave"           => { "READING" => "state",           "STATUS" => "(open)",        "MODEL" => "r" },
                     "MAX"             => { "READING" => "state",           "STATUS" => "(open.*)",      "MODEL" => "r" },
                     "dummy"           => { "READING" => "state",           "STATUS" => "(([Oo]pen|[Tt]ilt).*)",   "MODEL" => "r" },
+                    "HMCCUDEV"        => { "READING" => "state",           "STATUS" => "(open|tilted)", "MODEL" => "r" },
                     "WeekdayTimer"    => { "READING" => "delayedExecution","STATUS" => "^1\$",          "MODEL" => "a" },
                     "Heating_Control" => { "READING" => "delayedExecution","STATUS" => "^1\$",          "MODEL" => "a" }
                   );
@@ -1404,3 +1417,4 @@ sub WeekdayTimer_SetAllParms(;$) {            # {WeekdayTimer_SetAllParms()}
 =end :application/json;q=META.json
 
 =cut
+ 
