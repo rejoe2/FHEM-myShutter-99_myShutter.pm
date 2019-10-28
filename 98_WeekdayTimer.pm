@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm Testversion 2019-10-28 Beta-User $
+# $Id: 98_WeekdayTimer.pm Testversion 2019-10-14 21:28 Beta-User $
 ##############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -976,7 +976,7 @@ sub WeekdayTimer_FensterOffen ($$$) {
      if (defined($hash->{VERZOEGRUNG_IDX}) && $hash->{VERZOEGRUNG_IDX}!=$time) {
         #Prüfen, ob der nächste Timer überhaupt für den aktuellen Tag relevant ist!
 		
-		Log3 $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skiped by new timer at $hash->{profil}{$time}{TIME}";
+		Log3 $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$time}{TIME}, delayedExecutionCond returned $verzoegerteAusfuehrung";
         WeekdayTimer_RemoveInternalTimer($hash->{VERZOEGRUNG_IDX},$hash);
      }
      $hash->{VERZOEGRUNG_IDX} = $time;
@@ -1038,7 +1038,7 @@ sub WeekdayTimer_FensterOffen ($$$) {
                        Log3 $hash, 3, "[$name] switch of $hash->{DEVICE} delayed - sensor '$fk' Reading/Attribute '$reading' is '$windowStatus'";
                     }
                     if (defined($hash->{VERZOEGRUNG_IDX}) && $hash->{VERZOEGRUNG_IDX}!=$time) {
-                       Log3 $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skiped by new timer at $hash->{profil}{$time}{TIME}";
+                       Log3 $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$time}{TIME} while window contact returned open state";
                        WeekdayTimer_RemoveInternalTimer($hash->{VERZOEGRUNG_IDX},$hash);
                     }
                     $hash->{VERZOEGRUNG_IDX} = $time;
