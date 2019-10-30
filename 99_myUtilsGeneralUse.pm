@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtilsGeneralUse.pm 2019-07-18 Beta-User $
+# $Id: myUtilsGeneralUse.pm 2019-10-30 Beta-User $
 #
 
 package main;
@@ -52,6 +52,7 @@ sub myTBotpresence($$) {
   my ($name,$event) = @_;
   my $msg = ReadingsVal($name,"msgText","none");
   my $target = getKeyValue($event);
+  return undef unless $target;
   my $newState = "absent";
   CommandSet(undef,"$target T_last $msg");
   if ($msg =~ /^\/kurz.*/) {
@@ -81,5 +82,61 @@ sub myTBotpresence($$) {
     }
   }  
 }
+
+sub my_stairway_motion($$;$) {
+  my ($dev,$event,$timeout) = @_;
+  $timeout = 90 unless $timeout;
+  my $checktime = gettimeofday()+$timeout;
+
+  if ($dev eq "Bewegungsmelder_Treppenhaus_EG") {
+    return undef if ReadingsVal("Bewegungsmelder_Treppenhaus_Lichtlevel_EG","lux",0) > 20;
+    my $setdevice = "Licht_Flur_Treppe";
+
+	if(ReadingsAge($setdevice,"myLastPIR",10000) > 600 || ReadingsVal($setdevice,"myLastPIR","Bewegungsmelder_Treppenhaus_OG") ne "Bewegungsmelder_Treppenhaus_EG") {
+      #EG-Lichter
+	  CommandSet(undef, "$setdevice on") if ReadingsVal($setdevice,"status","OFF") ne "ON";
+	  CommandSet(undef, "$setdevice brightness 163");
+      readingsSingleUpdate($defs{$setdevice},"myLastPIR","$dev", 0);
+	  InternalTimer($checktime,"myTimeout_stairway_motion","$setdevice $dev");	
+      
+	  #OG-Licht
+	  $setdevice = "Licht_Treppenhaus_OG";
+      unless (ReadingsVal("$setdevice","state","off") =~ /on/) {
+	    CommandSet(undef, "$setdevice on : pct 25")  
+	  } elsif (ReadingsVal("$setdevice","brightness",0) < 80) {
+	    CommandSet(undef, "$setdevice brightness 40")  
+	  } 
+      readingsSingleUpdate($defs{$setdevice},"myLastPIR","$dev", 0);
+	  InternalTimer($checktime,"myTimeout_stairway_motion","$setdevice $dev");	
+    
+	}
+  } elsif ($dev eq "Bewegungsmelder_Treppenhaus_OG") {
+    return undef if ReadingsVal("Bewegungsmelder_Treppenhaus_Lichtlevel_EG","lux",0) > 20;
+    my $setdevice = "Licht_Flur_Treppe";
+
+#	  if(ReadingsAge($setdevice,"myLastPIR",10000) > 600 ) {
+      if (ReadingsVal($setdevice,"status","OFF") eq "OFF") {
+	    CommandSet(undef, "$setdevice on");
+        CommandSet(undef, "$setdevice brightness 60");
+      } else {
+	    CommandSet(undef, "$setdevice brightness 60") if ReadingsVal($setdevice,"brightness",0) < 60;
+	  }
+	  readingsSingleUpdate($defs{$setdevice},"myLastPIR","$dev", 0);
+      InternalTimer($checktime,"myTimeout_stairway_motion","$setdevice $dev");
+#	}
+  } 
+}
+
+
+sub myTimeout_stairway_motion ($) {
+  my ($name,$mdet) = split(' ',shift(@_));
+  #my $name = $hash->{NAME};
+  if (ReadingsVal("$name","myLastPIR","none") eq $mdet) {
+    CommandSet (undef,"$name off") ;
+    CommandDeleteReading(undef, "$name myLastPIR");
+  }
+  
+}
+
 
 1;
