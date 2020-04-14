@@ -6,7 +6,6 @@ package main;
 
 use strict;
 use warnings;
-use POSIX;
 
 sub
 myAdvanced_Utils_Initialize($$)
@@ -98,6 +97,63 @@ sub listInternalTimer(;$) {
 
     $ret .= '</table></html>';
     return $ret;
+}
+
+sub mySendLast20LogEntries($$){
+  my ($bot,$receiver) = @_;
+  my $seconds = time();
+  my $stop_processing = 0;
+  my @t = localtime($seconds);
+  my $today_log_filename = ResolveDateWildcards($attr{global}{logfile}, @t);
+  my @tyesterday = localtime($seconds-DAYSECONDS);
+  my ($err, @logdata) = FileRead({FileName => $today_log_filename,ForceType => "file"});
+  my $message = "Error reading logfile: $err";
+  unless ($err) {
+    my @datatosend;
+    if (@logdata > 19) {
+      @datatosend = @logdata[-20..-1];
+    } else {
+      @datatosend = @logdata;
+	  my $yesterday_log_filename = ResolveDateWildcards($attr{global}{logfile}, @tyesterday);
+      unless ($yesterday_log_filename eq $today_log_filename) {
+        my ($err2, @logdata2) = FileRead({FileName => $yesterday_log_filename,ForceType => "file"});
+        my $remainingLines = (@datatosend) - 20;
+		unshift (@datatosend, @logdata2[${remainingLines}..-1]) unless $err2;
+      }
+    }
+    my $str_today = ResolveDateWildcards("%Y.%m.%d",@t);
+    my $str_yesterday = ResolveDateWildcards("%Y.%m.%d",@tyesterday);
+    @datatosend = grep {
+      $_ =~ s/($str_today|$str_yesterday).//g #get only values from today and yesterday, cut of date and one character
+    } @datatosend;
+	for (@datatosend)  { s/[;&<>]//g };#remove unwanted characters
+    $message = join("\n", @datatosend); 
+  }
+  CommandSet(undef,"$bot _msg \@$receiver ```${message}```");
+  return;
+}
+
+sub identifyMyBestGW($;$) {
+  my ($name, $maxReadingsAge) = @_;
+  my $hash = $defs{$name};
+  $maxReadingsAge = $maxReadingsAge // AttrVal($name,"maxReadingsAge",600);
+  my @rssis = grep { $_ =~ /.*_rssi/ } sort keys %{ $hash->{READINGS} }; 
+  my $bestGW = "unknown";
+  my $bestGWold = ReadingsVal($name,"bestRecentGW","unknownGW");
+  my $bestRSSI = -1000;
+  my $currentRSSI = 0;
+  foreach (@rssis) {
+    if (ReadingsAge($name,$_,100) < $maxReadingsAge) {
+      $currentRSSI = ReadingsVal($name,$_,-1100);
+      if ($currentRSSI > $bestRSSI) {
+        $bestRSSI = $currentRSSI ;
+        $bestGW = $_;
+      }
+      
+    }
+  }
+  $bestGW =~ s/_.*//g;
+  return $bestGW ne $bestGWold ? $bestGW : undef;
 }
 
 1;

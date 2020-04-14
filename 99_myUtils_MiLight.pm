@@ -6,7 +6,6 @@ package main;
 
 use strict;
 use warnings;
-use POSIX;
 
 sub
 myUtils_MiLight_Initialize($$)
@@ -163,7 +162,19 @@ sub milight_to_shutter($$) {
     
 	CommandSet(undef, "$slatname $com $slatlevel");
 	
-  } 
+  } elsif ($event =~ /color_temp/) {
+	my ($reading,$value) = split (/ /,$event);
+    my $slatname = $name;
+	my $slatlevel = 100 - ($value/(370-153))*100;
+    $com = $type eq "ZWave" ? "dim" : "slats"; 
+	$slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
+    my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
+    $defnr++;
+    my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
+    $slatname = shift @slatnames;
+    
+	CommandSet(undef, "$slatname $com $slatlevel");
+  }	
 }
 
 sub milight_Deckenlichter ($) {
@@ -225,7 +236,7 @@ sub milight_Deckenlichter ($) {
 <ul>
   <b>milight_Deckenlichter ($)</b><br>
   Allows control of a group of 4 channels of on/off devices.<br>
-</ul>
+</ul><br>
 <ul>
   <b>milight_to_MPD($$)</b><br>
   Allows control of a MusicPlayerDeamon - basics like play, pause, stop and volume.<br>

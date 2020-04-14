@@ -6,7 +6,6 @@ package main;
 
 use strict;
 use warnings;
-use POSIX;
 
 sub
 myUtils_ZWave_Initialize($$)
