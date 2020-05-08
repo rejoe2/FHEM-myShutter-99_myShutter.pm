@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2019-09-09 Beta-User $
+# $Id: myUtils_MiLight.pm 2020-05-08 Beta-User $
 #
 
 package main;
@@ -8,15 +8,15 @@ use strict;
 use warnings;
 
 sub
-myUtils_MiLight_Initialize($$)
+myUtils_MiLight_Initialize
 {
   my ($hash) = @_;
 }
 
 # Enter you functions below _this_ line.
 
-sub milight_toggle_indirect($) {
-  my ($name) = @_;
+sub milight_toggle_indirect {
+  my $name = shift // return;
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
   my $dimmLevel;
   my $hash;
@@ -40,10 +40,12 @@ sub milight_toggle_indirect($) {
        CommandSet(undef, "$setdevice off");
     }
   }
+  return;
 }
 
-sub milight_dimm_indirect($$) {
-  my ($name,$event) = @_;
+sub milight_dimm_indirect {
+  my $name  = shift;
+  my $event = shift // return;
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
   foreach my $setdevice (split (/,/,$Target_Devices)) {
     if ($event =~ m/LongRelease/) {
@@ -52,10 +54,11 @@ sub milight_dimm_indirect($$) {
       milight_dimm($setdevice);
 	}
   }
+  return;
 }
 
-sub milight_dimm($) {
-  my ($Target_Device) = @_;
+sub milight_dimm {
+  my $Target_Device = shift // return;
   my $dimmDir = ReadingsVal($Target_Device,"myDimmDir","up");
   my $dimmLevel = ReadingsVal($Target_Device,"myLastdimmLevel",ReadingsNum($Target_Device,"brightness","255"));
   if ($dimmDir ne "up") { 
@@ -75,8 +78,9 @@ sub milight_dimm($) {
   readingsSingleUpdate($defs{$Target_Device}, "myLastdimmLevel",$dimmLevel, 0);
 }
 
-sub milight_FUT_to_RGBW($$) {
-  my ($name,$Event) = @_;
+sub milight_FUT_to_RGBW {
+  my $name  = shift;
+  my $Event = shift // return;
   #return "" if ReadingsVal($name,"presence","absent") eq "absent";
   $Event =~ s/://g;
   if($Event =~ /OFF|ON/) {
@@ -92,8 +96,9 @@ sub milight_FUT_to_RGBW($$) {
   }  
 }
 
-sub milight_to_MPD($$) {
-  my ($name,$Event) = @_;
+sub milight_to_MPD {
+  my $name  = shift;
+  my $Event = shift // return;
   return "" if ReadingsVal($name,"presence","absent") eq "absent";
   if($Event =~ /ON/) {
     CommandSet(undef, "$name play") if ReadingsVal($name,"state","play") =~ /pause|stop/;
@@ -121,12 +126,14 @@ sub milight_to_MPD($$) {
 
   } else {
 
-  }  
+  }
+  return;
 }
 
-sub milight_to_shutter($$) {
+sub milight_to_shutter {
   #foreach my $setdevice (split (/ /,$Target_Devices)) {
-  my ($name,$event) = @_;
+  my $name  = shift;
+  my $event = shift // return;
   my $type = InternalVal($name,"TYPE","MQTT2_DEVICE"); 
   my $moving = ReadingsVal($name,"motor","stop") =~ /stop/ ? 0 : 1;
   $moving = 1 if (ReadingsNum($name,"power",0) > 1 && $type eq "ZWave");
@@ -175,10 +182,11 @@ sub milight_to_shutter($$) {
     
 	CommandSet(undef, "$slatname $com $slatlevel");
   }	
+  return;
 }
 
-sub milight_Deckenlichter ($) {
-  my $Event = shift @_;
+sub milight_Deckenlichter {
+  my $Event = shift // return;
   if ($Event =~ /mode_speed_up/){
     CommandSet(undef, "Licht_WoZi_Hinten_Aussen toggle");
   } elsif ($Event =~ /mode_speed_down/){
@@ -195,6 +203,7 @@ sub milight_Deckenlichter ($) {
       CommandSet(undef, "Licht_WoZi_Vorn_Aussen on");
     } 
   }
+  return;
 }
 
 1;

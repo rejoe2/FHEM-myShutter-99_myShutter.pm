@@ -8,14 +8,14 @@ use strict;
 use warnings;
 
 sub
-myUtils_Homematic_Initialize($$)
+myUtils_Homematic_Initialize
 {
   my ($hash) = @_;
 }
 
 # Enter you functions below _this_ line.
 
-sub myWinContactNotify ($$;$) {
+sub myWinContactNotify {  #three parameters, last (timeout) is optional
   my ($window, $event, $timeout) = @_;
   $timeout = 90 unless $timeout;
   my @virtuals = devspec2array("TYPE=CUL_HM:FILTER=model=VIRTUAL:FILTER=myRealFK=.*$window.*");
@@ -33,10 +33,11 @@ sub myWinContactNotify ($$;$) {
 	  CommandSet (undef,"$virtual geschlossen") unless ( $openwc );
 	}	
   }	
+  return;
 }	
 
-sub myTimeoutWinContact ($) {
-  my $name = shift(@_);
+sub myTimeoutWinContact {
+  my $name = shift // return;
   #my $name = $hash{NAME};
   return unless (ReadingsVal("Heizperiode","state","off") eq "on");
   my $myreals = AttrVal($name,"myRealFK","");
@@ -46,10 +47,11 @@ sub myTimeoutWinContact ($) {
     $openwc++ if (ReadingsVal($wc,"state","closed") ne "closed");
   }
   CommandSet (undef,"$name offen") if ( $openwc );
+  return;
 }
 
-sub devStateIcon_Clima($) {
-my $climaname = shift(@_);
+sub devStateIcon_Clima {
+my $climaname = shift // return;
 my $ret ="";
 my $name = InternalVal($climaname,"device",$climaname);
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
@@ -118,13 +120,12 @@ $symbol_string = "sani_heating_boost" if $controlval =~ /boost/;
 my $boostname = $TC ? $climaname : $name;
 $ret .= "<a href=\"/fhem?cmd.dummy=set $boostname controlMode boost&XHR=1\">" . FW_makeImage($symbol_string,"temp_control") . "</a>";
 
-return "<div><p style=\"text-align:right\">$ret</p></div>"
-;
+return "<div><p style=\"text-align:right\">$ret</p></div>";
 }
 
 
 #Aufruf:   {HM_TC_Holiday (<Thermostat>,"16", "06.12.13", "16:30", "09.12.13" ,"05:00")}
-sub HM_TC_Holiday($$$$$$) {
+sub HM_TC_Holiday { # 6 Parameters needed
   my ($rt, $temp, $startDate, $startTime, $endDate, $endTime) = @_;
   my $climaname = $rt."_Clima";
   $climaname = $rt."_Climate" if (AttrVal($rt,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU");
@@ -137,13 +138,14 @@ sub HM_TC_Holiday($$$$$$) {
   $startTime =~ s/\:[3-5].$/:30/;
   $endTime =~ s/\:[0-2].$/:00/;
   $endTime =~ s/\:[3-5].$/:30/;
-  CommandSet (undef,"$climaname controlParty $temp $startDate $startTime $endDate $endTime");
+  return CommandSet (undef,"$climaname controlParty $temp $startDate $startTime $endDate $endTime");
 }
 
-sub easy_HM_TC_Holiday($$;$$) {
-  my ($rt, $temp, $strt, $duration) = @_;
-  $duration = 3*3600 unless defined $duration; # 3 hours
-  $strt = gettimeofday() unless defined $strt;
+sub easy_HM_TC_Holiday { # 4 parameters, last two optional
+  my $rt = shift // return;
+  my $temp = shift // return;
+  my $duration = shift // 3*3600; # 3 hours
+  my $strt =  shift // gettimeofday();
   $duration = 0 if $strt eq "stop";
   $strt = gettimeofday() if $strt eq "now";
   $strt = gettimeofday() if $strt eq "stop";
@@ -157,11 +159,11 @@ sub easy_HM_TC_Holiday($$;$$) {
   my ($endDate, $endTime) = split(' ', sec2time_date($strt+$duration));
   #Log3 ($rt, 3, "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime");
   #return "myHM-utils $rt: Dauer: $duration, Start: $startDate, $startTime, Ende: $endDate, $endTime"
-  HM_TC_Holiday($rt,$temp,$startDate,$startTime,$endDate,$endTime);
+  return HM_TC_Holiday($rt,$temp,$startDate,$startTime,$endDate,$endTime);
 }
 
-sub hm_firmware_update_httpmod_stateFormat ($) {	
-  my $name = shift @_;
+sub hm_firmware_update_httpmod_stateFormat {	
+  my $name = shift // return;
   my $lastCheck = ReadingsTimestamp($name,"MATCHED_READINGS","???"); 	
   my $ret .= '<div style="text-align:left">last <a title="eq3-downloads" href="http://www.eq-3.de/service/downloads.html">homematic</a>-fw-check => '.$lastCheck; 	
   $ret .= '<br><br><pre>'; 	
@@ -200,8 +202,8 @@ sub hm_firmware_update_httpmod_stateFormat ($) {
   return $ret;
 }
 
-sub hm_firmware_update_httpmod_newFwForDevices ($) {	
-  my $name = shift @_;
+sub hm_firmware_update_httpmod_newFwForDevices {	
+  my $name = shift // return;
 	my $ret = "";
 	my @data;
 	if (ReadingsVal($name,"UNMATCHED_READINGS","?") eq "") {
@@ -229,8 +231,8 @@ sub hm_firmware_update_httpmod_newFwForDevices ($) {
 }
 
 
-sub sec2time_date($) {
-  my ($seconds) = @_;
+sub sec2time_date {
+  my ($seconds) = shift // return;
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($seconds);
   $year = sprintf("%02d", $year % 100); #shorten to 2 digits
   $mon   = $mon+1; #range in localtime is 0-11
@@ -242,9 +244,8 @@ sub sec2time_date($) {
   return "$date $time";
 }
 
-sub roundTime2fiveMinutes($)
-{
-  my ($time) = @_;
+sub roundTime2fiveMinutes {
+  my $time = shift // return;
   if ($time =~ /^([0-2]\d):(\d)(\d)$/)
   {
     my $n = $3;
@@ -252,7 +253,7 @@ sub roundTime2fiveMinutes($)
     $n = "5" if ($n>5);
     return "$1:$2$n";
   }
-  return undef;
+  return
 }
 
 1;
