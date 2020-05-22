@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2020-05-08 Beta-User $
+# $Id: myUtils_MiLight.pm 2020-05-22 Beta-User $
 #
 
 package main;
@@ -49,10 +49,10 @@ sub milight_dimm_indirect {
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
   foreach my $setdevice (split (/,/,$Target_Devices)) {
     if ($event =~ m/LongRelease/) {
-	  AnalyzeCommand(undef,"deleteReading $setdevice myLastdimmLevel");
-	} else {
+      AnalyzeCommand(undef,"deleteReading $setdevice myLastdimmLevel");
+    } else {
       milight_dimm($setdevice);
-	}
+    }
   }
   return;
 }
@@ -96,6 +96,46 @@ sub milight_FUT_to_RGBW {
   }  
 }
 
+sub milight_FUT_to_HUE {
+  my $name  = shift;
+  my $Event = shift // return;
+  my $whitecol = shift // 'FFFFFF';
+  #return "" if ReadingsVal($name,"presence","absent") eq "absent";
+  $Event =~ s/://g;
+  my @parms = split  m{\s+}xms, $Event; 
+        
+  if($Event =~ /OFF|ON/) {
+    my $command = lc ($Event);
+    return CommandSet(undef, "$name $command");
+  }
+  
+  if ($Event =~ /brightness/)  {
+    $Event =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
+    return CommandSet(undef, "$name $Event");
+  } 
+  
+  if ($Event =~ /hue/)  {
+    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+        my $rgb = Color::hsv2hex($parms[1],ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
+        return CommandSet(undef, "$name rgb $rgb");
+    }
+    return CommandSet(undef, "$name $Event");
+  } 
+  
+  if ($Event =~ /saturation/)  {
+    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+        my $sat = int($parms[1]*2.54);
+        return CommandSet(undef, "$name sat $sat");
+    }
+    return CommandSet(undef, "$name $Event");
+  } 
+  
+  if ($Event =~ /command set_white/)  {
+    return CommandSet(undef, "$name rgb $whitecol") if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice");
+    return CommandSet(undef, "$name command Weiss");
+  }  
+}
+
 sub milight_to_MPD {
   my $name  = shift;
   my $Event = shift // return;
@@ -119,7 +159,7 @@ sub milight_to_MPD {
     my $gainmode = CommandSet(undef, "$name mpdCMD replay_gain_status") =~ /album/ ? "auto" : "album"; 
     
     CommandSet(undef, "$name mpdCMD replay_gain_mode $gainmode");
- 	
+ 
   } elsif ($Event =~ /bulb_mode.*white/)  {
     my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
     CommandSet(undef, "$name mpdCMD consume $consumer");
@@ -142,59 +182,67 @@ sub milight_to_shutter {
   my $now = gettimeofday;
   if (!$moving && $event =~ m/ON|OFF/) {
     if ($now - ReadingsVal($name, "myLastRCOnOff",$now) < 5) {
-	  CommandSet(undef,"$name $com");
       CommandSetReading(undef,"$name myLastRCOnOff $now");
-	} else {
-      CommandSetReading(undef,"$name myLastRCOnOff $now");
-	} 
-  } elsif ($event =~ m/ON|OFF/) { 
-    CommandSet(undef,"$name stop");
-	CommandSetReading(undef,"$name myLastRCOnOff $now");
-  } elsif ($event =~ /brightness/) {
-	my ($reading,$value) = split (/ /,$event);
+      return CommandSet(undef,"$name $com");
+
+    } else {
+      return CommandSetReading(undef,"$name myLastRCOnOff $now");
+    } 
+  } 
+  if ($event =~ m/ON|OFF/) { 
+    CommandSetReading(undef,"$name myLastRCOnOff $now");
+    return CommandSet(undef,"$name stop");
+  }
+  if ($event =~ /brightness/) {
+    my ($reading,$value) = split (/ /,$event);
     my $level = int (round ($value/2,55));
     $com = $type eq "ZWave" ? "dim" : "pct"; 
-	$level = 99 if ($level == 100 && $type eq "ZWave");
-    CommandSet(undef, "$name $com $level");
-  } elsif ($event =~ /saturation/) {
-	my ($reading,$value) = split (/ /,$event);
+    $level = 99 if ($level == 100 && $type eq "ZWave");
+    return CommandSet(undef, "$name $com $level");
+  } 
+  if ($event =~ /saturation/) {
+    my ($reading,$value) = split (/ /,$event);
     my $slatname = $name;
-	my $slatlevel = 100 - $value;
+    my $slatlevel = 100 - $value;
     $com = $type eq "ZWave" ? "dim" : "slats"; 
-	$slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
+    $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
     my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
     $defnr++;
     my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
     $slatname = shift @slatnames;
     
-	CommandSet(undef, "$slatname $com $slatlevel");
-	
-  } elsif ($event =~ /color_temp/) {
-	my ($reading,$value) = split (/ /,$event);
+    return CommandSet(undef, "$slatname $com $slatlevel");
+
+  } 
+  if ($event =~ /color_temp/) {
+    my ($reading,$value) = split (/ /,$event);
     my $slatname = $name;
-	my $slatlevel = 100 - ($value/(370-153))*100;
+    my $slatlevel = 100 - ($value/(370-153))*100;
     $com = $type eq "ZWave" ? "dim" : "slats"; 
-	$slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
+    $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
     my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
     $defnr++;
     my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
     $slatname = shift @slatnames;
     
-	CommandSet(undef, "$slatname $com $slatlevel");
-  }	
+    return CommandSet(undef, "$slatname $com $slatlevel");
+  }
   return;
 }
 
 sub milight_Deckenlichter {
   my $Event = shift // return;
   if ($Event =~ /mode_speed_up/){
-    CommandSet(undef, "Licht_WoZi_Hinten_Aussen toggle");
-  } elsif ($Event =~ /mode_speed_down/){
-    CommandSet(undef, "Licht_WoZi_Vorn_Aussen toggle");
-  } elsif ($Event =~ /command: set_white/){
-    CommandSet(undef, "Licht_WoZi_Vorn_Mitte toggle");
-  } elsif ($Event =~ /mode: [0-8]/){
-    CommandSet(undef, "Licht_WoZi_Hinten_Mitte toggle");
+    return CommandSet(undef, "Licht_WoZi_Hinten_Aussen toggle");
+  } 
+  if ($Event =~ /mode_speed_down/){
+    return CommandSet(undef, "Licht_WoZi_Vorn_Aussen toggle");
+  } 
+  if ($Event =~ /command: set_white/){
+    return CommandSet(undef, "Licht_WoZi_Vorn_Mitte toggle");
+  } 
+  if ($Event =~ /mode: [0-8]/){
+    return CommandSet(undef, "Licht_WoZi_Hinten_Mitte toggle");
   } else {
     my @ondevs = devspec2array("Licht_WoZi_(Hinten|Vorn)_(Aussen|Mitte):FILTER=state=on");
     if (@ondevs) {
