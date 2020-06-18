@@ -55,7 +55,7 @@ my $climaname = shift // return;
 my $ret ="";
 my $name = InternalVal($climaname,"device",$climaname);
 my $TC = AttrVal($name,"model","HM-CC-RT-DN") eq "HM-TC-IT-WM-W-EU" ? 1:0;
-my $state = ReadingsVal($name,"state","NACK");
+my $state = ReadingsVal($name,"commState","NACK");
 
 #Battery
 my $batval  = ReadingsVal($name,"batteryLevel","");
@@ -63,10 +63,10 @@ my $symbol_string = "measure_battery_";
 my $command_string = "getConfig";
 if ($batval >=3) {$symbol_string .= "100"} elsif ($batval >2.6) {$symbol_string .= "75"} elsif ($batval >2.4) {$symbol_string .= "50"} elsif ($batval >2.1) {$symbol_string .= "25"} else {$symbol_string .= '0@red'};
 
-if ($state =~ /CMDs_p/) {
+if ($state =~ m{CMDs_p}x) {
   $symbol_string = "edit_settings";
   $command_string = "clear msgEvents"; 
-} elsif ($state =~ /RESPONSE|NACK/) {
+} elsif ($state =~ m{RESPONSE|NACK}x) {
   $command_string = "clear msgEvents"; 
   $symbol_string = 'edit_settings@red' ;
 }
@@ -75,14 +75,14 @@ $ret .= "<a href=\"/fhem?cmd.dummy=set $name $command_string&XHR=1\">" . FW_make
 #Lock Mode
 my $btnLockval = ReadingsVal($name,".R-btnLock","on") ;
 #$btnLockval = InternalVal($name,".R-btnLock","on") if ($TC);
-my $btnLockvalSet = $btnLockval =~ /on/ ? "off":"on";
-$symbol_string = $btnLockval =~ /on/ ? "secur_locked": "secur_open";
+my $btnLockvalSet = $btnLockval =~ m{on}x ? "off":"on";
+$symbol_string = $btnLockval =~ m{on}x ? "secur_locked": "secur_open";
 $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $name regSet btnLock $btnLockvalSet&XHR=1\">" . FW_makeImage($symbol_string, "locked")."</a>";
 
 #ControlMode
 my $controlval = ReadingsVal($climaname,"controlMode","manual") ;
-my $controlvalSet = ($controlval =~ /manual/)? "auto":"manual";
-$symbol_string = $controlval =~ /manual/ ? "sani_heating_manual" : "sani_heating_automatic";
+my $controlvalSet = ($controlval =~ m{manual}x)? "auto":"manual";
+$symbol_string = $controlval =~ m{manual}x ? "sani_heating_manual" : "sani_heating_automatic";
 $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname controlMode $controlvalSet&XHR=1\">" . FW_makeImage($symbol_string,"sani_heating_manual")."</a>";
 #my $symbol_mode = "<a href=\"/fhem?cmd.dummy=set $climaname controlMode $controlvalSet&XHR=1\">" . FW_makeImage($mode_symbol_string,"sani_heating_manual")."</a>";
 
@@ -91,8 +91,8 @@ if ($TC) {
   #progSelect
   #Reading: R-weekProgSel  (z.B. prog1) Bild: rc_1 usw., 
   my $progVal = ReadingsVal($climaname,"R-weekPrgSel","none") ;
-  my $progValSet = $progVal =~ /prog1/ ? "prog2" : $progVal =~ /prog2/ ? "prog3":"prog1" ;
-  $symbol_string = $progVal =~ /prog1/ ? "rc_1" : $progVal =~ /prog2/ ? "rc_2": $progVal =~ /prog3/ ?"rc_3":"unknown" ;
+  my $progValSet = $progVal =~ m{prog1}x ? "prog2" : $progVal =~ m{prog2}x ? "prog3":"prog1" ;
+  $symbol_string = $progVal =~ m{prog1}x ? "rc_1" : $progVal =~ m{prog2}x ? "rc_2": $progVal =~ m{prog3}x ?"rc_3":"unknown" ;
   $ret .= " " . "<a href=\"/fhem?cmd.dummy=set $climaname regSet weekPrgSel $progValSet&XHR=1\">" . FW_makeImage($symbol_string, "rc_1")."</a> ";
   #humidity
   my $humval = ReadingsVal($climaname,"humidity","") ;
@@ -149,10 +149,10 @@ sub easy_HM_TC_Holiday { # 4 parameters, last two optional
   $duration = 0 if $strt eq "stop";
   $strt = gettimeofday() if $strt eq "now";
   $strt = gettimeofday() if $strt eq "stop";
-  if ($strt =~ /^(\d+):(\d+)$/) {
+  if ( $strt =~ m{\A(\d+):(\d+)\z}x ) {
     $strt = $1*DAYSECONDS + $2*HOURSECONDS;
   };
-  if ($duration =~ /^(\d+):(\d+)$/) {
+  if ( $duration =~ m{\A(\d+):(\d+)\z}x ) {
     $duration = $1*DAYSECONDS + $2*HOURSECONDS;
   };
   my ($startDate, $startTime) = split(' ', sec2time_date($strt));
@@ -232,7 +232,7 @@ sub hm_firmware_update_httpmod_newFwForDevices {
 
 
 sub sec2time_date {
-  my ($seconds) = shift // return;
+  my $seconds = shift // return;
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($seconds);
   $year = sprintf("%02d", $year % 100); #shorten to 2 digits
   $mon   = $mon+1; #range in localtime is 0-11
@@ -246,7 +246,7 @@ sub sec2time_date {
 
 sub roundTime2fiveMinutes {
   my $time = shift // return;
-  if ($time =~ /^([0-2]\d):(\d)(\d)$/)
+  if ($time =~ m{\A([0-2]\d):(\d)(\d)\z}x)
   {
     my $n = $3;
     $n = "0" if ($n<5);
