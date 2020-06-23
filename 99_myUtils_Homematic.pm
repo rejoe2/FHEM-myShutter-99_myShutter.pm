@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm 08-15 2019-10-08 11:55:42Z Beta-User $
+# $Id: myUtils_Homematic.pm 08-15 2020-06-23 Beta-User $
 #
 
 package main;
