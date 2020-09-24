@@ -138,11 +138,11 @@ sub Twilight_Define {
 
     $hash->{WEATHER_HORIZON} = 0;
     CommandAttr( undef, "$name indoorHorizon $indoor_horizon") if $indoor_horizon; 
-    $hash->{LATITUDE}        = $latitude;
-    $hash->{LONGITUDE}       = $longitude;
+    $hash->{helper}{'.LATITUDE'}  = $latitude;
+    $hash->{helper}{'.LONGITUDE'} = $longitude;
     #$hash->{WEATHER}         = $weather if $weather;
     
-    $hash->{CONDITION}     = 50;
+    #$hash->{CONDITION}     = 50;
     $hash->{SUNPOS_OFFSET} = 5 * 60;
 
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
@@ -182,7 +182,7 @@ sub Twilight_Change_DEF {
     my $hash  = shift // return;
     my $name = $hash->{NAME};
     my $newdef = "";
-    $newdef = "$hash->{LATITUDE} $hash->{LONGITUDE}" if $hash->{LATITUDE} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{LONGITUDE} != AttrVal( 'global', 'longitude', 8.686 );
+    $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
    
     return CommandModify(undef, "$name $newdef");    
 }
@@ -212,10 +212,10 @@ sub Twilight_Notify {
         
             #### tbd; this is the place to update ss_wather and sr_weather
             my $extWeather = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},-1);
-            my $last = ReadingsNum($name, "extWeatherValue", -1);
+            my $last = ReadingsNum($name, "cloudCover", -1);
             return if $last - 6 < $extWeather && $last + 6 > $extWeather;
             
-            readingsSingleUpdate ($hash,  "extWeatherValue", $extWeather, 1);
+            readingsSingleUpdate ($hash,  "cloudCover", $extWeather, 1);
                         
             Twilight_getWeatherHorizon( $hash, $extWeather );
             Twilight_TwilightTimes( $hash, "weather", $extWeather, 1 );
@@ -238,8 +238,8 @@ sub Twilight_Firstrun {
         $hash->{helper}{extWeather}{Device} = $extWeather;
         $hash->{helper}{extWeather}{Reading} = $extWReading;
 
-        my $extWeatherVal = ReadingsVal($extWeather, $extWReading,"-1");
-        readingsSingleUpdate ($hash,  "extWeatherValue", $extWeatherVal, 0);
+        my $extWeatherVal = ReadingsNum($extWeather, $extWReading,-1);
+        readingsSingleUpdate ($hash, "cloudCover", $extWeatherVal, 0);
         Twilight_getWeatherHorizon( $hash, $extWeatherVal );
         Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
     }
@@ -376,8 +376,8 @@ sub Twilight_calc {
     my $idx  = shift // return;
 
     my $midnight = time() - Twilight_midnight_seconds( time() );
-    my $lat      = $hash->{LATITUDE};
-    my $long     = $hash->{LONGITUDE};
+    my $lat      = $hash->{helper}{'.LATITUDE'};
+    my $long     = $hash->{helper}{'.LONGITUDE'};
 
     #my $sr = sunrise_abs("Horizon=$deg");
     my $sr =
@@ -409,11 +409,11 @@ sub Twilight_TwilightTimes {
 
     my $Name = $hash->{NAME};
 
-    my $horizon = $hash->{HORIZON};
+    #my $horizon = $hash->{HORIZON};
     my $swip    = $hash->{SWIP};
 
-    my $lat  = $hash->{LATITUDE};
-    my $long = $hash->{LONGITUDE};
+    my $lat  = $hash->{helper}{'.LATITUDE'};
+    my $long = $hash->{helper}{'.LONGITUDE'};
 
 # ------------------------------------------------------------------------------
     my $idx      = -1;
@@ -448,8 +448,8 @@ sub Twilight_TwilightTimes {
         }
     }
 
-#$attr{global}{latitude}  = $lat;
-#$attr{global}{longitude} = $long;
+#$attr{global}{helper}{'.LATITUDE'}  = $lat;
+#$attr{global}{helper}{'.LONGITUDE'} = $long;
 # ------------------------------------------------------------------------------
     readingsBeginUpdate($hash);
     for my $ereignis ( keys %{ $hash->{TW} } ) {
@@ -464,10 +464,10 @@ sub Twilight_TwilightTimes {
             : FmtTime( $hash->{TW}{$ereignis}{TIME} ) );
         }
     }
-    if ( $hash->{CONDITION} != 50 ) {
-        readingsBulkUpdate( $hash, "condition", $hash->{CONDITION} );
+    #if ( $hash->{CONDITION} != 50 ) {
+        #readingsBulkUpdate( $hash, "condition", $hash->{CONDITION} );
         #readingsBulkUpdate( $hash, "condition_txt", $hash->{CONDITION_TXT} );
-    }
+    #}
     readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
 
 # ------------------------------------------------------------------------------
@@ -719,14 +719,14 @@ sub Twilight_getWeatherHorizon {
     
     
     return if !looks_like_number($result) || $result < 0 || $result > 100;
-    $hash->{CONDITION} = $result;
-    Log3 ( $hash, 4, "[$hash->{NAME}] Set (Sun-)Condition to [$hash->{CONDITION}] (Cloud-)Condition was [$result]!");
-    $hash->{WEATHER_CORRECTION} = $hash->{CONDITION} / 12.5;
+    #$hash->{CONDITION} = $result;
+    #Log3 ( $hash, 4, "[$hash->{NAME}] Set (Sun-)Condition to [$hash->{CONDITION}] (Cloud-)Condition was [$result]!");
+    $hash->{WEATHER_CORRECTION} = $result / 12.5;
     $hash->{WEATHER_HORIZON}    = $hash->{WEATHER_CORRECTION} + $hash->{INDOOR_HORIZON};
     my $doy = strftime("%j",localtime);
     my $declination =  0.4095*sin(0.016906*($doy-80.086));
-    if($hash->{WEATHER_HORIZON} > (89-$hash->{LATITUDE}+$declination) ){
-        $hash->{WEATHER_HORIZON} =  89-$hash->{LATITUDE}+$declination;	
+    if($hash->{WEATHER_HORIZON} > (89-$hash->{helper}{'.LATITUDE'}+$declination) ){
+        $hash->{WEATHER_HORIZON} =  89-$hash->{helper}{'.LATITUDE'}+$declination;
     };
     
     return;
@@ -736,7 +736,7 @@ sub Twilight_getWeatherHorizon {
     my $location = $hash->{WEATHER};
     if ( $location == 0 ) {
         $hash->{WEATHER_HORIZON} = "0";
-        $hash->{CONDITION}       = "0";
+        #$hash->{CONDITION}       = "0";
         return 1;
     }
 
@@ -795,8 +795,8 @@ sub Twilight_getWeatherHorizon {
         $hash->{WEATHER_CORRECTION} = $faktor_cond_code[$cond_code] / 25 * 20;
         $hash->{WEATHER_HORIZON} =
           $hash->{WEATHER_CORRECTION} + $hash->{INDOOR_HORIZON};
-        $hash->{CONDITION}     = $cond_code;
-        $hash->{CONDITION_TXT} = $cond_txt;
+        #$hash->{CONDITION}     = $cond_code;
+        #$hash->{CONDITION_TXT} = $cond_txt;
         $hash->{TEMPERATUR}    = $temperatur;
         Log3( $hash, 4,
 "[$hash->{NAME}] $cond_code=$cond_txt $temperatur, correction: $hash->{WEATHER_CORRECTION}°"
@@ -805,9 +805,9 @@ sub Twilight_getWeatherHorizon {
 
 #    my $doy = strftime( "%j", localtime );
 #    my $declination = 0.4095 * sin( 0.016906 * ( $doy - 80.086 ) );
-    if ( $hash->{WEATHER_HORIZON} > ( 89 - $hash->{LATITUDE} + $declination ) )
+    if ( $hash->{WEATHER_HORIZON} > ( 89 - $hash->{helper}{'.LATITUDE'} + $declination ) )
     {
-        $hash->{WEATHER_HORIZON} = 89 - $hash->{LATITUDE} + $declination;
+        $hash->{WEATHER_HORIZON} = 89 - $hash->{helper}{'.LATITUDE'} + $declination;
     }
 
     return 1;
@@ -830,8 +830,8 @@ sub Twilight_sunpos {
     $iMonth++;
     $iYear += 100;
 
-    my $dLongitude = $hash->{LONGITUDE};
-    my $dLatitude  = $hash->{LATITUDE};
+    my $dLongitude = $hash->{helper}{'.LONGITUDE'};
+    my $dLatitude  = $hash->{helper}{'.LATITUDE'};
     Log3( $hash, 5,
         "Compute sunpos for latitude $dLatitude , longitude $dLongitude" )
       if $dHours == 0 && $dMinutes <= 6;
