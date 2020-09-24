@@ -69,6 +69,7 @@ BEGIN {
           readingsEndUpdate
           AttrVal
           ReadingsVal
+          ReadingsNum
           IsDisabled
           Log3
           InternalTimer
@@ -210,8 +211,12 @@ sub Twilight_Notify {
         if($found) {
         
             #### tbd; this is the place to update ss_wather and sr_weather
-            my $extWeather = ReadingsVal($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},"-1");
+            my $extWeather = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},-1);
+            my $last = ReadingsNum($name, "extWeatherValue", -1);
+            return if $last == -1 || ( $last - 6 < $extWeather && $last + 6 > $extWeather );
+            
             readingsSingleUpdate ($hash,  "extWeatherValue", $extWeather, 1);
+                        
             Twilight_getWeatherHorizon( $hash, $extWeather );
             Twilight_TwilightTimes( $hash, "weather", $extWeather );
             myRemoveInternalTimer ("sunpos", $hash);
