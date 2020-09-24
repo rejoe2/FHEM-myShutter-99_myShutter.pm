@@ -32,7 +32,7 @@
 #
 ##############################################################################
 
-package FHEM::helper::Twilight;    ## no critic 'Package declaration'
+package FHEM::Twilight;    ## no critic 'Package declaration'
 
 use strict;
 use warnings;
@@ -86,8 +86,8 @@ BEGIN {
     );
 }
 
-sub main::Twilight_Initialize { goto &Initialize }
-sub main::twilight { goto &twilight }
+sub ::Twilight_Initialize { goto &Initialize }
+sub ::twilight { goto &twilight }
 
 
 ################################################################################
@@ -100,7 +100,7 @@ sub Initialize {
     $hash->{GetFn}    = \&Twilight_Get;
     $hash->{NotifyFn} = \&Twilight_Notify;
     $hash->{AttrFn}   = \&Twilight_Attr;
-    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather indoorHorizon";
+    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather indoorHorizon:selectnumbers,-6,1,20,1,lin";
     return;
 }
 
@@ -213,12 +213,12 @@ sub Twilight_Notify {
             #### tbd; this is the place to update ss_wather and sr_weather
             my $extWeather = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},-1);
             my $last = ReadingsNum($name, "extWeatherValue", -1);
-            return if $last == -1 || ( $last - 6 < $extWeather && $last + 6 > $extWeather );
+            return if $last - 6 < $extWeather && $last + 6 > $extWeather;
             
             readingsSingleUpdate ($hash,  "extWeatherValue", $extWeather, 1);
                         
             Twilight_getWeatherHorizon( $hash, $extWeather );
-            Twilight_TwilightTimes( $hash, "weather", $extWeather );
+            Twilight_TwilightTimes( $hash, "weather", $extWeather, 1 );
             myRemoveInternalTimer ("sunpos", $hash);
             myInternalTimer ("sunpos", time()+1,   \&Twilight_sunpos, $hash, 0);
         }
@@ -402,7 +402,10 @@ sub Twilight_calc {
 
 ################################################################################
 sub Twilight_TwilightTimes {
-    my ( $hash, $whitchTimes, $xml ) = @_;
+    my $hash        = shift;
+    my $whitchTimes = shift;
+    my $xml         = shift // return;
+    my $isEvent     = shift // 0;
 
     my $Name = $hash->{NAME};
 
@@ -451,13 +454,18 @@ sub Twilight_TwilightTimes {
     readingsBeginUpdate($hash);
     for my $ereignis ( keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq "weather" && !( $ereignis =~ m/weather/ ) );
-        readingsBulkUpdate( $hash, $ereignis,
+        if ($isEvent) {
+            readingsBulkUpdate( $hash, $ereignis,
+            FmtTime( $hash->{TW}{$ereignis}{TIME} ) ) if $hash->{TW}{$ereignis}{TIME} > time;
+        } else {
+            readingsBulkUpdate( $hash, $ereignis,
             $hash->{TW}{$ereignis}{TIME} == 0
             ? "undefined"
             : FmtTime( $hash->{TW}{$ereignis}{TIME} ) );
+        }
     }
     if ( $hash->{CONDITION} != 50 ) {
-        readingsBulkUpdate( $hash, "condition",     $hash->{CONDITION} );
+        readingsBulkUpdate( $hash, "condition", $hash->{CONDITION} );
         #readingsBulkUpdate( $hash, "condition_txt", $hash->{CONDITION_TXT} );
     }
     readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
