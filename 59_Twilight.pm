@@ -4,7 +4,7 @@
 #     59_Twilight.pm
 #     Copyright by Sebastian Stuecker
 #     erweitert von Dietmar Ortmann
-#     Maintained by igami since 02-2018
+#     Orphan module, maintained by Beta-User since 09-2020
 #
 #     used algorithm see:          http://lexikon.astronomie.info/zeitgleichung/
 #
@@ -100,7 +100,7 @@ sub Initialize {
     $hash->{GetFn}    = \&Twilight_Get;
     $hash->{NotifyFn} = \&Twilight_Notify;
     $hash->{AttrFn}   = \&Twilight_Attr;
-    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather indoorHorizon";
+    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather indoorHorizon:selectnumbers,-6,1,20,1,lin";
     return;
 }
 
@@ -156,8 +156,9 @@ sub Twilight_Define {
     my $useTimer = $weather || $indoor_horizon || ( $DEFmayChange && $latitude  == AttrVal( 'global', 'latitude', 50.112 ) && $longitude == AttrVal( 'global', 'longitude', 8.686 ) ) ? 1 : 0;
     
     InternalTimer(time(), \&Twilight_Change_DEF,$hash,0) if $useTimer;
-
-    return InternalTimer( time()+1, \&Twilight_Firstrun,$hash,0) if !$init_done || $useTimer;
+    
+    $hash->{DEFINE} = 1;
+    return InternalTimer( time()+$useTimer, \&Twilight_Firstrun,$hash,0) if !$init_done || $useTimer;
     return Twilight_Firstrun($hash);
 }
 
@@ -173,6 +174,10 @@ sub Twilight_Undef {
     myRemoveInternalTimer( "weather",  $hash );
     myRemoveInternalTimer( "sunpos",   $hash );
     notifyRegexpChanged( $hash, "" );
+    delete $hash->{helper}{extWeather}{regexp};
+    delete $hash->{helper}{extWeather}{Device};
+    delete $hash->{helper}{extWeather}{Reading};
+    delete $hash->{helper}{extWeather};
 
     return;
 }
@@ -183,8 +188,8 @@ sub Twilight_Change_DEF {
     my $name = $hash->{NAME};
     my $newdef = "";
     $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
-   
-    return CommandModify(undef, "$name $newdef");    
+
+    return CommandModify(undef, "$name $newdef");
 }
 
 ################################################################################
@@ -192,13 +197,15 @@ sub Twilight_Notify {
     my $hash  = shift;
     my $whash = shift // return;
     
+    return if !exists $hash->{helper}{extWeather};
+    
     my $name = $hash->{NAME};
     return if(IsDisabled($name));
 
     my $wname = $whash->{NAME};
-    my $re = $hash->{helper}{extWeather}{regexp} // "unknown";
-
     my $events = deviceEvents( $whash, 1 );
+
+    my $re = $hash->{helper}{extWeather}{regexp} // "unknown";
 
     return if(!$events); # Some previous notify deleted the array.
     my $max = int(@{$events});
@@ -230,11 +237,12 @@ sub Twilight_Notify {
     }
     return;
 }
-    
 
 sub Twilight_Firstrun {
-    my $hash  = shift;
+    my $hash     = shift // return;
     my $name = $hash->{NAME};
+    $hash->{SWIP} = 0;
+
     my $attrVal = AttrVal( $name,'useExtWeather', undef );
     if ($attrVal) {
         my ($extWeather, $extWReading) = split( ":", $attrVal ); 
@@ -246,19 +254,16 @@ sub Twilight_Firstrun {
         my $extWeatherVal = ReadingsVal($extWeather, $extWReading,"-1");
         readingsSingleUpdate ($hash,  "cloudCover", $extWeatherVal, 0);
         Twilight_getWeatherHorizon( $hash, $extWeatherVal );
-        $hash->{SWIP} = 0;
         Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
     }
 
     $hash->{INDOOR_HORIZON}  = min( 20, max( -6, AttrVal( $name,'indoorHorizon', 0) ) );
     
-    $hash->{DEFINE}        = 1;
     my $mHash = { HASH => $hash };
     Twilight_sunpos($mHash);
     Twilight_Midnight($mHash);
     delete $hash->{DEFINE};
 
-    
     return;
 }
 
@@ -283,6 +288,7 @@ sub Twilight_Attr {
             delete $hash->{helper}{extWeather}{regexp};
             delete $hash->{helper}{extWeather}{Device};
             delete $hash->{helper}{extWeather}{Reading};
+            delete $hash->{helper}{extWeather};
         }
        
     }
