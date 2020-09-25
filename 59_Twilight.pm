@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm Testversion cloudCover 2020-09-25 Beta-User $
+# $Id: 59_Twilight.pm Testversion cloudCover 2 2020-09-25 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -138,11 +138,11 @@ sub Twilight_Define {
 
     $hash->{WEATHER_HORIZON} = 0;
     CommandAttr( undef, "$name indoorHorizon $indoor_horizon") if $indoor_horizon; 
-    $hash->{LATITUDE}        = $latitude;
-    $hash->{LONGITUDE}       = $longitude;
+    $hash->{helper}{'.LATITUDE'}        = $latitude;
+    $hash->{helper}{'.LONGITUDE'}       = $longitude;
     #$hash->{WEATHER}         = $weather if $weather;
     
-    $hash->{CONDITION}     = 50;
+    #$hash->{CONDITION}     = 50;
     $hash->{SUNPOS_OFFSET} = 5 * 60;
 
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
@@ -182,7 +182,7 @@ sub Twilight_Change_DEF {
     my $hash  = shift // return;
     my $name = $hash->{NAME};
     my $newdef = "";
-    $newdef = "$hash->{LATITUDE} $hash->{LONGITUDE}" if $hash->{LATITUDE} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{LONGITUDE} != AttrVal( 'global', 'longitude', 8.686 );
+    $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
    
     return CommandModify(undef, "$name $newdef");    
 }
@@ -246,6 +246,7 @@ sub Twilight_Firstrun {
         my $extWeatherVal = ReadingsVal($extWeather, $extWReading,"-1");
         readingsSingleUpdate ($hash,  "cloudCover", $extWeatherVal, 0);
         Twilight_getWeatherHorizon( $hash, $extWeatherVal );
+        $hash->{SWIP} = 0;
         Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
     }
 
@@ -275,6 +276,7 @@ sub Twilight_Attr {
             $hash->{helper}{extWeather}{regexp} = qq($attrVal:.*);
             $hash->{helper}{extWeather}{Device} = $extWeather;
             $hash->{helper}{extWeather}{Reading} = $extWReading;
+            return InternalTimer( time(), \&Twilight_Firstrun,$hash,0) if $init_done;
 
         } elsif ($cmd eq "del") {
             notifyRegexpChanged( $hash, "" );
@@ -381,8 +383,8 @@ sub Twilight_calc {
     my $idx  = shift // return;
 
     my $midnight = time() - Twilight_midnight_seconds( time() );
-    my $lat      = $hash->{LATITUDE};
-    my $long     = $hash->{LONGITUDE};
+    my $lat      = $hash->{helper}{'.LATITUDE'};
+    my $long     = $hash->{helper}{'.LONGITUDE'};
 
     #my $sr = sunrise_abs("Horizon=$deg");
     my $sr =
@@ -414,15 +416,20 @@ sub Twilight_TwilightTimes {
     my $horizon = $hash->{HORIZON};
     my $swip    = $hash->{SWIP};
 
-    my $lat  = $hash->{LATITUDE};
-    my $long = $hash->{LONGITUDE};
+    my $lat  = $hash->{helper}{'.LATITUDE'};
+    my $long = $hash->{helper}{'.LONGITUDE'};
 
 # ------------------------------------------------------------------------------
     my $idx      = -1;
+    my $indoor_horizon = $hash->{INDOOR_HORIZON};
+    $indoor_horizon = 0.02 if !$indoor_horizon; #equals to 0
+    my $weather_horizon = $hash->{WEATHER_HORIZON};
+    $weather_horizon = 0.01 if !$weather_horizon; #equals to 0
+
     my @horizons = (
         "_astro:-18", "_naut:-12", "_civil:-6", ":0",
-        "_indoor:$hash->{INDOOR_HORIZON}",
-        "_weather:$hash->{WEATHER_HORIZON}"
+        "_indoor:$indoor_horizon",
+        "_weather:$weather_horizon"
     );
     for my $horizon (@horizons) {
         $idx++;
@@ -461,10 +468,10 @@ sub Twilight_TwilightTimes {
             ? "undefined"
             : FmtTime( $hash->{TW}{$ereignis}{TIME} ) );
     }
-    if ( $hash->{CONDITION} != 50 ) {
+    #if ( $hash->{CONDITION} != 50 ) {
         #readingsBulkUpdate( $hash, "condition",     $hash->{CONDITION} );
         #readingsBulkUpdate( $hash, "condition_txt", $hash->{CONDITION_TXT} );
-    }
+    #}
     readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
 
 # ------------------------------------------------------------------------------
@@ -714,100 +721,18 @@ sub Twilight_getWeatherHorizon {
     my $hash = shift;
     my $result = shift // return;
     
-    
     return if !looks_like_number($result) || $result < 0 || $result > 100;
-    $hash->{CONDITION} = $result;
-    Log3 ( $hash, 4, "[$hash->{NAME}] Set (Sun-)Condition to [$hash->{CONDITION}] (Cloud-)Condition was [$result]!");
-    $hash->{WEATHER_CORRECTION} = $hash->{CONDITION} / 12.5;
+    #$hash->{CONDITION} = $result;
+    #Log3 ( $hash, 4, "[$hash->{NAME}] Set (Sun-)Condition to [$hash->{CONDITION}] (Cloud-)Condition was [$result]!");
+    $hash->{WEATHER_CORRECTION} = $result / 12.5;
     $hash->{WEATHER_HORIZON}    = $hash->{WEATHER_CORRECTION} + $hash->{INDOOR_HORIZON};
     my $doy = strftime("%j",localtime);
     my $declination =  0.4095*sin(0.016906*($doy-80.086));
-    if($hash->{WEATHER_HORIZON} > (89-$hash->{LATITUDE}+$declination) ){
-        $hash->{WEATHER_HORIZON} =  89-$hash->{LATITUDE}+$declination;	
+    if($hash->{WEATHER_HORIZON} > (89-$hash->{helper}{'.LATITUDE'}+$declination) ){
+        $hash->{WEATHER_HORIZON} =  89-$hash->{helper}{'.LATITUDE'}+$declination;
     };
-    
+
     return;
-    
-    #### old yahoo based code!
-
-    my $location = $hash->{WEATHER};
-    if ( $location == 0 ) {
-        $hash->{WEATHER_HORIZON} = "0";
-        $hash->{CONDITION}       = "0";
-        return 1;
-    }
-
-    my $mod              = "[" . $hash->{NAME} . "] ";
-    my @faktor_cond_code = (
-        10, 10, 10, 10, 9, 7, 7, 7, 7, 7, 7, 5, 5, 5,
-        5,  7,  7,  5,  5, 5, 7, 5, 5, 5, 5, 5, 2, 4,
-        4,  2,  2,  0,  0, 0, 0, 5, 0, 8, 8, 8, 6, 8,
-        6,  5,  2,  5,  6, 6, 0, 0, 0
-    );
-
-# condition codes are described in FHEM wiki and in the documentation of the yahoo weather API
-
-    my ( $cond_code, $cond_txt, $temperatur, $aktTemp );
-    if ( defined($result) ) {
-
-        # ersetze in result(json) ": durch "=>
-        # dadurch entsteht ein Perlausdruck, der direkt geparst werden kann
-
-        my $perlAusdruck = $result;
-
-        #$perlAusdruck = "<h1>could";
-        $perlAusdruck =~ s/("[\w ]+")(\s*)(:)/$1=>/gx;
-        $perlAusdruck =~ s/null/undef/g;
-        $perlAusdruck =~ s/true/1/g;
-        $perlAusdruck =~ s/false/0/g;
-        $perlAusdruck = 'return ' . $perlAusdruck;
-
-        my $anonymSub = eval "sub {$perlAusdruck}";
-        Log3( $hash, 3, "[$hash->{NAME}] error $@ parsing $result" ) if $@;
-        if ( !$@ ) {
-            my $resHash = $anonymSub->() if ( $anonymSub gt "" );
-            Log3( $hash, 3, "[$hash->{NAME}] error $@ parsing $result" )
-              if ($@);
-
-#Log3 $hash, 3, "jsonAsPerl". Dumper $resHash->{query}{results}{channel}{item}{condition};
-            if ( !$@ ) {
-
-                $cond_code =
-                  $resHash->{query}{results}{channel}{item}{condition}{code};
-                $cond_txt =
-                  $resHash->{query}{results}{channel}{item}{condition}{text};
-                $temperatur =
-                  $resHash->{query}{results}{channel}{item}{condition}{temp};
-            }
-        }
-    }
-
-    # wenn kein Code ermittelt werden kann, wird ein Pseudocode gesetzt
-    if ( !defined($cond_code) ) {
-        $cond_code  = "50";          # eigener neutraler Code
-        $cond_txt   = "undefined";
-        $temperatur = "undefined";
-    }
-    else {
-        $hash->{WEATHER_CORRECTION} = $faktor_cond_code[$cond_code] / 25 * 20;
-        $hash->{WEATHER_HORIZON} =
-          $hash->{WEATHER_CORRECTION} + $hash->{INDOOR_HORIZON};
-        $hash->{CONDITION}     = $cond_code;
-        $hash->{CONDITION_TXT} = $cond_txt;
-        $hash->{TEMPERATUR}    = $temperatur;
-        Log3( $hash, 4,
-"[$hash->{NAME}] $cond_code=$cond_txt $temperatur, correction: $hash->{WEATHER_CORRECTION}°"
-        );
-    }
-
-#    my $doy = strftime( "%j", localtime );
-#    my $declination = 0.4095 * sin( 0.016906 * ( $doy - 80.086 ) );
-    if ( $hash->{WEATHER_HORIZON} > ( 89 - $hash->{LATITUDE} + $declination ) )
-    {
-        $hash->{WEATHER_HORIZON} = 89 - $hash->{LATITUDE} + $declination;
-    }
-
-    return 1;
 }
 
 ################################################################################
@@ -827,8 +752,8 @@ sub Twilight_sunpos {
     $iMonth++;
     $iYear += 100;
 
-    my $dLongitude = $hash->{LONGITUDE};
-    my $dLatitude  = $hash->{LATITUDE};
+    my $dLongitude = $hash->{helper}{'.LONGITUDE'};
+    my $dLatitude  = $hash->{helper}{'.LATITUDE'};
     Log3( $hash, 5,
         "Compute sunpos for latitude $dLatitude , longitude $dLongitude" )
       if $dHours == 0 && $dMinutes <= 6;
