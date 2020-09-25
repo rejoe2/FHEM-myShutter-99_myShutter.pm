@@ -140,9 +140,6 @@ sub Twilight_Define {
     CommandAttr( undef, "$name indoorHorizon $indoor_horizon") if $indoor_horizon; 
     $hash->{helper}{'.LATITUDE'}        = $latitude;
     $hash->{helper}{'.LONGITUDE'}       = $longitude;
-    #$hash->{WEATHER}         = $weather if $weather;
-    
-    #$hash->{CONDITION}     = 50;
     $hash->{SUNPOS_OFFSET} = 5 * 60;
 
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
@@ -222,17 +219,16 @@ sub Twilight_Notify {
             my $last = ReadingsNum($name, "cloudCover", -1);
             return if $last - 6 < $extWeather && $last + 6 > $extWeather;
             
-            readingsSingleUpdate ($hash,  "cloudCover", $extWeather, 1);
-                        
+            readingsSingleUpdate ($hash, "cloudCover", $extWeather, 1);
             Twilight_getWeatherHorizon( $hash, $extWeather );
             
             my $swip = $hash->{SWIP};
-            $hash->{SWIP} = 0 if $swip;
+            $hash->{SWIP} = 1 if !$swip;
             Twilight_TwilightTimes( $hash, "weather", $extWeather );
-            $hash->{SWIP} = 1 if $swip;
+            $hash->{SWIP} = 0 if !$swip;
             
             myRemoveInternalTimer ("sunpos", $hash);
-            myInternalTimer ("sunpos", time()+1,   \&Twilight_sunpos, $hash, 0);
+            myInternalTimer ("sunpos", time()+1, \&Twilight_sunpos, $hash, 0);
         }
     }
     return;
@@ -428,9 +424,9 @@ sub Twilight_TwilightTimes {
 # ------------------------------------------------------------------------------
     my $idx      = -1;
     my $indoor_horizon = $hash->{INDOOR_HORIZON};
-    $indoor_horizon = 0.02 if !$indoor_horizon; #equals to 0
+    #$indoor_horizon = 0.02 if !$indoor_horizon; #equals to 0; not needed as Twilight_calc this already reflects in $idx?
     my $weather_horizon = $hash->{WEATHER_HORIZON};
-    $weather_horizon = 0.01 if !$weather_horizon; #equals to 0
+    #$weather_horizon = 0.01 if !$weather_horizon; #equals to 0, s.a.
 
     my @horizons = (
         "_astro:-18", "_naut:-12", "_civil:-6", ":0",
@@ -463,8 +459,6 @@ sub Twilight_TwilightTimes {
         }
     }
 
-#$attr{global}{latitude}  = $lat;
-#$attr{global}{longitude} = $long;
 # ------------------------------------------------------------------------------
     readingsBeginUpdate($hash);
     for my $ereignis ( keys %{ $hash->{TW} } ) {
@@ -474,10 +468,7 @@ sub Twilight_TwilightTimes {
             ? "undefined"
             : FmtTime( $hash->{TW}{$ereignis}{TIME} ) );
     }
-    #if ( $hash->{CONDITION} != 50 ) {
-        #readingsBulkUpdate( $hash, "condition",     $hash->{CONDITION} );
-        #readingsBulkUpdate( $hash, "condition_txt", $hash->{CONDITION_TXT} );
-    #}
+
     readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
 
 # ------------------------------------------------------------------------------
@@ -575,114 +566,22 @@ sub Twilight_Midnight {
     return if ( !defined($hash) );
 
     $hash->{SWIP} = 0;
-    #even more tests! xxxxxx
-    return Twilight_WeatherCallbackNew( $hash, "Mid" );
 
-    my $param = Twilight_CreateHttpParameterAndGetData( $myHash, "Mid" );
-    return;
+    return Twilight_WeatherCallbackNew( $hash, "Mid" );
 }
 
 ################################################################################
-# {Twilight_WeatherTimerUpdate( {HASH=$defs{"Twilight"}} ) }
 sub Twilight_WeatherTimerUpdate {
     my $myHash = shift // return;
     my $hash = myGetHashIndirekt( $myHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
 
     $hash->{SWIP} = 1;
-    #even more tests! xxxxxx
+
     return Twilight_WeatherCallbackNew( $hash, "weather" );
-    
-    my $param = Twilight_CreateHttpParameterAndGetData( $myHash,  );
-    return;
 }
 
 ################################################################################
-sub Twilight_CreateHttpParameterAndGetData {
-    my $myHash = shift;
-    my $mode   = shift // return; # "weather" or "mid"
-    my $hash   = myGetHashIndirekt( $myHash, ( caller(0) )[3] );
-    return if ( !defined($hash) );
-    
-    #more tests! xxxxxx
-    return Twilight_WeatherCallbackNew( $hash, $mode );
-
-
-    my $location = $hash->{WEATHER} // 0 ;
-    my $verbose = AttrVal( $hash->{NAME}, "verbose", 3 );
-
-    my $URL = "http://query.yahooapis.com/v1/public/yql?q=select%%20*%%20from%%20weather.forecast%%20where%%20woeid=%s%%20and%%20u=%%27c%%27&format=%s&env=store%%3A%%2F%%2Fdatatables.org%%2Falltableswithkeys";
-    my $url = sprintf( $URL, $location, "json" );
-    Log3( $hash, 4, "[$hash->{NAME}] url=$url" );
-
-    my $param = {
-        url     => $url,
-        timeout => defined( $hash->{DEFINE} ) ? 10 : 10,
-        hash    => $hash,
-        method  => "GET",
-        loglevel => 4 - ( $verbose - 3 ),
-        header   => "User-Agent: Mozilla/5.0\r\nAccept: application/xml",
-        callback => \&Twilight_WeatherCallback,
-        mode     => $mode
-    };
-
-    #test! xxxxxx
-    delete $param->{callback};
-    return Twilight_WeatherCallback( $param, "test", "no restult");
-
-
-    if ( defined( $hash->{DEFINE} ) ) {
-        delete $param->{callback};
-        my ( $err, $result ) = HttpUtils_BlockingGet($param);
-        Twilight_WeatherCallback( $param, $err, $result );
-    }
-    else {
-        HttpUtils_NonblockingGet($param);
-    }
-    return;
-
-}
-
-################################################################################
-sub Twilight_WeatherCallback {
-    my ( $param, $err, $result ) = @_;
-
-    my $hash = $param->{hash};
-    return if ( !defined($hash) );
-
-    if ($err) {
-
-    #Log3 $hash, 3, "[$hash->{NAME}] got no weather info from yahoo. Error code: $err";
-    #disabled due to yahoo
-        $result = undef;
-    }
-    else {
-        Log3( $hash, 4,
-            "[$hash->{NAME}] got weather info from yahoo for $hash->{WEATHER}"
-        );
-        Log3( $hash, 5, "[$hash->{NAME}] answer=$result" ) if defined $result;
-    }
-
-    Twilight_getWeatherHorizon( $hash, $result );
-
-    #$hash->{CONDITION} = 50;
-
-    ##repetition makes no longer sense...!
-    #if ($hash->{CONDITION} == 50 && $hash->{VERSUCHE} <= 10) {
-    #   $hash->{VERSUCHE} += 1;
-    #   Twilight_RepeatTimerSet($hash, $param->{mode});
-    #   return;
-    #}
-
-    Twilight_TwilightTimes( $hash, $param->{mode}, $result );
-
-#Log3 $hash, 3, "[$hash->{NAME}] " . ($hash->{VERSUCHE}+1) . " attempt(s) needed to get valid weather data from yahoo"   if ($hash->{CONDITION} != 50 && $hash->{VERSUCHE} >  0);
-#Log3 $hash, 3, "[$hash->{NAME}] " . ($hash->{VERSUCHE}+1) . " attempt(s) needed got NO valid weather data from yahoo"   if ($hash->{CONDITION} == 50 && $hash->{VERSUCHE} >  0);
-#$hash->{VERSUCHE} = 0;
-
-    return Twilight_StandardTimerSet($hash);
-
-}
 
 sub Twilight_WeatherCallbackNew {
     my $hash = shift;
@@ -754,8 +653,6 @@ sub Twilight_getWeatherHorizon {
     my $result = shift // return;
     
     return if !looks_like_number($result) || $result < 0 || $result > 100;
-    #$hash->{CONDITION} = $result;
-    #Log3 ( $hash, 4, "[$hash->{NAME}] Set (Sun-)Condition to [$hash->{CONDITION}] (Cloud-)Condition was [$result]!");
     $hash->{WEATHER_CORRECTION} = $result / 12.5;
     $hash->{WEATHER_HORIZON}    = $hash->{WEATHER_CORRECTION} + $hash->{INDOOR_HORIZON};
     my $doy = strftime("%j",localtime);
@@ -971,6 +868,9 @@ sub twilight {
 }
 
 1;
+
+__END__
+
 
 =pod
 =encoding utf8
