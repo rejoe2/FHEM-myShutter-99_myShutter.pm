@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm Testversion package 2 2020-09-23 Beta-User $
+# $Id: 59_Twilight.pm Testversion cloudCover 2020-09-25 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -100,7 +100,7 @@ sub Initialize {
     $hash->{GetFn}    = \&Twilight_Get;
     $hash->{NotifyFn} = \&Twilight_Notify;
     $hash->{AttrFn}   = \&Twilight_Attr;
-    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather indoorHorizon:selectnumbers,-6,1,20,1,lin";
+    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather indoorHorizon";
     return;
 }
 
@@ -212,13 +212,18 @@ sub Twilight_Notify {
         
             #### tbd; this is the place to update ss_wather and sr_weather
             my $extWeather = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},-1);
-            my $last = ReadingsNum($name, "extWeatherValue", -1);
+            my $last = ReadingsNum($name, "cloudCover", -1);
             return if $last - 6 < $extWeather && $last + 6 > $extWeather;
             
-            readingsSingleUpdate ($hash,  "extWeatherValue", $extWeather, 1);
+            readingsSingleUpdate ($hash,  "cloudCover", $extWeather, 1);
                         
             Twilight_getWeatherHorizon( $hash, $extWeather );
-            Twilight_TwilightTimes( $hash, "weather", $extWeather, 1 );
+            
+            my $swip = $hash->{SWIP};
+            $hash->{SWIP} = 0 if $swip;
+            Twilight_TwilightTimes( $hash, "weather", $extWeather );
+            $hash->{SWIP} = 1 if $swip;
+            
             myRemoveInternalTimer ("sunpos", $hash);
             myInternalTimer ("sunpos", time()+1,   \&Twilight_sunpos, $hash, 0);
         }
@@ -239,7 +244,7 @@ sub Twilight_Firstrun {
         $hash->{helper}{extWeather}{Reading} = $extWReading;
 
         my $extWeatherVal = ReadingsVal($extWeather, $extWReading,"-1");
-        readingsSingleUpdate ($hash,  "extWeatherValue", $extWeatherVal, 0);
+        readingsSingleUpdate ($hash,  "cloudCover", $extWeatherVal, 0);
         Twilight_getWeatherHorizon( $hash, $extWeatherVal );
         Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
     }
@@ -402,10 +407,7 @@ sub Twilight_calc {
 
 ################################################################################
 sub Twilight_TwilightTimes {
-    my $hash        = shift;
-    my $whitchTimes = shift;
-    my $xml         = shift // return;
-    my $isEvent     = shift // 0;
+    my ( $hash, $whitchTimes, $xml ) = @_;
 
     my $Name = $hash->{NAME};
 
@@ -454,18 +456,13 @@ sub Twilight_TwilightTimes {
     readingsBeginUpdate($hash);
     for my $ereignis ( keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq "weather" && !( $ereignis =~ m/weather/ ) );
-        if ($isEvent) {
-            readingsBulkUpdate( $hash, $ereignis,
-            FmtTime( $hash->{TW}{$ereignis}{TIME} ) ) if $hash->{TW}{$ereignis}{TIME} > time;
-        } else {
-            readingsBulkUpdate( $hash, $ereignis,
+        readingsBulkUpdate( $hash, $ereignis,
             $hash->{TW}{$ereignis}{TIME} == 0
             ? "undefined"
             : FmtTime( $hash->{TW}{$ereignis}{TIME} ) );
-        }
     }
     if ( $hash->{CONDITION} != 50 ) {
-        readingsBulkUpdate( $hash, "condition", $hash->{CONDITION} );
+        #readingsBulkUpdate( $hash, "condition",     $hash->{CONDITION} );
         #readingsBulkUpdate( $hash, "condition_txt", $hash->{CONDITION_TXT} );
     }
     readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
