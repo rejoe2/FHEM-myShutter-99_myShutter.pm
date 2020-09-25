@@ -575,6 +575,9 @@ sub Twilight_Midnight {
     return if ( !defined($hash) );
 
     $hash->{SWIP} = 0;
+    #even more tests! xxxxxx
+    return Twilight_WeatherCallbackNew( $hash, "Mid" );
+
     my $param = Twilight_CreateHttpParameterAndGetData( $myHash, "Mid" );
     return;
 }
@@ -587,7 +590,10 @@ sub Twilight_WeatherTimerUpdate {
     return if ( !defined($hash) );
 
     $hash->{SWIP} = 1;
-    my $param = Twilight_CreateHttpParameterAndGetData( $myHash, "weather" );
+    #even more tests! xxxxxx
+    return Twilight_WeatherCallbackNew( $hash, "weather" );
+    
+    my $param = Twilight_CreateHttpParameterAndGetData( $myHash,  );
     return;
 }
 
@@ -597,6 +603,10 @@ sub Twilight_CreateHttpParameterAndGetData {
     my $mode   = shift // return; # "weather" or "mid"
     my $hash   = myGetHashIndirekt( $myHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
+    
+    #more tests! xxxxxx
+    return Twilight_WeatherCallbackNew( $hash, $mode );
+
 
     my $location = $hash->{WEATHER} // 0 ;
     my $verbose = AttrVal( $hash->{NAME}, "verbose", 3 );
@@ -615,6 +625,11 @@ sub Twilight_CreateHttpParameterAndGetData {
         callback => \&Twilight_WeatherCallback,
         mode     => $mode
     };
+
+    #test! xxxxxx
+    delete $param->{callback};
+    return Twilight_WeatherCallback( $param, "test", "no restult");
+
 
     if ( defined( $hash->{DEFINE} ) ) {
         delete $param->{callback};
@@ -666,6 +681,17 @@ sub Twilight_WeatherCallback {
 #$hash->{VERSUCHE} = 0;
 
     return Twilight_StandardTimerSet($hash);
+
+}
+
+sub Twilight_WeatherCallbackNew {
+    my $hash = shift;
+    my $mode = shift // return;
+    my $cloudCover = shift;
+
+    Twilight_getWeatherHorizon( $hash, $cloudCover );
+    Twilight_TwilightTimes( $hash, $mode, $cloudCover );
+    return Twilight_StandardTimerSet( $hash );
 
 }
 
