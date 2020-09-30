@@ -196,3 +196,36 @@ setreading DEVICE attrTemplateVersion FGS223_Venetian_Mode_20200930
 name:----AEOTEC-devices-section--------
 filter:TYPE=ZWave
 order:03AEOTEC00000
+desc:Templates for AEOTEC/AEON Labs devices.Manufacturer info can be found <a href https://aeotec.freshdesk.com/support/solutions/6000084017>here</a>. firmware updates are available for some devices, but for updating, you have to use a separate Windows machine.
+
+#AEON Labs ZW095 Home Energy Meter Gen5
+name:ZW095_Home_Energy_Meter
+filter:TYPE=ZWave
+order:03AEOTEC0000ZW095
+desc:Applies to AEON Labs ZW095 Home Energy Meter Gen5 .<br>NOTE: early, untested version!<br>The template is based on this <a href  https://forum.fhem.de/index.php/topic,112682.0.html>forum thread</a>, manufacturer info can be found <a href https://aeotec.freshdesk.com/support/solutions/folders/6000217020>here</a>. Having an up-to-date firmware is highly recommended
+par:MAINCHANNEL;Main channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",0) }
+par:CHANNEL01;First channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",1) }
+par:CHANNEL02;Second channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",2) }
+par:CHANNEL02;Second channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",3) }
+deletereading -q MAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03 (?!associatedWith|model.*).*
+set MAINCHANNEL associationAdd 1 1
+set MAINCHANNEL configGroup1Interval 60
+set MAINCHANNEL configGroup1Reports 14337
+set MAINCHANNEL configGroup2Interval 60
+set MAINCHANNEL configGroup2Reports 1792
+set MAINCHANNEL configGroup3Interval 600
+set MAINCHANNEL configGroup3Reports 4128780
+set MAINCHANNEL configSelectiveReporting Enable
+attr MAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03 stateFormat energy_kWh
+attr MAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03 userReadings energy_kWh:energy:.* monotonic {ReadingsNum("$name","energy",0)}
+#closing section
+option:{ 1 }  
+get MAINCHANNEL configAll
+get MAINCHANNEL associationAll
+{ fhem "trigger $FW_wname JS:location.href='$FW_ME?room=%23devspec%3dMAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03'" if($cl && $cl->{TYPE} eq "FHEMWEB") }
+setreading DEVICE attrTemplateVersion ZW095_Home_Energy_Meter_20200930
+
+name:ZW100_Multisensor
+filter:TYPE=ZWave
+order:03AEOTEC0000ZW100
+desc:Having an up-to-date firmware is highly recommended
