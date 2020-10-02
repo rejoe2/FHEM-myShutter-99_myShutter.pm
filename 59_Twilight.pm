@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm Testversion SWIP inverted 2020-10-01 Beta-User $
+# $Id: 59_Twilight.pm Testversion convert old def 2020-10-02 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
