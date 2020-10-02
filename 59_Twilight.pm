@@ -42,6 +42,7 @@ use Time::Local qw(timelocal_nocheck);
 use List::Util qw(max min);
 use GPUtils qw(GP_Import GP_Export);
 eval { use FHEM::Core::Timer::Helper qw(addTimer removeTimer); 1 };
+use FHEM::Meta;
 
 ## Import der FHEM Funktionen
 #-- Run before package compilation
@@ -102,7 +103,7 @@ sub Initialize {
     $hash->{AttrFn}   = \&Twilight_Attr;
     $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather";
     $hash->{parseParams} = 1;
-    return;
+    return FHEM::Meta::InitMod( __FILE__, $hash );
 }
 
 
@@ -112,7 +113,7 @@ sub Twilight_Define {
     my $aref = shift;
     my $href = shift // return if !defined $aref;
     
-    #my %href = %{$hrefs};
+    return $@ unless ( FHEM::Meta::SetInternals($hash) );
     
     #my $def  = shift // return;
     #my @arr  = split m{\s+}xms, $def;
