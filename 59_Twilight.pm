@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm Testversion def-Übernahme 2020-09-29 Beta-User $
+# $Id: 59_Twilight.pm Testversion SWIP inverted 2020-10-01 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -60,6 +60,7 @@ BEGIN {
           CommandAttr
           CommandModify
           looks_like_number
+          devspec2array
           notifyRegexpChanged
           deviceEvents
           readingFnAttributes
@@ -70,6 +71,7 @@ BEGIN {
           AttrVal
           ReadingsVal
           ReadingsNum
+          InternalVal
           IsDisabled
           Log3
           InternalTimer
@@ -152,6 +154,7 @@ sub Twilight_Define {
     $hash->{helper}{'.LATITUDE'}        = $latitude;
     $hash->{helper}{'.LONGITUDE'}       = $longitude;
     $hash->{SUNPOS_OFFSET} = 5 * 60;
+    #$hash->{LOT} = $LOT;
 
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
 
@@ -193,7 +196,12 @@ sub Twilight_Change_DEF {
     my $name = $hash->{NAME};
     my $newdef = "";
     my $weather = $hash->{DEFINE};
-    $weather = "" if $weather eq "none" || looks_like_number($weather);
+    $weather = "" if $weather eq "none";
+    if (looks_like_number($weather)) {
+        my @wd = devspec2array("TYPE=Weather");
+        my ($err, $wreading) = Twilight_disp_ExtWeather($hash, $wd[0]) if $wd[0];
+        $weather = $err ? "" : $wd[0] ;
+    }
     $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
     $newdef .= " $hash->{INDOOR_HORIZON} $weather";
 
@@ -225,19 +233,54 @@ sub Twilight_Notify {
     
         if($found) {
         
-            #### tbd; this is the place to update ss_wather and sr_weather
+            #### tbd; this is the place to update ss_weather and sr_weather
             my $extWeather = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},-1);
             my $last = ReadingsNum($name, "cloudCover", -1);
-            return if $last - 6 < $extWeather && $last + 6 > $extWeather;
-            
+            return if abs ($last - $extWeather) < 6;
+
             readingsSingleUpdate ($hash, "cloudCover", $extWeather, 1);
             Twilight_getWeatherHorizon( $hash, $extWeather );
             
-            my $swip = $hash->{SWIP};
-            $hash->{SWIP} = 0 if $swip;
-            Twilight_TwilightTimes( $hash, "weather", $extWeather );
-            $hash->{SWIP} = 1 if $swip;
+            #my $horizon = $hash->{HORIZON};
+            #my ( $name, $deg ) = split( ":", $horizon );
             
+            my ($sr, $ss) = Twilight_calc( $hash, $hash->{WEATHER_HORIZON}, "7" ); ##these are numbers
+            my $now = time();
+            #$hash->{SR_TEST} = $sr;
+            #$hash->{SS_TEST} = $ss;
+            
+            #done for today?
+            return if $now > min($ss , $hash->{TW}{ss_weather}{TIME});
+            
+            #set potential dates in the past to now
+            $sr = max( $sr, $now - 0.01 );
+            $ss = max( $ss, $now - 0.01 );
+            
+            #renew dates and timers?, fire events?
+            my $nextevent = ReadingsVal($name,"nextEvent","none");            
+            readingsBeginUpdate($hash);
+            my $nextEventTime = FmtTime( $sr );
+            if ($now < $sr ) {
+                $hash->{TW}{sr_weather}{TIME} = $sr;
+                Twilight_RemoveInternalTimer( "sr_weather", $hash );
+                Twilight_InternalTimer( "sr_weather", $sr, \&Twilight_fireEvent, $hash, 0 );
+                readingsBulkUpdate( $hash, "sr_weather", $nextEventTime );
+                readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "sr_weather";
+            }
+            if ($now < $ss ) {
+                $nextEventTime = FmtTime( $ss );
+                $hash->{TW}{ss_weather}{TIME} = $ss;
+                Twilight_RemoveInternalTimer( "ss_weather", $hash );
+                Twilight_InternalTimer( "ss_weather", $ss, \&Twilight_fireEvent, $hash, 0 );
+                readingsBulkUpdate( $hash, "ss_weather", $nextEventTime );
+                readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "ss_weather";
+            }
+            
+            readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
+            #my $swip = $hash->{SWIP};
+            #$hash->{SWIP} = 1 if !$swip;
+            #Twilight_TwilightTimes( $hash, "weather", $extWeather );
+            #$hash->{SWIP} = 0 if !$swip;
             Twilight_RemoveInternalTimer ("sunpos", $hash);
             Twilight_InternalTimer ("sunpos", time()+1, \&Twilight_sunpos, $hash, 0);
         }
@@ -321,13 +364,18 @@ sub Twilight_disp_ExtWeather {
     my $extWeather = shift //return;
     my ( $err, $extWReading );
     my $wtype = InternalVal( $extWeather, 'TYPE', undef );
-    $err = "No type info about extWeather available!" if !$wtype;
+    return ("No type info about extWeather available!", "none") if !$wtype;
     
     my $dispatch = {
-        "Weather" => {"cloudCover" => "cloudCover"},
+        "Weather" => {"cloudCover" => "cloudCover", "demo" => "someValue"},
     };
-    $extWReading = $dispatch->{$wtype}{cloudCover} if (ref $dispatch->{$wtype} eq 'HASH'); 
-    return "No cloudCover reading assigned to $wtype, has to be implemented first; use dedicated form in define or attribute" if !$extWReading;
+    if (ref $dispatch->{$wtype} eq 'HASH') {
+        $extWReading =  $dispatch->{$wtype}{cloudCover};
+        $hash->{helper}{extWeather}{dispatch} = $dispatch->{$wtype};
+    } else {
+        $extWReading = "none"; 
+    }
+    $err = $extWReading eq "none" ? "No cloudCover reading assigned to $wtype, has to be implemented first; use dedicated form in define or attribute" : undef ;
     return $err, $extWReading;
 }
 
@@ -415,17 +463,18 @@ sub Twilight_calc {
     my $deg  = shift;
     my $idx  = shift // return;
 
-    my $midnight = time() - Twilight_midnight_seconds( time() );
+    my $now = time();
+    my $midnight = $now - Twilight_midnight_seconds( $now );
     my $lat      = $hash->{helper}{'.LATITUDE'};
     my $long     = $hash->{helper}{'.LONGITUDE'};
 
     #my $sr = sunrise_abs("Horizon=$deg");
     my $sr =
-      sr_alt( time(), 1, 0, 0, 0, "Horizon=$deg", undef, undef, undef, $lat,
+      sr_alt( $now, 1, 0, 0, 0, "Horizon=$deg", undef, undef, undef, $lat,
         $long );
 
     my $ss =
-      sr_alt( time(), 0, 0, 0, 0, "Horizon=$deg", undef, undef, undef, $lat,
+      sr_alt( $now, 0, 0, 0, 0, "Horizon=$deg", undef, undef, undef, $lat,
         $long );
 
     my ( $srhour, $srmin, $srsec ) = split( ":", $sr );
@@ -444,9 +493,10 @@ sub Twilight_calc {
 sub Twilight_TwilightTimes {
     my ( $hash, $whitchTimes, $xml ) = @_;
 
-    my $Name = $hash->{NAME};
+    my $name = $hash->{NAME};
 
-    my $horizon = $hash->{HORIZON};
+    #my $horizon = $hash->{HORIZON};
+    #my $horizon = ReadingsNum($name,"horizon",0);
     my $swip    = $hash->{SWIP};
 
     my $lat  = $hash->{helper}{'.LATITUDE'};
@@ -454,15 +504,11 @@ sub Twilight_TwilightTimes {
 
 # ------------------------------------------------------------------------------
     my $idx      = -1;
-    my $indoor_horizon = $hash->{INDOOR_HORIZON};
-    #$indoor_horizon = 0.02 if !$indoor_horizon; #equals to 0; not needed as Twilight_calc this already reflects in $idx?
-    my $weather_horizon = $hash->{WEATHER_HORIZON};
-    #$weather_horizon = 0.01 if !$weather_horizon; #equals to 0, s.a.
 
     my @horizons = (
         "_astro:-18", "_naut:-12", "_civil:-6", ":0",
-        "_indoor:$indoor_horizon",
-        "_weather:$weather_horizon"
+        "_indoor:$hash->{INDOOR_HORIZON}",
+        "_weather:$hash->{WEATHER_HORIZON}"
     );
     for my $horizon (@horizons) {
         $idx++;
@@ -486,7 +532,7 @@ sub Twilight_TwilightTimes {
           Twilight_calc( $hash, $deg, $idx );
 
         if ( $hash->{TW}{$sr}{TIME} == 0 ) {
-            Log3( $hash, 4, "[$Name] hint: $hash->{TW}{$sr}{NAME},  $hash->{TW}{$ss}{NAME} are not defined(HORIZON=$deg)" );
+            Log3( $hash, 4, "[$name] hint: $hash->{TW}{$sr}{NAME},  $hash->{TW}{$ss}{NAME} are not defined(HORIZON=$deg)" );
         }
     }
 
