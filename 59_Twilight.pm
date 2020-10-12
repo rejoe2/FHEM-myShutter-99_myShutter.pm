@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm Testversion convert old def 2020-10-02 Beta-User $
+# $Id: 59_Twilight.pm Test no warnings 2020-10-12  Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -44,7 +44,6 @@ use GPUtils qw(GP_Import GP_Export);
 eval { use FHEM::Core::Timer::Helper qw(addTimer removeTimer); 1 };
 use FHEM::Meta;
 
-## Import der FHEM Funktionen
 #-- Run before package compilation
 BEGIN {
 
@@ -184,6 +183,7 @@ sub Twilight_Undef {
     Twilight_RemoveInternalTimer( "sunpos",   $hash );
     notifyRegexpChanged( $hash, "" );
     delete $hash->{helper}{extWeather}{regexp};
+    delete $hash->{helper}{extWeather}{dispatch};
     delete $hash->{helper}{extWeather}{Device};
     delete $hash->{helper}{extWeather}{Reading};
     delete $hash->{helper}{extWeather};
@@ -233,13 +233,20 @@ sub Twilight_Notify {
         my $found = ($wname =~ m/^$re$/x || "$wname:$s" =~ m/^$re$/sx);
     
         if($found) {
-        
-            #### tbd; this is the place to update ss_weather and sr_weather
             my $extWeather = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading},-1);
             my $last = ReadingsNum($name, "cloudCover", -1);
             return if abs ($last - $extWeather) < 6;
-
-            readingsSingleUpdate ($hash, "cloudCover", $extWeather, 1);
+            my ($cond, $condText) = [-1,"not known"];
+            my $dispatch = defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{dispatch} ? 1 : 0; 
+            $cond = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{dispatch}{cond_code},-2) if $dispatch;
+            $condText = ReadingsVal($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{dispatch}{cond_text},"unknown") if $dispatch;
+ 
+            readingsBeginUpdate( $hash );
+            readingsBulkUpdate( $hash, "cloudCover", $extWeather );
+            readingsBulkUpdate( $hash, "condition_code", $cond ) if $dispatch;
+            readingsBulkUpdate( $hash, "condition_txt", $condText ) if $dispatch;
+            readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
+            
             Twilight_getWeatherHorizon( $hash, $extWeather );
             
             #my $horizon = $hash->{HORIZON};
@@ -368,7 +375,7 @@ sub Twilight_disp_ExtWeather {
     return ("No type info about extWeather available!", "none") if !$wtype;
     
     my $dispatch = {
-        "Weather" => {"cloudCover" => "cloudCover", "demo" => "someValue"},
+        "Weather" => {"cloudCover" => "cloudCover", "cond_code" => "code", "cond_text" => "condition"},
     };
     if (ref $dispatch->{$wtype} eq 'HASH') {
         $extWReading =  $dispatch->{$wtype}{cloudCover};
@@ -542,7 +549,7 @@ sub Twilight_TwilightTimes {
     for my $ereignis ( keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq "weather" && !( $ereignis =~ m/weather/ ) );
         readingsBulkUpdate( $hash, $ereignis,
-            $hash->{TW}{$ereignis}{TIME} == 0
+            !defined $hash->{TW}{$ereignis}{TIME} || $hash->{TW}{$ereignis}{TIME} == 0
             ? "undefined"
             : FmtTime( $hash->{TW}{$ereignis}{TIME} ) );
     }
@@ -576,7 +583,7 @@ sub Twilight_TwilightTimes {
         next if ( $whitchTimes eq "weather" && !( $ereignis =~ m/weather/ ) );
 
         Twilight_RemoveInternalTimer( $ereignis, $hash );  # if(!$jetztIstMitternacht);
-        if ( $hash->{TW}{$ereignis}{TIME} > 0 ) {
+        if ( defined $hash->{TW}{$ereignis}{TIME} && $hash->{TW}{$ereignis}{TIME} > 0 ) {
             $myHash = Twilight_InternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
                 \&Twilight_fireEvent, $hash, 0 );
             map { $myHash->{$_} = $hash->{TW}{$ereignis}{$_} } @keyListe;
@@ -855,19 +862,16 @@ sub Twilight_sunpos {
 
     my $twilight_weather;
 
-    if (!defined $hash->{helper}{extWeather}{Device}) 
-    #if ( ( my $ExtWeather = AttrVal( $hashName, "useExtWeather", "" ) ) eq "" )
-    {
+    if (!defined $hash->{helper}{extWeather}{Device}) {
         $twilight_weather =
           int( ( $dElevation - $hash->{WEATHER_HORIZON} + 12.0 ) / 18.0 * 1000 )
           / 10;
-        Log3( $hash, 5, "[$hash->{NAME}] " . "Original weather readings" );
-    }
-    else {
+        Log3( $hash, 5, "[$hash->{NAME}] Original weather readings" );
+    } else {
         my $extDev = $hash->{helper}{extWeather}{Device};
         my $extReading = $hash->{helper}{extWeather}{Reading};
         #my ( $extDev, $extReading ) = split( ":", $ExtWeather );
-        my $extWeatherHorizont = ReadingsVal($extDev ,$extReading , -1 );
+        my $extWeatherHorizont = ReadingsNum($extDev ,$extReading , -1 );
         if ( $extWeatherHorizont >= 0 ) {
             $extWeatherHorizont = min (100, $extWeatherHorizont);
             Log3( $hash, 5,
@@ -971,7 +975,7 @@ __END__
   <a name="Twilightdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; Twilight [&lt;latitude&gt; &lt;longitude&gt;] [&lt;indoor_horizon&gt; [&lt;weatherDevice:Reading&gt;]]</code><br>
+    <code>define &lt;name&gt; Twilight [&lt;latitude&gt; &lt;longitude&gt;] [&lt;indoor_horizon&gt; [&lt;weatherDevice[:Reading]&gt;]]</code><br>
     <br>
     Defines a virtual device for Twilight calculations <br><br>
 
@@ -992,7 +996,10 @@ __END__
     The parameter <b>weatherDevice:Reading</b> can be used to point to a device providing cloud coverage information to calculate <b>twilight_weather</b>.<br/>
     The reading used shoud be in the range of 0 to 100 like the reading <b>c_clouds</b> in an <b><a href="#openweathermap">openweathermap</a></b> device, where 0 is clear sky and 100 are overcast clouds.<br/> Example: MyWeather:cloudCover
     <br><br>
-    NOTE: using useExtWeather attribute may override settings in DEF.
+    NOTE 1: using useExtWeather attribute may override settings in DEF.
+    <br>
+    <br>
+    NOTE 2: If weatherDevice-type is known, <Reading> is optional (atm only "Weather"-type devices are supported).
     <br>
     A Twilight device periodically calculates the times of different twilight phases throughout the day.
     It calculates a virtual "light" element, that gives an indicator about the amount of the current daylight.
@@ -1023,9 +1030,12 @@ __END__
    consider these aspects.
      <br><br>
 
-    Example:
+    Examples:
     <pre>
-      define myTwilight Twilight 49.962529  10.324845 3 676757
+      define myTwilight Twilight 49.962529  10.324845 3 localWeather:clouds
+    </pre>
+    <pre>
+      define myTwilight2 Twilight 4 localWeather
     </pre>
   </ul>
   <br>
@@ -1077,7 +1087,7 @@ __END__
   <b>Attributes</b>
   <ul>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
-    <li><b>useExtWeather &lt;device&gt;:&lt;reading&gt;</b></li>
+    <li><b>useExtWeather &lt;device&gt;[:&lt;reading&gt;]</b></li>
     use data from other devices to calculate <b>twilight_weather</b>.<br/>
     The reading used shoud be in the range of 0 to 100 like the reading <b>c_clouds</b>    in an <b><a href="#openweathermap">openweathermap</a></b> device, where 0 is clear sky and 100 are overcast clouds.<br/>
     Note: Atm. additional weather effects like heavy rain or thunderstorms are neglegted for the calculation of the <b>twilight_weather</b> reading.<br/>
@@ -1112,20 +1122,20 @@ Example:
 <h3>Twilight</h3>
 <ul>
   <b>Allgemeine Hinweise</b><br>
-  Dieses Modul nutzte früher Daten von der Yahoo Wetter API. Diese ist leider nicht mehr verfügbar, daher ist die heutige Funktionalität deutlich eingeschränkt. Dies kann zu einem gewissen Grad kompensiert werden, indem man im define oder das Attribut<a href="#Twilightattr">useExtWeather</a> ein externes Wetter-Device setzt, um Bedeckungsgrade mit Wolken zu berücksichtigen. Falls Sie nur Astronomische Daten benötigen, wäre Astro hierfür eine genauere Alternative.<br><br>
+  Dieses Modul nutzte früher Daten von der Yahoo Wetter API. Diese ist leider nicht mehr verfügbar, daher ist die heutige Funktionalität deutlich eingeschränkt. Dies kann zu einem gewissen Grad kompensiert werden, indem man im define oder das Attribut <a href="#Twilightattr">useExtWeather</a> ein externes Wetter-Device setzt, um Bedeckungsgrade mit Wolken zu berücksichtigen. Falls Sie nur Astronomische Daten benötigen, wäre Astro hierfür eine genauere Alternative.<br><br>
 
   <br>
 
   <a name="Twilightdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; Twilight [&lt;latitude&gt; &lt;longitude&gt;] [&lt;indoor_horizon&gt; [&lt;weatherDevice:Reading&gt;]]</code><br>
+    <code>define &lt;name&gt; Twilight [&lt;latitude&gt; &lt;longitude&gt;] [&lt;indoor_horizon&gt; [&lt;weatherDevice[:Reading]&gt;]]</code><br>
     <br>
     Erstellt ein virtuelles Device f&uuml;r die D&auml;mmerungsberechnung (Zwielicht)<br><br>
 
   <b>latitude, longitude (geografische L&auml;nge & Breite)</b>
   <br>
-    Die Parameter <b>latitude</b> und <b>longitude</b> sind Dezimalzahlen welche die Position auf der Erde bestimmen, f&uuml;r welche der Dämmerungs-Status berechnet werden soll. Sie sind optional, wenn nicht vorhanden, werden die Angaben in global berücksichtigt, bzw. ohne weitere Angaben die Daten von Frankfurt/Main. Möchte man andere als die in global gesetzten Werte setzen, müssen zwingend beide Werte angegeben werden.
+    Die Parameter <b>latitude</b> und <b>longitude</b> sind Dezimalzahlen welche die Position auf der Erde bestimmen, für welche der Dämmerungs-Status berechnet werden soll. Sie sind optional, wenn nicht vorhanden, werden die Angaben in global berücksichtigt, bzw. ohne weitere Angaben die Daten von Frankfurt/Main. Möchte man andere als die in global gesetzten Werte setzen, müssen zwingend beide Werte angegeben werden.
     <br><br>
   <b>indoor_horizon</b>
   <br>
@@ -1135,11 +1145,13 @@ Example:
   <b>weatherDevice:Reading</b>
   <br>
     Der Parameter <b>weatherDevice:Reading</b> kann genutzt werden, um &uumlber ein anderes Device an den Bedeckungsgrad f&uumlr die Berechnung von <b>twilight_weather</b> bereitzustellen.<br/>
-    Das Reading sollte sich im Intervall zwischen 0 und 100 bewegen, z.B. das Reading <b>c_clouds</b> in einem<b><a href="#openweathermap">openweathermap</a></b> device, bei dem 0 heiteren und 100 bedeckten Himmel bedeuten.
+    Das Reading sollte sich im Intervall zwischen 0 und 100 bewegen, z.B. das Reading <b>c_clouds</b> in einem <b><a href="#openweathermap">openweathermap</a></b> device, bei dem 0 heiteren und 100 bedeckten Himmel bedeuten.
     <br>Beispiel: MyWeather:cloudCover
     <br><br>
-    Hinweis: Eventuelle Angaben im useExtWeather-Attribut &uumlberschreiben die Angaben im define.
-    <br>   
+    Hinweis 1: Eventuelle Angaben im useExtWeather-Attribut &uumlberschreiben die Angaben im define.
+    <br>
+    Hinweis 2: Bei bekannten Wetter-Device-Typen (im Moment ausschließlich: Weather) ist die Angabe des Readings optional.
+    <br>
     <br>
     Ein Twilight-Device berechnet periodisch die D&auml;mmerungszeiten und -phasen w&auml;hrend des Tages.
     Es berechnet ein virtuelles "Licht"-Element das einen Indikator f&uuml;r die momentane Tageslichtmenge ist.
@@ -1191,14 +1203,14 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
     <table>
     <tr><td><b>light</b></td><td>der aktuelle virtuelle Tageslicht-Wert</td></tr>
     <tr><td><b>nextEvent</b></td><td>Name des n&auml;chsten Events</td></tr>
-    <tr><td><b>nextEventTime</b></td><td>die Zeit wann das n&auml;chste Event wahrscheinlich passieren wird (w&auml;hrend Lichtphase 5 und 6 wird dieser Wert aktualisiert wenn sich das Wetter &auml;ndert)</td></tr>
+    <tr><td><b>nextEventTime</b></td><td>die Zeit wann das n&auml;chste Event wahrscheinlich passieren wird; (w&auml;hrend Lichtphase 5 und 6 wird dieser Wert aktualisiert wenn sich das Wetter &auml;ndert)</td></tr>
     <tr><td><b>sr_astro</b></td><td>Zeit des astronomitschen Sonnenaufgangs</td></tr>
     <tr><td><b>sr_naut</b></td><td>Zeit des nautischen Sonnenaufgangs</td></tr>
     <tr><td><b>sr_civil</b></td><td>Zeit des zivilen/b&uuml;rgerlichen Sonnenaufgangs</td></tr>
     <tr><td><b>sr</b></td><td>Zeit des Sonnenaufgangs</td></tr>
     <tr><td><b>sr_indoor</b></td><td>Zeit des "indoor" Sonnenaufgangs</td></tr>
-    <tr><td><b>sr_weather</b></td><td>"Wert" des Wetters beim Sonnenaufgang</td></tr>
-    <tr><td><b>ss_weather</b></td><td>"Wert" des Wetters beim Sonnenuntergang</td></tr>
+    <tr><td><b>sr_weather</b></td><td>"Zeit" des wetterabhängigen Sonnenaufgangs</td></tr>
+    <tr><td><b>ss_weather</b></td><td>"Zeit" des wetterabhängigen Sonnenuntergangs</td></tr>
     <tr><td><b>ss_indoor</b></td><td>Zeit des "indoor" Sonnenuntergangs</td></tr>
     <tr><td><b>ss</b></td><td>Zeit des Sonnenuntergangs</td></tr>
     <tr><td><b>ss_civil</b></td><td>Zeit des zivilen/b&uuml;rgerlichen Sonnenuntergangs</td></tr>
@@ -1249,4 +1261,48 @@ Anwendungsbeispiel:
 </ul>
 
 =end html_DE
+
+=for :application/json;q=META.json 59_Twilight.pm
+{
+   "abstract" : "generate twilight & sun related events; check alternative Astro.",
+   "author" : [
+      "Beta-User <>",
+      "orphan <>"
+   ],
+   "keywords" : [
+      "Timer",
+      "light",
+      "twlight",
+      "Dämmerung",
+      "Helligkeit",
+      "Wetter",
+      "weather"
+   ],
+   "name" : "FHEM::Twilight",
+   "prereqs" : {
+      "runtime" : {
+         "requires" : {
+            "FHEM::Meta" : "0",
+            "GPUtils" : "0",
+            "List::Util" : "0",
+            "Math::Trig" : "0",
+            "Time::Local" : "0",
+            "strict" : "0",
+            "warnings" : "0",
+            "FHEM::Core::Timer::Helper" : "0"
+         }
+      }
+   },
+   "x_fhem_maintainer" : [
+      "Beta-User",
+      "orphan"
+   ],
+   "x_lang" : {
+      "de" : {
+         "abstract" : "liefert Dämmerungs- und Sonnenstands-basierte Events. Alternative: Astro"
+      }
+   }
+}
+=end :application/json;q=META.json
+
 =cut
