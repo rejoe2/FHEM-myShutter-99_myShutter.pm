@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2020-05-22 Beta-User $
+# $Id: myUtils_MiLight.pm 2020-10-12 Beta-User $
 #
 
 package main;
@@ -10,7 +10,7 @@ use warnings;
 sub
 myUtils_MiLight_Initialize
 {
-  my ($hash) = @_;
+  my $hash = shift;
 }
 
 # Enter you functions below _this_ line.
@@ -20,9 +20,9 @@ sub milight_toggle_indirect {
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
   my $dimmLevel;
   my $hash;
-  foreach my $setdevice (split (/,/,$Target_Devices)) {
+  for my $setdevice (split (/,/,$Target_Devices)) {
     $hash = $defs{$setdevice};
-	if(ReadingsVal($setdevice,"state","OFF") =~ /OFF|off/) {
+    if(ReadingsVal($setdevice,"state","OFF") =~ /OFF|off/) {
       CommandSet(undef, "$setdevice on");
       readingsSingleUpdate($hash,"myLastShort","1", 0);
       AnalyzeCommandChain(undef, "sleep 1; set $setdevice brightness 220");
@@ -97,43 +97,68 @@ sub milight_FUT_to_RGBW {
 }
 
 sub milight_FUT_to_HUE {
-  my $name  = shift;
+  my $names  = shift;
   my $Event = shift // return;
   my $whitecol = shift // 'FFFFFF';
-  #return "" if ReadingsVal($name,"presence","absent") eq "absent";
-  $Event =~ s/://g;
-  my @parms = split  m{\s+}xms, $Event; 
-        
-  if($Event =~ /OFF|ON/) {
-    my $command = lc ($Event);
-    return CommandSet(undef, "$name $command");
+  my %ret; 
+  if(length($Event) < 10000 && $Event =~ m/^\s*[{[].*[}\]]\s*$/s) {
+        %ret = json2nameValue($Event);
+  }
+  my @parms; 
+  if(!keys %ret) {
+    $Event =~ s/://g;
+    $Event = "state ".lc($Event) if $Event =~ m/OFF|ON/i;
+    @parms = split  m{\s+}xms, $Event;     
+    $ret{$parms[0]} = $parms[1];
   }
   
-  if ($Event =~ /brightness/)  {
-    $Event =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
-    return CommandSet(undef, "$name $Event");
+  my @devices = split m{\s+}xms, $names; 
+  for my $name (@devices) {
+
+
+  for my $k (keys %ret) {
+
+  my $string = qq($k $ret{$k});
+  
+  if($string =~ m/OFF|ON/i) {
+    my $command = $ret{$k};
+    CommandSet(undef, "$name $command");
+  }
+  
+  if ($string =~ /brightness/)  {
+    $string =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
+    CommandSet(undef, "$name $string");
   } 
   
-  if ($Event =~ /hue/)  {
+  if ($string =~ /hue/)  {
     if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
-        my $rgb = Color::hsv2hex($parms[1],ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
-        return CommandSet(undef, "$name rgb $rgb");
+        my $rgb = Color::hsv2hex($ret{$k},ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
+        CommandSet(undef, "$name rgb $rgb");
+    } else {
+      CommandSet(undef, "$name $Event");
     }
-    return CommandSet(undef, "$name $Event");
   } 
   
-  if ($Event =~ /saturation/)  {
+  if ($string =~ /saturation/)  {
     if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
-        my $sat = int($parms[1]*2.54);
-        return CommandSet(undef, "$name sat $sat");
+      my $sat = int($ret{$k}*2.54);
+      CommandSet(undef, "$name sat $sat");
+    } else {
+      CommandSet(undef, "$name $Event");
     }
-    return CommandSet(undef, "$name $Event");
   } 
   
-  if ($Event =~ /command set_white/)  {
-    return CommandSet(undef, "$name rgb $whitecol") if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice");
-    return CommandSet(undef, "$name command Weiss");
-  }  
+  if ($string =~ /command set_white/)  {
+    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") {
+      CommandSet(undef, "$name rgb $whitecol");
+    } else { 
+      CommandSet(undef, "$name command Weiss");
+    } 
+ }  
+
+  } #end keys loop
+ } #end devices loop
+ return;
 }
 
 sub milight_to_MPD {
@@ -218,6 +243,64 @@ sub milight_to_shutter {
     my ($reading,$value) = split (/ /,$event);
     my $slatname = $name;
     my $slatlevel = 100 - ($value/(370-153))*100;
+    $com = $type eq "ZWave" ? "dim" : "slats"; 
+    $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
+    my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
+    $defnr++;
+    my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
+    $slatname = shift @slatnames;
+    
+    return CommandSet(undef, "$slatname $com $slatlevel");
+  }
+  return;
+}
+
+sub milight_to_shutter2 {
+  my $name  = shift;
+  my $event = shift // return;
+  my $type = InternalVal($name,"TYPE","MQTT2_DEVICE"); 
+  my $moving = ReadingsVal($name,"motor","stop") =~ /stop/ ? 0 : 1;
+  $moving = 1 if (ReadingsNum($name,"power",0) > 1 && $type eq "ZWave");
+
+  my $rets = json2nameValue($event);
+  
+  my $com = "off";
+  my $now = gettimeofday;
+  if (!$moving && $rets->{state} =~ m/ON|OFF/) {
+    if ($now - ReadingsVal($name, "myLastRCOnOff",$now) < 5) {
+      CommandSetReading(undef,"$name myLastRCOnOff $now");
+      $com = lc($rets->{state});
+      return CommandSet(undef,"$name $com)");
+    } 
+    return CommandSetReading(undef,"$name myLastRCOnOff $now"); 
+  } 
+  if ($rets->{state} =~ m/ON|OFF/) { 
+    CommandSetReading(undef,"$name myLastRCOnOff $now");
+    return CommandSet(undef,"$name stop");
+  }
+  if (defined $rets->{brightness}) {
+    my ($reading,$value) = split (/ /,$event);
+    my $level = int (round ($rets->{brightness}/2,55));
+    $com = $type eq "ZWave" ? "dim" : "pct"; 
+    $level = 99 if ($level == 100 && $type eq "ZWave");
+    return CommandSet(undef, "$name $com $level");
+  } 
+  if (defined $rets->{saturation}) {
+    my $slatname = $name;
+    my $slatlevel = 100 - $rets->{saturation};
+    $com = $type eq "ZWave" ? "dim" : "slats"; 
+    $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
+    my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
+    $defnr++;
+    my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
+    $slatname = shift @slatnames;
+    
+    return CommandSet(undef, "$slatname $com $slatlevel");
+
+  } 
+  if (defined $rets->{color_temp}) {
+    my $slatname = $name;
+    my $slatlevel = 100 - ($rets->{color_temp}/(370-153))*100;
     $com = $type eq "ZWave" ? "dim" : "slats"; 
     $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
     my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
