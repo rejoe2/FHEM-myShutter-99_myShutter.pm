@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtilsGeneralUse.pm 2020-10-12 Beta-User $
+# $Id: myUtilsGeneralUse.pm 2020-10-13 Beta-User $
 #
 
 package main;
@@ -29,8 +29,8 @@ sub
 myHHMMSS2sec
 {
   my ($h,$m,$s) = split(":", shift);
-  $m = 0 if(!$m);
-  $s = 0 if(!$s);
+  $m = 0 if !$m;
+  $s = 0 if !$s;
   my $seconds = HOURSECONDS*$h+MINUTESECONDS*$m+$s;
   return $seconds;
 }
@@ -129,26 +129,29 @@ sub myTimeout_stairway_motion {
 sub myCalendar2Holiday {
   my $calname    = shift // return;
   my $regexp     = shift // return;
+  my $targetname = shift // $calname;
   my $field      = shift // "summary";
   my $limit      = shift // 10;
   my $yearEndRe  = shift;
-  my $targetname = shift // $calname;
   
   my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
-  my @holidaysraw = split(/\n/,CommandGet(undef, qq($calname events format:custom="4 \$T1 \$T2 \$S" timeFormat:"%m-%d" limit:count=$limit filter:field($field)=~"$regexp")));
+  my $getstring = $calname . ' events format:custom="4 $T1 $T2 $S" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
+  my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
+  
   my @holidays;
   for my $holiday (@holidaysraw) {
-    if ($_ !~ m/$yearEndRe/) {
-      push (@holidays, $_);
-    } else { my @tokens = split (" ",$_);
+    if ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
+      push (@holidays, $holiday);
+    } else { my @tokens = split (" ",$holiday);
       my $lines = "4 $tokens[1] 12-31 $tokens[3]";
       push (@holidays,$lines) if $month > 9;
       $lines = "4 01-01 $tokens[2] $tokens[3]";
       unshift (@holidays,$lines);
     }
   } 
+  unshift (@holidays, "# get $getstring");
   my $today = strftime "%d.%m.%y, %H:%M", localtime(time);;\
-  unshift (@holidays, "# Created by at a_make_holiday on $today");
+  unshift (@holidays, "# Created by myCalendar2Holiday on $today");
   FileWrite("./FHEM/${targetname}.holiday",@holidays);
 }
 
