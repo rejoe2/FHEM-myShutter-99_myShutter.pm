@@ -243,7 +243,7 @@ sub Twilight_Notify {
                 #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
                 return if ref $hash->{helper}{extWeather}{dispatch}->{function} ne 'CODE';
                 ( $extWeather, $sr_extWeather, $ss_extWeather ) = $hash->{helper}{extWeather}{dispatch}->{function}->($hash, $wname);
-                #Log3( $hash, 5, "[$hash->{NAME}] after dispatch" );
+                Log3( $hash, 5, "[$hash->{NAME}] after dispatch. results: $extWeather $sr_extWeather $ss_extWeather" );
 
             }    
             my $last = ReadingsNum($name, "cloudCover", -1);
@@ -264,9 +264,10 @@ sub Twilight_Notify {
             
             my ($sr, $ss) = Twilight_calc( $hash, $weather_horizon, "7" ); ##these are numbers
             my ($sr_wh,$ss_wh);
-            if ($ss_extWeather) {
-              $sr_wh = Twilight_getWeatherHorizon( $hash, $sr_extWeather, 1);
-              $ss_wh = Twilight_getWeatherHorizon( $hash, $ss_extWeather, 1);
+            if (defined $ss_extWeather) {
+              Log3( $hash, 5, "[$name] ss_extWeather exists" );
+              $sr_wh = Twilight_getWeatherHorizon( $hash, $sr_extWeather, 0);
+              $ss_wh = Twilight_getWeatherHorizon( $hash, $ss_extWeather, 0);
               my ($srt_wh, $sst_wh) = Twilight_calc( $hash, $sr_wh, "7" );
               $sr = $srt_wh;
               ($srt_wh, $sst_wh) = Twilight_calc( $hash, $ss_wh, "7" );
@@ -294,8 +295,8 @@ sub Twilight_Notify {
 
             readingsBeginUpdate( $hash );
             readingsBulkUpdate( $hash, "cloudCover", $extWeather );
-            readingsBulkUpdate( $hash, "cloudCover_sr", $sr_wh ) if $sr_wh && $now < $sr;
-            readingsBulkUpdate( $hash, "cloudCover_ss", $ss_wh ) if $ss_wh && $now < $ss;
+            readingsBulkUpdate( $hash, "cloudCover_sr", $sr_extWeather ) if $sr_wh && $now < $sr;
+            readingsBulkUpdate( $hash, "cloudCover_ss", $ss_extWeather ) if $ss_wh && $now < $ss;
             readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
             #readingsBulkUpdate( $hash, "condition_code", $cond ) if $dispatch;
             #readingsBulkUpdate( $hash, "condition_txt", $condText ) if $dispatch;
@@ -1030,7 +1031,7 @@ sub getTwilightHours {
     my $hour    = ( localtime )[2];
     my $sr_hour = ( localtime( $hash->{TW}{sr_weather}{TIME}))[2];
     my $ss_hour = ( localtime( $hash->{TW}{ss_weather}{TIME}))[2]; 
-    return [$hour,$sr_hour,$ss_hour];
+    return $hour, $sr_hour, $ss_hour;
 }
 
 sub getwTYPE_Weather {
@@ -1038,10 +1039,16 @@ sub getwTYPE_Weather {
     
     my @ret;
     my $extDev  = $hash->{helper}{extWeather}{Device};
-    #my ($hour, $sr_hour, $ss_hour) =getTwilightHours($hash); 
+    my ($hour, $sr_hour, $ss_hour) = getTwilightHours($hash); 
     
     $ret[0] = ReadingsNum($extDev,"cloudCover",0);
-    Log3( $hash, 5, "[$hash->{NAME}] function is called, first element is $ret[0]" );
+    Log3( $hash, 5, "[$hash->{NAME}] function is called, cc is $ret[0], hours sr: $sr_hour, ss: $ss_hour" );
+    
+    my $hfc_sr = max( 0 , $sr_hour - $hour );
+    my $hfc_ss = max( 0 , $ss_hour - $hour );
+    
+    $ret[1] = $hfc_sr ? ReadingsNum($extDev,"hfc${hfc_sr}_cloudCover",0) : $ret[0];
+    $ret[2] = $hfc_ss ? ReadingsNum($extDev,"hfc${hfc_ss}_cloudCover",0) : $ret[0];
 
     return @ret;
 }
