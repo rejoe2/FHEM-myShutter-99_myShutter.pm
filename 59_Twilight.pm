@@ -81,6 +81,9 @@ BEGIN {
           FmtTime
           FmtDateTime
           strftime
+          perlSyntaxCheck
+          EvalSpecials
+          AnalyzePerlCommand
           stacktrace
           )
     );
@@ -104,7 +107,6 @@ sub Initialize {
     $hash->{parseParams} = 1;
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
-
 
 ################################################################################
 sub Twilight_Define {
@@ -236,16 +238,30 @@ sub Twilight_Notify {
             my $dispatch = defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{dispatch} ? 1 : 0; 
 
             if (!$dispatch 
-                || $dispatch && !defined $hash->{helper}{extWeather}{dispatch}{function}) 
+                || $dispatch && !defined $hash->{helper}{extWeather}{dispatch}{function} && !defined $hash->{helper}{extWeather}{dispatch}{userfunction} ) 
             { 
                 $extWeather = ReadingsNum($wname, $hash->{helper}{extWeather}{Reading},-1);
-            } else {
+            } elsif (defined $hash->{helper}{extWeather}{dispatch}{function} ) {
                 #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
                 return if ref $hash->{helper}{extWeather}{dispatch}->{function} ne 'CODE';
                 ( $extWeather, $sr_extWeather, $ss_extWeather ) = $hash->{helper}{extWeather}{dispatch}->{function}->($hash, $wname);
                 Log3( $hash, 5, "[$hash->{NAME}] after dispatch. results: $extWeather $sr_extWeather $ss_extWeather" );
 
-            }    
+            } elsif (defined $hash->{helper}{extWeather}{dispatch}{userfunction} ) {
+                #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
+                my %specials = (
+                    '$WEATHERDEV'     => $extWeather,
+                    '$WEATHERREADING' => $hash->{helper}{extWeather}{dispatch}{trigger}
+                );
+                my $evalcode = EvalSpecials ($hash->{helper}{extWeather}{dispatch}->{function}, %specials); 
+                
+                ( $extWeather, $sr_extWeather, $ss_extWeather ) = 
+                AnalyzePerlCommand( $hash, $evalcode );
+                
+                Log3( $hash, 5, "[$hash->{NAME}] external code results: $extWeather $sr_extWeather $ss_extWeather" );
+
+            }
+            
             my $last = ReadingsNum($name, "cloudCover", -1);
             
             #here we have to split up for extended forecast handling... 
@@ -412,14 +428,22 @@ sub Twilight_init_ExtWeather_usage {
         @parts = split( " ", $devreading, 2 );
         ($extWeather, $extWReading) = split( ":", $parts[0] ); 
         return "External weather device seems not to exist" if (!defined $defs{$extWeather} && $init_done);
-        ### add code for $parts[1] if exists 
+        
         ### This is the place to allow external dispatch functions...
+        my %specials = (
+            '$WEATHERDEV'     => $extWeather,
+            '$WEATHERREADING' => $extWReading
+        );
+
+        my $err = perlSyntaxCheck( $parts[1], %specials );
+        return $err if ( $err );
+        
     } else {
         #conversion code, try to guess the ext. weather device to replace yahoo
         my @devices=devspec2array("TYPE=Weather"); 
         return "No Weather-Type device found if !$devices[0]";
         $extWeather = $devices[0];
-        $extWReading = "cloudCover";
+        #$extWReading = "cloudCover";
     }
     
     ($err, $extWReading) = Twilight_disp_ExtWeather($hash, $extWeather) if !$extWReading; 
@@ -428,8 +452,9 @@ sub Twilight_init_ExtWeather_usage {
     notifyRegexpChanged($hash, $extWregex);
     $hash->{helper}{extWeather}{regexp} = $extWregex;
     $hash->{helper}{extWeather}{Device} = $extWeather;
-    $hash->{helper}{extWeather}{Reading} = $extWReading if !$parts[1];
-    $hash->{helper}{extWeather}{trigger} = $extWReading if  $parts[1];;
+    $hash->{helper}{extWeather}{Reading} = $extWReading if !$parts[1] && !exists  $hash->{helper}{extWeather}{dispatch};
+    $hash->{helper}{extWeather}{trigger} = $extWReading if $parts[1];
+    $hash->{helper}{extWeather}{userfunction} = $parts[1] if $parts[1];
     return InternalTimer( time(), \&Twilight_Firstrun,$hash,0) if $init_done && $useTimer;
     return;
 }
@@ -442,8 +467,14 @@ sub Twilight_disp_ExtWeather {
     return ("No type info about extWeather available!", "none") if !$wtype;
     
     my $dispatch = {
-        "Weather" => {"cloudCover" => "cloudCover", "function" => \&getwTYPE_Weather },
-        "PROPLANTA" => { "function" => \&getwTYPE_PROPLANTA }
+        "Weather" => {
+            "cloudCover" => "cloudCover", 
+            "function" => \&getwTYPE_Weather 
+         },
+        "PROPLANTA" => { 
+            "cloudCover" => "fc0_cloud03",
+            "function" => \&getwTYPE_PROPLANTA 
+        }
     };
     if (ref $dispatch->{$wtype} eq 'HASH') {
         $extWReading =  $dispatch->{$wtype}{cloudCover};
