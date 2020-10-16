@@ -771,7 +771,7 @@ sub Twilight_StandardTimerSet {
 
     Twilight_RemoveInternalTimer( "Midnight", $hash );
     Twilight_InternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
-    return Twilight_WeatherTimerSet($hash);
+    return; # Twilight_WeatherTimerSet($hash);
 }
 
 ################################################################################
