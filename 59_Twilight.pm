@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm exp. dispatch 2020-10-15 Beta-User $
+# $Id: 59_Twilight.pm midnight timer reviewed 2020-10-20 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -41,7 +41,7 @@ use Math::Trig;
 use Time::Local qw(timelocal_nocheck);
 use List::Util qw(max min);
 use GPUtils qw(GP_Import GP_Export);
-eval { use FHEM::Core::Timer::Helper qw(addTimer removeTimer); 1 };
+eval { use FHEM::Core::Timer::Helper qw( addTimer removeTimer optimizeLOT ); 1 };
 use FHEM::Meta;
 
 #-- Run before package compilation
@@ -81,6 +81,9 @@ BEGIN {
           FmtTime
           FmtDateTime
           strftime
+          perlSyntaxCheck
+          EvalSpecials
+          AnalyzePerlCommand
           stacktrace
           )
     );
@@ -104,7 +107,6 @@ sub Initialize {
     $hash->{parseParams} = 1;
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
-
 
 ################################################################################
 sub Twilight_Define {
@@ -176,11 +178,11 @@ sub Twilight_Undef {
     my $arg = shift // return;
 
     for my $key ( keys %{ $hash->{TW} } ) {
-        Twilight_RemoveInternalTimer( $key, $hash );
+        Twilight_RemoveInternalTimer( $key, $hash, \&Twilight_fireEvent );
     }
-    Twilight_RemoveInternalTimer( "Midnight", $hash );
-    Twilight_RemoveInternalTimer( "weather",  $hash );
-    Twilight_RemoveInternalTimer( "sunpos",   $hash );
+    Twilight_RemoveInternalTimer( "Midnight", $hash, \&Twilight_Midnight );
+    #Twilight_RemoveInternalTimer( "weather",  $hash,  );
+    Twilight_RemoveInternalTimer( "sunpos",   $hash, \&Twilight_sunpos );
     notifyRegexpChanged( $hash, "" );
     for my $key ( keys %{ $hash->{helper}{extWeather} } ) {
         delete $hash->{helper}{extWeather}{$key};
@@ -204,8 +206,8 @@ sub Twilight_Change_DEF {
     }
     $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
     $newdef .= " $hash->{INDOOR_HORIZON} $weather";
-
-    return CommandModify(undef, "$name $newdef");
+    $hash->{DEF} = $newdef;
+    return; # CommandModify(undef, "$name $newdef");
 }
 
 ################################################################################
@@ -231,130 +233,141 @@ sub Twilight_Notify {
         $s = "" if(!defined($s));
         my $found = ($wname =~ m/^$re$/x || "$wname:$s" =~ m/^$re$/sx);
     
-        if($found) {
-            my ($extWeather, $sr_extWeather, $ss_extWeather);
-            my $dispatch = defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{dispatch} ? 1 : 0; 
-
-            if (!$dispatch 
-                || $dispatch && !defined $hash->{helper}{extWeather}{dispatch}{function}) 
-            { 
-                $extWeather = ReadingsNum($wname, $hash->{helper}{extWeather}{Reading},-1);
-            } else {
-                #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
-                return if ref $hash->{helper}{extWeather}{dispatch}->{function} ne 'CODE';
-                ( $extWeather, $sr_extWeather, $ss_extWeather ) = $hash->{helper}{extWeather}{dispatch}->{function}->($hash, $wname);
-                Log3( $hash, 5, "[$hash->{NAME}] after dispatch. results: $extWeather $sr_extWeather $ss_extWeather" );
-
-            }    
-            my $last = ReadingsNum($name, "cloudCover", -1);
-            
-            #here we have to split up for extended forecast handling... 
-            
-            Log3( $hash, 5, "[$name] NotifyFn called, reading is $extWeather, last is $last" );
-
-            return if abs ($last - $extWeather) < 6;
-            #my ($cond, $condText) = [-1,"not known"];
-            
-            #$cond = ReadingsNum($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{dispatch}{cond_code},-2) if $dispatch;
-            #$condText = ReadingsVal($hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{dispatch}{cond_text},"unknown") if $dispatch;
- 
-            my $weather_horizon = Twilight_getWeatherHorizon( $hash, $extWeather, 1);
-            
-            #add $sr_weather_horizon and $ss_weather_horizon here, then we will have to do some more Twilight_calc...
-            
-            my ($sr, $ss) = Twilight_calc( $hash, $weather_horizon, "7" ); ##these are numbers
-            my ($sr_wh,$ss_wh);
-            if (defined $ss_extWeather) {
-              Log3( $hash, 5, "[$name] ss_extWeather exists" );
-              $sr_wh = Twilight_getWeatherHorizon( $hash, $sr_extWeather, 0);
-              $ss_wh = Twilight_getWeatherHorizon( $hash, $ss_extWeather, 0);
-              my ($srt_wh, $sst_wh) = Twilight_calc( $hash, $sr_wh, "7" );
-              $sr = $srt_wh;
-              ($srt_wh, $sst_wh) = Twilight_calc( $hash, $ss_wh, "7" );
-              $ss = $sst_wh;
-            }
-            
-            my $now = time();
-            Log3( $hash, 5, "[$name] NotifyFn: calc sr_w is ".FmtTime( $sr) .", ss_w is ".FmtTime( $ss) );
-            #$hash->{SR_TEST} = $sr;
-            #$hash->{SS_TEST} = $ss;
-            
-            #done for today?
-            return if $now > min($ss , $hash->{TW}{ss_weather}{TIME});
-            Log3( $hash, 5, "[$name] not yet done for today" );
-            
-            #set potential dates in the past to now
-            $sr = max( $sr, $now - 0.01 );
-            $ss = max( $ss, $now - 0.01 );
-            my $sr_passed = $hash->{TW}{sr_weather}{TIME} > $sr ? 1 : 0;
-            my $ss_passed = $hash->{TW}{ss_weather}{TIME} > $ss ? 1 : 0;
-            
-            #renew dates and timers?, fire events?
-            my $nextevent = ReadingsVal($name,"nextEvent","none");            
-            my $nextEventTime = FmtTime( $sr );
-
-            readingsBeginUpdate( $hash );
-            readingsBulkUpdate( $hash, "cloudCover", $extWeather );
-            readingsBulkUpdate( $hash, "cloudCover_sr", $sr_extWeather ) if $sr_wh && $now < $sr;
-            readingsBulkUpdate( $hash, "cloudCover_ss", $ss_extWeather ) if $ss_wh && $now < $ss;
-            readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
-            #readingsBulkUpdate( $hash, "condition_code", $cond ) if $dispatch;
-            #readingsBulkUpdate( $hash, "condition_txt", $condText ) if $dispatch;
-
-
-            readingsBeginUpdate( $hash );
-            
-
-            if ( $now < $sr ) {
-                Twilight_RemoveInternalTimer( "sr_weather", $hash );
-                $hash->{TW}{sr_weather}{TIME} = $sr;
-                Twilight_InternalTimer( "sr_weather", $sr, \&Twilight_fireEvent, $hash, 0 );
-                readingsBulkUpdate( $hash, "sr_weather", $nextEventTime );
-                readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "sr_weather";
-            } elsif ( $sr_passed ) {
-                Twilight_RemoveInternalTimer( "sr_weather", $hash );
-                readingsBulkUpdate( $hash, "sr_weather", $nextEventTime );
-                if ( $nextevent eq "sr_weather" ) {
-                    readingsBulkUpdate( $hash, "nextEvent", "ss_weather" ) ;
-                    readingsBulkUpdate( $hash, "nextEventTime", FmtTime( $ss ) ) ;
-                    readingsBulkUpdate( $hash, "state", "6" );
-                    readingsBulkUpdate( $hash, "light", "6" );
-                    readingsBulkUpdate( $hash, "aktEvent", "sr_weather" );
-                    Twilight_RemoveInternalTimer( "ss_weather", $hash );
-                    Twilight_InternalTimer( "ss_weather", $ss, \&Twilight_fireEvent, $hash, 0 );
-                }
-            } 
-            
-            if ( $now < $ss ) {
-                $nextEventTime = FmtTime( $ss );
-                Twilight_RemoveInternalTimer( "ss_weather", $hash );
-                $hash->{TW}{ss_weather}{TIME} = $ss;
-                $hash->{TW}{ss_weather}{SWIP} = 1;
-                Twilight_InternalTimer( "ss_weather", $ss, \&Twilight_fireEvent, $hash, 0 );
-                readingsBulkUpdate( $hash, "ss_weather", $nextEventTime );
-                readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "ss_weather" && !$ss_passed;
-            } elsif ( $ss_passed ) {
-                Twilight_RemoveInternalTimer( "ss_weather", $hash );
-                readingsBulkUpdate( $hash, "ss_weather", $nextEventTime );
-                if ( $nextevent eq "ss_weather" ) {
-                    readingsBulkUpdate( $hash, "nextEvent", "ss_indoor" ) ;
-                    readingsBulkUpdate( $hash, "nextEventTime", FmtTime( $hash->{TW}{ss_indoor}{TIME} ) ) ;
-                    readingsBulkUpdate( $hash, "aktEvent", "ss_weather" );
-                    readingsBulkUpdate( $hash, "state", "8" );
-                    readingsBulkUpdate( $hash, "light", "4" );
-                }
-            }
-            
-            readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
-            #my $swip = $hash->{SWIP};
-            #$hash->{SWIP} = 1 if !$swip;
-            #Twilight_TwilightTimes( $hash, "weather", $extWeather );
-            #$hash->{SWIP} = 0 if !$swip;
-            Twilight_RemoveInternalTimer ("sunpos", $hash);
-            Twilight_InternalTimer ("sunpos", time()+1, \&Twilight_sunpos, $hash, 0);
-        }
+        return Twilight_HandleWeatherData( $hash, 1) if $found;
     }
     return;
+}
+
+sub Twilight_HandleWeatherData {
+    my $hash     = shift // return;
+    my $inNotify = shift // 0;
+    my $wname = $hash->{helper}{extWeather}{Device} // "none";
+    my $name = $hash->{NAME};
+    my ($extWeather, $sr_extWeather, $ss_extWeather);
+    my $dispatch = defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{dispatch} ? 1 : 0; 
+
+    if (!$dispatch 
+        || $dispatch && !defined $hash->{helper}{extWeather}{dispatch}{function} && !defined $hash->{helper}{extWeather}{dispatch}{userfunction} ) 
+    { 
+        $extWeather = ReadingsNum($wname, $hash->{helper}{extWeather}{Reading},-1);
+    } elsif (defined $hash->{helper}{extWeather}{dispatch}{function} ) {
+        #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
+        return if ref $hash->{helper}{extWeather}{dispatch}->{function} ne 'CODE';
+        ( $extWeather, $sr_extWeather, $ss_extWeather ) = $hash->{helper}{extWeather}{dispatch}->{function}->($hash, $wname);
+        Log3( $hash, 5, "[$hash->{NAME}] after dispatch. results: $extWeather $sr_extWeather $ss_extWeather" );
+
+    } elsif (defined $hash->{helper}{extWeather}{dispatch}{userfunction} ) {
+        #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
+        my %specials = (
+                    '$WEATHERDEV'     => $extWeather,
+                    '$WEATHERREADING' => $hash->{helper}{extWeather}{dispatch}{trigger}
+                       );
+        my $evalcode = EvalSpecials ($hash->{helper}{extWeather}{dispatch}->{function}, %specials); 
+                
+        ( $extWeather, $sr_extWeather, $ss_extWeather ) = 
+            AnalyzePerlCommand( $hash, $evalcode );
+                
+        Log3( $hash, 5, "[$hash->{NAME}] external code results: $extWeather $sr_extWeather $ss_extWeather" );
+        
+    }
+
+    my $last = ReadingsNum($name, "cloudCover", -1);
+            
+    #here we have to split up for extended forecast handling... 
+            
+    $inNotify ? Log3( $hash, 5, "[$name] NotifyFn called, reading is $extWeather, last is $last" ) 
+              : Log3( $hash, 5, "[$name] timer based weather update called, reading is $extWeather, last is $last" );
+
+    return if $inNotify && abs ($last - $extWeather) < 6;
+
+    my $weather_horizon = Twilight_getWeatherHorizon( $hash, $extWeather, 1);
+            
+    my ($sr, $ss) = Twilight_calc( $hash, $weather_horizon, "7" ); #these are numbers
+    my ($sr_wh,$ss_wh);
+    if (defined $ss_extWeather) {
+        Log3( $hash, 5, "[$name] ss_extWeather exists" );
+        $sr_wh = Twilight_getWeatherHorizon( $hash, $sr_extWeather, 0);
+        $ss_wh = Twilight_getWeatherHorizon( $hash, $ss_extWeather, 0);
+        my ($srt_wh, $sst_wh) = Twilight_calc( $hash, $sr_wh, "7" );
+        $sr = $srt_wh;
+        ($srt_wh, $sst_wh) = Twilight_calc( $hash, $ss_wh, "7" );
+        $ss = $sst_wh;
+    }
+
+    my $now = time();
+    Log3( $hash, 5, "[$name] extW-update fn: calc sr_w is ".FmtTime( $sr) .", ss_w is ".FmtTime( $ss) );
+
+    #done for today?
+    return if $inNotify && $now > min($ss , $hash->{TW}{ss_weather}{TIME});
+    Log3( $hash, 5, "[$name] not yet done for today" );
+    
+    #set potential dates in the past to now
+    my $sr_passed = 0;
+    my $ss_passed = 0;
+    if ($inNotify) {
+        $sr = max( $sr, $now - 0.01 );
+        $ss = max( $ss, $now - 0.01 );
+        $sr_passed = $hash->{TW}{sr_weather}{TIME} > $sr ? 1 : 0;
+        $ss_passed = $hash->{TW}{ss_weather}{TIME} > $ss ? 1 : 0;
+    }
+
+    #renew dates and timers?, fire events?
+    my $nextevent = ReadingsVal($name,"nextEvent","none");            
+    my $nextEventTime = FmtTime( $sr );
+
+    readingsBeginUpdate( $hash );
+    readingsBulkUpdate( $hash, "cloudCover", $extWeather );
+    readingsBulkUpdate( $hash, "cloudCover_sr", $sr_extWeather ) if $sr_wh && $now < $sr;
+    readingsBulkUpdate( $hash, "cloudCover_ss", $ss_extWeather ) if $ss_wh && $now < $ss;
+
+    if ( $now < $sr ) {
+        #Twilight_RemoveInternalTimer( "sr_weather", $hash );
+        $hash->{TW}{sr_weather}{TIME} = $sr;
+        Twilight_RenewInternalTimer( "sr_weather", $sr, \&Twilight_fireEvent, $hash, 0 );
+        readingsBulkUpdate( $hash, "sr_weather", $nextEventTime );
+            readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "sr_weather";
+    } elsif ( $sr_passed ) {
+        #Twilight_RemoveInternalTimer( "sr_weather", $hash );
+        Twilight_RemoveInternalTimer( "sr_weather", $hash, \&Twilight_fireEvent);
+        readingsBulkUpdate( $hash, "sr_weather", $nextEventTime );
+        if ( $nextevent eq "sr_weather" ) {
+            readingsBulkUpdate( $hash, "nextEvent", "ss_weather" ) ;
+            readingsBulkUpdate( $hash, "nextEventTime", FmtTime( $ss ) ) ;
+            readingsBulkUpdate( $hash, "state", "6" );
+            readingsBulkUpdate( $hash, "light", "6" );
+            readingsBulkUpdate( $hash, "aktEvent", "sr_weather" );
+            #Twilight_RemoveInternalTimer( "ss_weather", $hash );
+            Twilight_RenewInternalTimer( "ss_weather", $ss, \&Twilight_fireEvent, $hash, 0 );
+        }
+    } 
+    
+    if ( $now < $ss ) {
+        $nextEventTime = FmtTime( $ss );
+        #Twilight_RemoveInternalTimer( "ss_weather", $hash );
+        $hash->{TW}{ss_weather}{TIME} = $ss;
+        $hash->{TW}{ss_weather}{SWIP} = 1;
+        Twilight_RenewInternalTimer( "ss_weather", $ss, \&Twilight_fireEvent, $hash, 0 );
+        readingsBulkUpdate( $hash, "ss_weather", $nextEventTime );
+        readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "ss_weather" && !$ss_passed;
+    } elsif ( $ss_passed ) {
+        Twilight_RemoveInternalTimer( "ss_weather", $hash, \&Twilight_fireEvent );
+        readingsBulkUpdate( $hash, "ss_weather", $nextEventTime );
+        if ( $nextevent eq "ss_weather" ) {
+            readingsBulkUpdate( $hash, "nextEvent", "ss_indoor" ) ;
+            readingsBulkUpdate( $hash, "nextEventTime", FmtTime( $hash->{TW}{ss_indoor}{TIME} ) ) ;
+            readingsBulkUpdate( $hash, "aktEvent", "ss_weather" );
+            readingsBulkUpdate( $hash, "state", "8" );
+            readingsBulkUpdate( $hash, "light", "4" );
+        }
+    }
+
+    readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
+    #my $swip = $hash->{SWIP};
+    #$hash->{SWIP} = 1 if !$swip;
+    #Twilight_TwilightTimes( $hash, "weather", $extWeather );
+    #$hash->{SWIP} = 0 if !$swip;
+    #Twilight_RemoveInternalTimer ("sunpos", $hash);
+    return Twilight_RenewInternalTimer("sunpos", time()+1, \&Twilight_sunpos, $hash, 0);
 }
 
 sub Twilight_Firstrun {
@@ -366,17 +379,22 @@ sub Twilight_Firstrun {
     $attrVal = "$hash->{helper}{extWeather}{Device}:$hash->{helper}{extWeather}{Reading}" if !$attrVal && defined $hash->{helper} && defined $hash->{helper}{extWeather}{Device} && defined $hash->{helper}{extWeather}{Reading};
     $attrVal = "$hash->{helper}{extWeather}{Device}:$hash->{helper}{extWeather}{trigger}" if !$attrVal && defined $hash->{helper} && defined $hash->{helper}{extWeather}{Device} && defined $hash->{helper}{extWeather}{trigger};
     
+    my $extWeatherVal = 0;
+    
     if ($attrVal) {
         Twilight_init_ExtWeather_usage( $hash, $attrVal );
-        my $extWeatherVal = ReadingsNum( $name, "cloudCover", ReadingsNum( $hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading}, 0 ) );
+         $extWeatherVal = ReadingsNum( $name, "cloudCover", ReadingsNum( $hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading}, 0 ) );
         readingsSingleUpdate ( $hash, "cloudCover", $extWeatherVal, 0 ) if $extWeatherVal;
-        Twilight_getWeatherHorizon( $hash, $extWeatherVal );
-        Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
     }
-
-    my $mHash = { HASH => $hash };
-    Twilight_sunpos($mHash);
-    Twilight_Midnight($mHash);
+    Twilight_getWeatherHorizon( $hash, $extWeatherVal );
+    Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
+    
+    #my $mHash = { HASH => $hash };
+    #Twilight_sunpos($mHash) if !$attrVal;
+    #Twilight_Midnight($mHash, 1);
+    my $mHash = { h => $hash };
+    Twilight_sunpos($mHash) if !$attrVal;
+    Twilight_Midnight($mHash, 1);
     delete $hash->{DEFINE};
 
     return;
@@ -412,14 +430,22 @@ sub Twilight_init_ExtWeather_usage {
         @parts = split( " ", $devreading, 2 );
         ($extWeather, $extWReading) = split( ":", $parts[0] ); 
         return "External weather device seems not to exist" if (!defined $defs{$extWeather} && $init_done);
-        ### add code for $parts[1] if exists 
+        
         ### This is the place to allow external dispatch functions...
+        my %specials = (
+            '$WEATHERDEV'     => $extWeather,
+            '$WEATHERREADING' => $extWReading
+        );
+
+        my $err = perlSyntaxCheck( $parts[1], %specials );
+        return $err if ( $err );
+        
     } else {
         #conversion code, try to guess the ext. weather device to replace yahoo
         my @devices=devspec2array("TYPE=Weather"); 
         return "No Weather-Type device found if !$devices[0]";
         $extWeather = $devices[0];
-        $extWReading = "cloudCover";
+        #$extWReading = "cloudCover";
     }
     
     ($err, $extWReading) = Twilight_disp_ExtWeather($hash, $extWeather) if !$extWReading; 
@@ -428,8 +454,9 @@ sub Twilight_init_ExtWeather_usage {
     notifyRegexpChanged($hash, $extWregex);
     $hash->{helper}{extWeather}{regexp} = $extWregex;
     $hash->{helper}{extWeather}{Device} = $extWeather;
-    $hash->{helper}{extWeather}{Reading} = $extWReading if !$parts[1];
-    $hash->{helper}{extWeather}{trigger} = $extWReading if  $parts[1];;
+    $hash->{helper}{extWeather}{Reading} = $extWReading if !$parts[1] && !exists  $hash->{helper}{extWeather}{dispatch};
+    $hash->{helper}{extWeather}{trigger} = $extWReading if $parts[1];
+    $hash->{helper}{extWeather}{userfunction} = $parts[1] if $parts[1];
     return InternalTimer( time(), \&Twilight_Firstrun,$hash,0) if $init_done && $useTimer;
     return;
 }
@@ -440,10 +467,21 @@ sub Twilight_disp_ExtWeather {
     my ( $err, $extWReading );
     my $wtype = InternalVal( $extWeather, 'TYPE', undef );
     return ("No type info about extWeather available!", "none") if !$wtype;
+    for my $key ( keys %{ $hash->{helper}{extWeather} } ) {
+        delete $hash->{helper}{extWeather}{$key};
+    }
+    delete $hash->{helper}{extWeather}{dispatch};
+    
     
     my $dispatch = {
-        "Weather" => {"cloudCover" => "cloudCover", "function" => \&getwTYPE_Weather },
-        "PROPLANTA" => { "function" => \&getwTYPE_PROPLANTA }
+        "Weather" => {
+            "cloudCover" => "cloudCover", 
+            "function" => \&getwTYPE_Weather 
+         },
+        "PROPLANTA" => { 
+            "cloudCover" => "fc0_cloud06",
+            "function" => \&getwTYPE_PROPLANTA 
+        }
     };
     if (ref $dispatch->{$wtype} eq 'HASH') {
         $extWReading =  $dispatch->{$wtype}{cloudCover};
@@ -472,43 +510,53 @@ sub Twilight_Get {
     return "@$aref[0] $reading => $value";
 }
 
+
+sub Twilight_RenewInternalTimer {
+    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
+    Twilight_RemoveInternalTimer( $modifier, $hash, $callback );
+    Twilight_InternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
+    return optimizeLOT($hash->{NAME});
+}
+
 ################################################################################
+
 sub Twilight_InternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
 
     my $timerName = "$hash->{NAME}_$modifier";
-    my $mHash     = {
-        HASH     => $hash,
-        NAME     => "$hash->{NAME}_$modifier",
-        MODIFIER => $modifier
-    };
-    if ( defined( $hash->{TIMER}{$timerName} ) ) {
-        Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete first" );
-        stacktrace();
-    }
-    else {
-        $hash->{TIMER}{$timerName} = $mHash;
-    }
+    #my $mHash     = {
+    #    HASH     => $hash,
+    #    NAME     => "$hash->{NAME}_$modifier",
+    #    MODIFIER => $modifier
+    #};
+    #if ( defined( $hash->{TIMER}{$timerName} ) ) {
+    #    Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete first" );
+    #    stacktrace();
+    #}
+    #else {
+    #    $hash->{TIMER}{$timerName} = $mHash;
+    #}
 
     Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    addTimer($timerName,$tim, $callback, $mHash, $waitIfInitNotDone );
+    addTimer($hash->{NAME},$tim, $callback, {h=>$hash,n=>$modifier}, $waitIfInitNotDone );
     #InternalTimer( $tim, $callback, $mHash, $waitIfInitNotDone );
-    return $mHash;
+    return; # $mHash;
 }
 
 ################################################################################
 sub Twilight_RemoveInternalTimer {
     my $modifier = shift;
     my $hash = shift // return;
+    my $callback = shift;
 
     my $timerName = "$hash->{NAME}_$modifier";
-    my $myHash    = $hash->{TIMER}{$timerName};
-    if ( defined($myHash) ) {
-        delete $hash->{TIMER}{$timerName};
+    #my $myHash    = $hash->{TIMER}{$timerName};
+    #if ( defined($myHash) ) {
+    #    delete $hash->{TIMER}{$timerName};
         Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        removeTimer($timerName);
+        removeTimer($hash->{NAME},$callback,{h=>$hash,n=>$modifier});
         #RemoveInternalTimer($myHash);
-    }
+    #}
     return;
 }
 
@@ -567,7 +615,8 @@ sub Twilight_calc {
 
 ################################################################################
 sub Twilight_TwilightTimes {
-    my ( $hash, $whitchTimes, $xml ) = @_;
+    my $hash = shift;
+    my $whitchTimes = shift // return;
 
     my $name = $hash->{NAME};
 
@@ -650,11 +699,14 @@ sub Twilight_TwilightTimes {
     for my $ereignis ( sort keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq "weather" && !( $ereignis =~ m/weather/ ) );
 
-        Twilight_RemoveInternalTimer( $ereignis, $hash );  # if(!$jetztIstMitternacht);
+        Twilight_RemoveInternalTimer( $ereignis, $hash, \&Twilight_fireEvent );
+        #Twilight_RemoveInternalTimer( $ereignis, $hash );        # if(!$jetztIstMitternacht);
+        
         if ( defined $hash->{TW}{$ereignis}{TIME} && $hash->{TW}{$ereignis}{TIME} > 0 ) {
-            $myHash = Twilight_InternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
+            #$myHash = 
+            Twilight_InternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
                 \&Twilight_fireEvent, $hash, 0 );
-            map { $myHash->{$_} = $hash->{TW}{$ereignis}{$_} } @keyListe;
+            #map { $myHash->{$_} = $hash->{TW}{$ereignis}{$_} } @keyListe;
         }
     }
 
@@ -663,14 +715,18 @@ sub Twilight_TwilightTimes {
 }
 ################################################################################
 sub Twilight_fireEvent {
-    my $myHash = shift // return;
+    #my $myHash = shift // return;
+    
+    my ($hash, $modifier) = ($_[0]->{h}, $_[0]->{n});
 
-    my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
+    #my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
 
+    my $myHash =$hash->{TW}{$modifier};
     my $name = $hash->{NAME};
 
-    my $event = $myHash->{MODIFIER};
+    #my $event = $myHash->{MODIFIER};
+    my $event = $modifier;
     my $deg   = $myHash->{DEG};
     my $light = $myHash->{LIGHT};
     my $state = $myHash->{STATE};
@@ -714,91 +770,30 @@ sub Twilight_fireEvent {
 sub Twilight_Midnight {
     my $myHash = shift // return;
     my $firstrun = shift // 0;
+    my ($hash, $modifier) = ($myHash->{h}, $myHash->{n});
     
-    my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
+    #my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
-
-    return Twilight_HandleWeatherData( $hash, "Mid", $firstrun, ReadingsNum($hash->{NAME},"cloudCover",0) );
-}
-
-################################################################################
-sub Twilight_WeatherTimerUpdate {
-    my $myHash = shift // return;
-    my $swip = shift // 1;
     
-    my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
-    return if ( !defined($hash) );
-
-    return Twilight_HandleWeatherData( $hash, "weather", $swip );
-}
-
-################################################################################
-
-sub Twilight_HandleWeatherData {
-    my $hash = shift;
-    my $mode = shift;
-    my $swip = shift // return;
-    my $cloudCover = shift // ReadingsNum($hash->{NAME},"cloudCover",0);
-
-    $hash->{SWIP} = $swip;
-
-    Twilight_getWeatherHorizon( $hash, $cloudCover );
-    Twilight_TwilightTimes( $hash, $mode, $cloudCover );
-    return Twilight_StandardTimerSet( $hash );
-
-}
-
-################################################################################
-sub Twilight_RepeatTimerSet {
-    my $hash = shift;
-    my $mode = shift // return;
-
-    my $midnight = time() + 60;
-
-    Twilight_RemoveInternalTimer( "Midnight", $hash );
-    return Twilight_InternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash,
-        0 )
-      if $mode eq "Mid";
-
-    return Twilight_InternalTimer( "Midnight", $midnight,
-        \&Twilight_WeatherTimerUpdate, $hash, 0 );
-}
-
-################################################################################
-sub Twilight_StandardTimerSet {
-    my $hash = shift // return;
     my $midnight = time() - Twilight_midnight_seconds( time() ) + 24 * 3600 + 1;
 
-    Twilight_RemoveInternalTimer( "Midnight", $hash );
-    Twilight_InternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
-    return; # Twilight_WeatherTimerSet($hash);
-}
-
-################################################################################
-sub Twilight_WeatherTimerSet {
-    my $hash = shift // return;
-    my $now = time();
-
-    Twilight_RemoveInternalTimer( "weather", $hash );
-    for my $key ( "sr_weather", "ss_weather" ) {
-        my $tim = $hash->{TW}{$key}{TIME};
-        if ( $tim - 60 * 60 > $now + 60 ) {
-            Twilight_InternalTimer( "weather", $tim - 60 * 60,
-                \&Twilight_WeatherTimerUpdate, $hash, 0 );
-            last;
-        }
-    }
+    #Twilight_RemoveInternalTimer( "Midnight", $hash );
+    Twilight_RenewInternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
     
+    Twilight_TwilightTimes( $hash, "mid");
+    
+    return Twilight_HandleWeatherData( $hash, 0) if defined $hash->{helper}{extWeather}{Device};
     return;
 }
+
+
 
 ################################################################################
 sub Twilight_sunposTimerSet {
     my $hash = shift // return;
 
-    Twilight_RemoveInternalTimer( "sunpos", $hash );
-    return Twilight_InternalTimer( "sunpos", time() + $hash->{SUNPOS_OFFSET},
-        \&Twilight_sunpos, $hash, 0 );
+    #Twilight_RemoveInternalTimer( "sunpos", $hash );
+    return Twilight_RenewInternalTimer( "sunpos", time() + $hash->{SUNPOS_OFFSET}, \&Twilight_sunpos, $hash, 0 );
 }
 
 ################################################################################
@@ -822,9 +817,9 @@ sub Twilight_getWeatherHorizon {
 
 ################################################################################
 sub Twilight_sunpos {
-    my $myHash = shift // return;
-    
-    my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
+    #my $myHash = shift // return;
+    my ($hash, $modifier) = ($_[0]->{h}, $_[0]->{n});
+    #my $hash = Twilight_GetHashIndirekt( $myHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
 
     my $hashName = $hash->{NAME};
