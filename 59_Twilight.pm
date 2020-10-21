@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm midnight timer reviewed 2020-10-20 Beta-User $
+# $Id: 59_Twilight.pm midnight timer reviewed 2020-10-21 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -84,7 +84,6 @@ BEGIN {
           perlSyntaxCheck
           EvalSpecials
           AnalyzePerlCommand
-          stacktrace
           )
     );
 }
@@ -160,6 +159,10 @@ sub Twilight_Define {
 
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
 
+    for my $key ( keys %{ $hash->{TW} } ) {
+        Twilight_RemoveInternalTimer( $key, $hash, \&Twilight_fireEvent );
+    }
+    
     Log3( $hash, 1, "[$hash->{NAME}] Note: Twilight formerly used weather info from yahoo, but source is offline. Using a guessed Weather type device instead if available!"
     ) if looks_like_number($weather);
     
@@ -387,7 +390,13 @@ sub Twilight_Firstrun {
         readingsSingleUpdate ( $hash, "cloudCover", $extWeatherVal, 0 ) if $extWeatherVal;
     }
     Twilight_getWeatherHorizon( $hash, $extWeatherVal );
-    Twilight_TwilightTimes( $hash, "weather", $extWeatherVal );
+    
+    #next 3: Materials only
+    #Twilight_TwilightTimes( $hash, "mid") if !defined $hash->{helper}{extWeather}{Device};
+    #Twilight_TwilightTimes( $hash, "weather"); 
+    #return Twilight_HandleWeatherData( $hash, 0);
+    
+    #Twilight_TwilightTimes( $hash, "mid" );
     
     #my $mHash = { HASH => $hash };
     #Twilight_sunpos($mHash) if !$attrVal;
@@ -704,7 +713,7 @@ sub Twilight_TwilightTimes {
         
         if ( defined $hash->{TW}{$ereignis}{TIME} && $hash->{TW}{$ereignis}{TIME} > 0 ) {
             #$myHash = 
-            Twilight_InternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
+            Twilight_RenewInternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
                 \&Twilight_fireEvent, $hash, 0 );
             #map { $myHash->{$_} = $hash->{TW}{$ereignis}{$_} } @keyListe;
         }
@@ -780,9 +789,12 @@ sub Twilight_Midnight {
     #Twilight_RemoveInternalTimer( "Midnight", $hash );
     Twilight_RenewInternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
     
-    Twilight_TwilightTimes( $hash, "mid");
-    
-    return Twilight_HandleWeatherData( $hash, 0) if defined $hash->{helper}{extWeather}{Device};
+    if (!defined $hash->{helper}{extWeather}{Device} || $firstrun) {
+        Twilight_TwilightTimes( $hash, "mid");
+    } else {
+        Twilight_TwilightTimes( $hash, "weather") if !$firstrun; 
+        return Twilight_HandleWeatherData( $hash, 0);
+    }
     return;
 }
 
