@@ -437,14 +437,14 @@ sub Twilight_init_ExtWeather_usage {
         return "External weather device seems not to exist" if (!defined $defs{$extWeather} && $init_done);
         
         ### This is the place to allow external dispatch functions...
-        my %specials = (
-            '$WEATHERDEV'     => $extWeather,
-            '$WEATHERREADING' => $extWReading
-        );
-
-        my $err = perlSyntaxCheck( $parts[1], %specials );
-        return $err if ( $err );
-        
+        if ($parts[1]) {
+            my %specials = (
+                '$WEATHERDEV'     => $extWeather,
+                '$WEATHERREADING' => $extWReading
+            );
+            my $err = perlSyntaxCheck( $parts[1], %specials );
+            return $err if ( $err );
+        }
     } else {
         #conversion code, try to guess the ext. weather device to replace yahoo
         my @devices=devspec2array("TYPE=Weather"); 
