@@ -765,14 +765,13 @@ sub Twilight_Midnight {
     
     if (!defined $hash->{helper}{extWeather}{Device} || $firstrun) {
         Twilight_TwilightTimes( $hash, "mid", $firstrun);
-        return Twilight_sunposTimerSet($hash);
+        Twilight_sunposTimerSet($hash);
     } else {
         Twilight_HandleWeatherData( $hash, 0);
-        return Twilight_TwilightTimes( $hash, "mid", $firstrun); 
+        Twilight_TwilightTimes( $hash, "mid", $firstrun); 
     }
     my $now = time();
     my $midnight = $now - secondsSinceMidnight( $now ) + DAYSECONDS + 1;
-
     return resetRegisteredInternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
 
 }
