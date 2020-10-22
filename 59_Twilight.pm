@@ -303,12 +303,12 @@ sub Twilight_HandleWeatherData {
     #set potential dates in the past to now
     my $sr_passed = 0;
     my $ss_passed = 0;
-    if ($inNotify) {
+    if ($inNotify) { 
         $sr = max( $sr, $now - 0.01 );
         $ss = max( $ss, $now - 0.01 );
         $sr_passed = $hash->{TW}{sr_weather}{TIME} > $sr ? 1 : 0;
         $ss_passed = $hash->{TW}{ss_weather}{TIME} > $ss ? 1 : 0;
-    }
+    } 
 
     #renew dates and timers?, fire events?
     my $nextevent = ReadingsVal($name,"nextEvent","none");            
@@ -323,8 +323,8 @@ sub Twilight_HandleWeatherData {
         #deleteSingleRegisteredInternalTimer( "sr_weather", $hash );
         $hash->{TW}{sr_weather}{TIME} = $sr;
         resetRegisteredInternalTimer( "sr_weather", $sr, \&Twilight_fireEvent, $hash, 0 );
-        readingsBulkUpdate( $hash, "sr_weather", $nextEventTime );
-            readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "sr_weather";
+        readingsBulkUpdate( $hash, "sr_weather", $nextEventTime ) if $inNotify;
+        readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "sr_weather";
     } elsif ( $sr_passed ) {
         #deleteSingleRegisteredInternalTimer( "sr_weather", $hash );
         deleteSingleRegisteredInternalTimer( "sr_weather", $hash, \&Twilight_fireEvent);
@@ -346,7 +346,7 @@ sub Twilight_HandleWeatherData {
         $hash->{TW}{ss_weather}{TIME} = $ss;
         #$hash->{TW}{ss_weather}{SWIP} = 1;
         resetRegisteredInternalTimer( "ss_weather", $ss, \&Twilight_fireEvent, $hash, 0 );
-        readingsBulkUpdate( $hash, "ss_weather", $nextEventTime );
+        readingsBulkUpdate( $hash, "ss_weather", $nextEventTime ) if $inNotify;
         readingsBulkUpdate( $hash, "nextEventTime", $nextEventTime ) if $nextevent eq "ss_weather" && !$ss_passed;
     } elsif ( $ss_passed ) {
         deleteSingleRegisteredInternalTimer( "ss_weather", $hash, \&Twilight_fireEvent );
@@ -763,17 +763,18 @@ sub Twilight_Midnight {
     #my $hash = Twilight_GetHashIndirekt( $fnHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
     
-    my $midnight = time() - secondsSinceMidnight( time() ) + 24 * 3600 + 1;
-
-    resetRegisteredInternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
-    
     if (!defined $hash->{helper}{extWeather}{Device} || $firstrun) {
         Twilight_TwilightTimes( $hash, "mid", $firstrun);
+        return Twilight_sunposTimerSet($hash);
     } else {
-        Twilight_TwilightTimes( $hash, "weather", $firstrun); 
-        return Twilight_HandleWeatherData( $hash, 0);
+        Twilight_HandleWeatherData( $hash, 0);
+        return Twilight_TwilightTimes( $hash, "mid", $firstrun); 
     }
-    return Twilight_sunposTimerSet($hash);
+    my $now = time();
+    my $midnight = $now - secondsSinceMidnight( $now ) + DAYSECONDS + 1;
+
+    return resetRegisteredInternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
+
 }
 
 
