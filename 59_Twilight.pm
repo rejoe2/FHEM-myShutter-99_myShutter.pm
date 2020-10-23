@@ -432,7 +432,7 @@ sub Twilight_init_ExtWeather_usage {
         return "External weather device seems not to exist" if (!defined $defs{$extWeather} && $init_done);
         
         ### This is the place to allow external dispatch functions...
-        if ($parts[1]) {
+        if ($parts[1] && 0) { #&& 0 to disable this part atm...
             my %specials = (
                 '$WEATHERDEV'     => $extWeather,
                 '$WEATHERREADING' => $extWReading
@@ -1019,14 +1019,16 @@ sub getwTYPE_Weather {
     my $extDev  = $hash->{helper}{extWeather}{Device};
     my ($hour, $sr_hour, $ss_hour) = getTwilightHours($hash); 
     
-    $ret[0] = ReadingsNum($extDev,"cloudCover",0);
+    my $rAge = int(ReadingsAge("extDev","cloudCover",0)/3600);
+    
+    $ret[0] = $rAge < 24 ? ReadingsNum($extDev,"cloudCover",0) : 50;
     Log3( $hash, 5, "[$hash->{NAME}] function is called, cc is $ret[0], hours sr: $sr_hour, ss: $ss_hour" );
     
-    my $hfc_sr = max( 0 , $sr_hour - $hour ); #remark: needs some additionals logic for midnight updates! (ReadingsAge()?)
-    my $hfc_ss = max( 0 , $ss_hour - $hour );
+    my $hfc_sr = max( 0 , $sr_hour - $hour ) + $rAge; #remark: needs some additionals logic for midnight updates! (ReadingsAge()?)
+    my $hfc_ss = max( 0 , $ss_hour - $hour ) + $rAge;
     
-    $ret[1] = $hfc_sr ? ReadingsNum($extDev,"hfc${hfc_sr}_cloudCover",0) : $ret[0];
-    $ret[2] = $hfc_ss ? ReadingsNum($extDev,"hfc${hfc_ss}_cloudCover",0) : $ret[0];
+    $ret[1] = $hfc_sr && $rAge < 24 ? ReadingsNum($extDev,"hfc${hfc_sr}_cloudCover",0) : $ret[0];
+    $ret[2] = $hfc_ss && $rAge < 24 ? ReadingsNum($extDev,"hfc${hfc_ss}_cloudCover",0) : $ret[0];
 
     return @ret;
 }
