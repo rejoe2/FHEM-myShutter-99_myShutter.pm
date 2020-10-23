@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm midnight timer reviewed 2020-10-22 Beta-User $
+# $Id: 59_Twilight.pm midnight timer reviewed 2020-10-23 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -71,6 +71,7 @@ BEGIN {
           AttrVal
           ReadingsVal
           ReadingsNum
+          ReadingsAge
           InternalVal
           IsDisabled
           Log3
