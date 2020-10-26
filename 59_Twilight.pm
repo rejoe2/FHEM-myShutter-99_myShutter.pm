@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm midnight timer reviewed 2020-10-23 Beta-User $
+# $Id: 59_Twilight.pm 2020-10-26 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -168,7 +168,7 @@ sub Twilight_Define {
     
     my $useTimer = looks_like_number($weather) || ( $DEFmayChange && $latitude  == AttrVal( 'global', 'latitude', 50.112 ) && $longitude == AttrVal( 'global', 'longitude', 8.686 ) ) ? 1 : 0;
     
-    $hash->{DEFINE} = $weather ? $weather : 1;
+    $hash->{DEFINE} = $weather ? $weather : "none";
     InternalTimer(time(), \&Twilight_Change_DEF,$hash,0) if $useTimer;
         
     return InternalTimer( time()+$useTimer, \&Twilight_Firstrun,$hash,0) if !$init_done || $useTimer;
@@ -381,7 +381,7 @@ sub Twilight_Firstrun {
     
     my $extWeatherVal = 0;
     
-    if ($attrVal) {
+    if ($attrVal && $attrVal ne "none") {
         Twilight_init_ExtWeather_usage( $hash, $attrVal );
          $extWeatherVal = ReadingsNum( $name, "cloudCover", ReadingsNum( $hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading}, 0 ) );
         readingsSingleUpdate ( $hash, "cloudCover", $extWeatherVal, 0 ) if $extWeatherVal;
@@ -394,8 +394,9 @@ sub Twilight_Firstrun {
     #return Twilight_HandleWeatherData( $hash, 0);
     
     my $fnHash = { HASH => $hash };
-    Twilight_sunpos($fnHash) if !$attrVal;
+    Twilight_sunpos($fnHash) if !$attrVal || $attrVal eq "none";
     Twilight_Midnight($fnHash, 1);
+
     delete $hash->{DEFINE};
 
     return;
@@ -616,7 +617,7 @@ sub Twilight_TwilightTimes {
 
     my $name = $hash->{NAME};
 
-    my $swip    = !$firstrun;
+    my $swip    = $firstrun;
 
     my $lat  = $hash->{helper}{'.LATITUDE'};
     my $long = $hash->{helper}{'.LONGITUDE'};
@@ -644,8 +645,8 @@ sub Twilight_TwilightTimes {
         $hash->{TW}{$ss}{LIGHT} = $idx;
         $hash->{TW}{$sr}{STATE} = $idx + 1;
         $hash->{TW}{$ss}{STATE} = 12 - $idx;
-        #$hash->{TW}{$sr}{SWIP}  = $swip;
-        #$hash->{TW}{$ss}{SWIP}  = $swip;
+        $hash->{TW}{$sr}{SWIP}  = $swip;
+        $hash->{TW}{$ss}{SWIP}  = $swip;
 
         ( $hash->{TW}{$sr}{TIME}, $hash->{TW}{$ss}{TIME} ) =
           Twilight_calc( $hash, $deg, $idx );
@@ -682,19 +683,20 @@ sub Twilight_TwilightTimes {
     my $now              = time();
 
     #my @keyListe = qw "DEG LIGHT STATE SWIP TIME NAMENEXT";
-    my @keyListe = qw "DEG LIGHT STATE TIME NAMENEXT";
+    #my @keyListe = qw "DEG LIGHT STATE TIME NAMENEXT";
     for my $ereignis ( sort keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq "weather" && !( $ereignis =~ m/weather/ ) );
 
         deleteSingleRegisteredInternalTimer( $ereignis, $hash, \&Twilight_fireEvent );
         
-        if ( defined $hash->{TW}{$ereignis}{TIME} && $hash->{TW}{$ereignis}{TIME} > $now ) { # had been > 0
+        if ( defined $hash->{TW}{$ereignis}{TIME} && ($hash->{TW}{$ereignis}{TIME} > $now || $firstrun) ) { # had been > 0
             #my $fnHash = 
             setRegisteredInternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
                 \&Twilight_fireEvent, $hash, 0 );
             #map { $fnHash->{$_} = $hash->{TW}{$ereignis}{$_} } @keyListe;
         }
     }
+    
 
 # ------------------------------------------------------------------------------
     return 1;
@@ -717,7 +719,7 @@ sub Twilight_fireEvent {
     my $deg   = $myHash->{DEG};
     my $light = $myHash->{LIGHT};
     my $state = $myHash->{STATE};
-    #my $swip  = $myHash->{SWIP};
+    my $swip  = $myHash->{SWIP};
 
     my $eventTime = $myHash->{TIME};
     my $nextEvent = $myHash->{NAMENEXT};
@@ -731,8 +733,8 @@ sub Twilight_fireEvent {
       : "undefined";
 
     my $doTrigger = !( defined( $hash->{LOCAL} ) )
-      #&& ( abs($delta) < 6 || $swip && $state gt $oldState );
-      && ( abs($delta) < 6 || $state gt $oldState );
+      && ( abs($delta) < 6 || $swip && $state gt $oldState );
+      #&& ( abs($delta) < 6 || $state gt $oldState );
 
     Log3(
         $hash, 4,
@@ -764,15 +766,20 @@ sub Twilight_Midnight {
     #my $hash = Twilight_GetHashIndirekt( $fnHash, ( caller(0) )[3] );
     return if ( !defined($hash) );
     
-    if (!defined $hash->{helper}{extWeather}{Device} || $firstrun) {
+    if (!defined $hash->{helper}{extWeather}{Device}) { # || $firstrun) {
         Twilight_TwilightTimes( $hash, "mid", $firstrun);
-        Twilight_sunposTimerSet($hash);
+        #Twilight_sunposTimerSet($hash);
+        Twilight_sunpos({HASH => $hash});
     } else {
         Twilight_HandleWeatherData( $hash, 0);
         Twilight_TwilightTimes( $hash, "mid", $firstrun); 
     }
     my $now = time();
     my $midnight = $now - secondsSinceMidnight( $now ) + DAYSECONDS + 1;
+    my $daylightsavingdelta = (localtime ( time - 2 * HOURSECONDS ) )[2] - ( localtime( time + 22 * HOURSECONDS ) )[2]; 
+    $midnight -= 19 * HOURSECONDS if $daylightsavingdelta == 1 && (localtime)[2] < 2;
+    $midnight -= 20 * HOURSECONDS if $daylightsavingdelta == -1 && (localtime)[2] < 3;
+    
     return resetRegisteredInternalTimer( "Midnight", $midnight, \&Twilight_Midnight, $hash, 0 );
 
 }
@@ -942,7 +949,7 @@ sub Twilight_sunpos {
               int( ( $dElevation - $hash->{WEATHER_HORIZON} + 12.0 ) / 18.0 *
                   1000 ) / 10;
             Log3( $hash, 3,
-                    "[$hashName] No useable cloudCover value available: ${$extWeatherHorizont}, taking existant weather horizon." );
+                    "[$hashName] No useable cloudCover value available: ${extWeatherHorizont}, taking existant weather horizon." );
         }
     }
 
