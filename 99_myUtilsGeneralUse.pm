@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtilsGeneralUse.pm 2020-10-13 Beta-User $
+# $Id: myUtilsGeneralUse.pm 2020-10-26 Beta-User $
 #
 
 package main;
@@ -29,8 +29,8 @@ sub
 myHHMMSS2sec
 {
   my ($h,$m,$s) = split(":", shift);
-  $m = 0 if !$m;
-  $s = 0 if !$s;
+  $m = 0 if(!$m);
+  $s = 0 if(!$s);
   my $seconds = HOURSECONDS*$h+MINUTESECONDS*$m+$s;
   return $seconds;
 }
@@ -133,27 +133,40 @@ sub myCalendar2Holiday {
   my $field      = shift // "summary";
   my $limit      = shift // 10;
   my $yearEndRe  = shift;
-  
+ 
   my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
-  my $getstring = $calname . ' events format:custom="4 $T1 $T2 $S" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
+  my $getstring = $calname . ' events format:custom="4 $T1 $T2 $S $D" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
   my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
-  
+ 
   my @holidays;
+  my @singledays;
   for my $holiday (@holidaysraw) {
-    if ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
+    my @tokens = split (" ",$holiday);
+    #my @elements = split( " ", $holiday ); 
+    my $duration = pop @tokens;
+    
+    my $severalDays = $duration =~ m,[0-9]+h, ? 0 : 1;
+    
+    $holiday = join(' ', @tokens);
+    if (!$severalDays) {
+      $tokens[0] = 1;
+      splice @tokens, 2, 1;
+      $holiday = join(' ', @tokens);
+      push (@singledays, $holiday);
+    } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
       push (@holidays, $holiday);
-    } else { my @tokens = split (" ",$holiday);
-      my $lines = "4 $tokens[1] 12-31 $tokens[3]";
-      push (@holidays,$lines) if $month > 9;
-      $lines = "4 01-01 $tokens[2] $tokens[3]";
-      unshift (@holidays,$lines);
+    } else { 
+      $holiday = "4 $tokens[1] 12-31 $tokens[3]";
+      push (@holidays,$holiday) if $month > 9;
+      $holiday = "4 01-01 $tokens[2] $tokens[3]";
+      unshift (@holidays,$holiday);
     }
-  } 
+  }
+  push @holidays, @singledays;
   unshift (@holidays, "# get $getstring");
   my $today = strftime "%d.%m.%y, %H:%M", localtime(time);;\
   unshift (@holidays, "# Created by myCalendar2Holiday on $today");
   FileWrite("./FHEM/${targetname}.holiday",@holidays);
 }
-
 
 1;
