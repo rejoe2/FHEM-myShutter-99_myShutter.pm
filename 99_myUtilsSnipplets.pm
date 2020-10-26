@@ -11,3 +11,20 @@ sub incrementHerdLicht() {
     fhem("sleep 0.5;{incrementHerdLicht()}");
   }
 }
+
+#https://forum.fhem.de/index.php/topic,29438.msg898855.html#msg898855
+sub randomtime_with_realtime($;$)
+{
+  my ($MeH,$MeM,$MeS)=split(':',shift(@_));
+  my $MeB=shift(@_);
+  my $SGN = ($MeB<=>0);
+ 
+  my $T   = (int($MeH*3600 + $MeM*60 + $MeS + ($MeB*60+$SGN)*rand()))%86400;
+  # - rand erzeugt eine floating point Zahl, ist aber bei negativen Zahlen nicht eindeutig definiert,
+  #   deshalb verwenden wir lieber -x*rand()
+  # - int rundet in Richtung 0
+  # - modulo sorgt auch bei neg. Zahlen dafür, dass das Ergebnis [0..86400] ist
+
+  return sprintf("%2.2d:%2.2d:%2.2d",$T/3600,($T/60)%60,$T%60);
+} 
+1;
