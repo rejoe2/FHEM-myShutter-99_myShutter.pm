@@ -27,4 +27,25 @@ sub randomtime_with_realtime($;$)
 
   return sprintf("%2.2d:%2.2d:%2.2d",$T/3600,($T/60)%60,$T%60);
 } 
+
+
+https://forum.fhem.de/index.php/topic,76659.msg685644.html#msg685644
+sub isInTime($) {
+
+    my $dfi = shift;
+
+    $dfi =~ s/{([^\x7d]*)}/$cmdFromAnalyze=$1; eval $1/ge; # Forum #69787
+    my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) = localtime;
+    my $dhms = sprintf("%s\@%02d:%02d:%02d", $wday, $hour, $min, $sec);
+    foreach my $ft (split(" ", $dfi)) {
+        my ($from, $to) = split("-", $ft);
+        if(defined($from) && defined($to)) {
+            $from = "$wday\@$from" if(index($from,"@") < 0);
+            $to   = "$wday\@$to"   if(index($to,  "@") < 0);
+            return 1 if($from le $dhms && $dhms le $to);
+        }
+    }
+   
+    return 0;
+}
 1;
