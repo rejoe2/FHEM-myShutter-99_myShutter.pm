@@ -48,4 +48,32 @@ sub isInTime($) {
    
     return 0;
 }
+
+# https://forum.fhem.de/index.php/topic,33579.msg260382.html#msg260382
+sub UntoggleDimmer($;$)
+{
+ my ($sender, $actor) = @_;
+ my $val = ReadingsVal("$actor", "pct", 0);
+ if (Value($sender) eq "toggle") {
+                    $val = (Value($actor) eq "off")
+                        ? 50 :
+                          0}
+ elsif ($val == 0) {$val = 100}
+ else              {$val = ((int(($val-1)/10)+10)%10)*10} #Val = (int((val-1)/10))*10
+ fhem ("set $actor pct $val");
+ return;
+}
+
+# https://forum.fhem.de/index.php/topic,56784.msg482901.html#msg482901
+# Du baust Dir in deiner "99_myUtils" eine Funktion welche den übergebenen Wert für pct anhand eines logarithmischen Verlaufes zurückgibt. Dabei gilt: 0 gibt 0 zurück und 100 gibt 100 zurück. Der Rest liegt nicht auf einer Geraden, sondern auf dem logarithmischen Verlauf. Diesen, von der Funktion zurückgebenen, Wert übergibts Du als pct an den Dimmer.
+
+# set <name> pct {(pct2log(50)}
+
+# SVG_log10($)
+sub my_log10($) {
+  my ($n) = @_;
+  return 0 if( $n <= 0 );
+  return log(1+$n)/log(10);
+}
+
 1;
