@@ -1,5 +1,5 @@
 ###########################################
-# $Id: zwave.template 22934 2020-10-07 06:35:32Z Beta-User $
+# $Id: zwave.template 22978 2020-10-17 05:12:58Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -76,7 +76,7 @@ set DEVICE configByte 50 0 ## configScenesAssociationsActivation AssociationsAct
 option:{ CALLSPEECHRECOGN }  
 set DEVICE attrTemplate speechcontrol_type_blind
 #closing section
-option:{ 1 }  
+option:global
 get DEVICE configAll
 get DEVICE associationAll
 setreading DEVICE attrTemplateVersion FGRM222_Roller_Mode_20201007
@@ -110,7 +110,7 @@ set DEVICE configByte 50 0 ## configScenesAssociationsActivation AssociationsAct
 option:{ CALLSPEECHRECOGN }  
 set DEVICE attrTemplate speechcontrol_type_blind
 #closing section
-option:{ 1 }  
+option:global 
 get DEVICE configAll
 get DEVICE associationAll
 setreading DEVICE attrTemplateVersion FGRM222_Ventian_Blind_Mode_20201007
@@ -144,7 +144,7 @@ attr DEVICE userReadings dim:power..0.0.W {my $pos = ReadingsVal($name,"state",0
 option:{ CALLSPEECHRECOGN }  
 set DEVICE attrTemplate speechcontrol_type_blind
 #closing section
-option:{ 1 }  
+option:global
 get DEVICE configAll
 get DEVICE associationAll
 setreading DEVICE attrTemplateVersion FGRM222_Choice_demo_20201002
@@ -161,6 +161,7 @@ par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attribu
 par:MAINCHANNEL;Main channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",0) }
 par:CHANNEL01;First channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",1) }
 par:CHANNEL02;Second channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",2) }
+par:IO_DEV_ID;Decimal value of the IO node ID - do not proceed if it can't be identified!;{ my $id = hex(InternalVal(AttrVal("DEVICE","IODev","unknown"),"nodeIdHex",0));  $id ? $id : undef }
 par:ICON;ICON as set, defaults to fts_shutter_updown;{ AttrVal("DEVICE","icon","fts_shutter_updown") }
 attr MAINCHANNEL,CHANNEL01,CHANNEL02 icon ICON
 attr CHANNEL01 devStateIcon { FHEM::attrT_ZWave_Utils::devStateIcon_shutter($name,"FGR223") }
@@ -168,10 +169,10 @@ attr CHANNEL01 eventMap { usr=>{'dim.100'=>'dim 99' } }
 attr CHANNEL01 webCmd dim
 attr CHANNEL01 widgetOverride dim:colorpicker,BRI,0,1,99
 attr CHANNEL01 userReadings dim:(dim|reportedState).* {$1 =~ /reportedState/ ? ReadingsNum($name,"reportedState",0):ReadingsNum($name,"state",0)}
-set MAINCHANNEL associationDel 1 1  ## just like for FGS-223 (module-internal setting)
-set MAINCHANNEL mcaAdd 1 0 1 0      ## needs to be veryfied!
-set MAINCHANNEL mcaAdd 2 0 1 1
-set MAINCHANNEL mcaAdd 3 0 1 2
+set MAINCHANNEL associationDel 1 IO_DEV_ID  ## just like for FGS-223 (module-internal setting)
+set MAINCHANNEL mcaAdd 1 0 IO_DEV_ID 0      ## needs to be veryfied!
+set MAINCHANNEL mcaAdd 2 0 IO_DEV_ID 1
+set MAINCHANNEL mcaAdd 3 0 IO_DEV_ID 2
 set MAINCHANNEL configByte 65 10 ## configEnergyReportsOnChange 10
 option:{ RADIO_SCENES_ACTIVATION }
 set MAINCHANNEL configByte 40 15 ## configS1SwitchScenesSent 15 (=1+2+4+8=all keypress types)
@@ -179,14 +180,14 @@ set MAINCHANNEL configByte 41 15 ## configS2SwitchScenesSent 15
 option:{ RADIO_ASSOCIATIONS_ACTIVATION }
 set MAINCHANNEL configByte 40 0  ## configS1SwitchScenesSent 0
 set MAINCHANNEL configByte 41 0  ## configS2SwitchScenesSent 0
-option:{ 1 }
+option:global
 set MAINCHANNEL configByte 20 SWITCHTYPE
 set MAINCHANNEL configByte 151 1 ## configOperatingMode RollerBlind
 set MAINCHANNEL configByte 150 2 ## configForceCalibration ForceDeviceCalibration
 option:{ CALLSPEECHRECOGN }  
 set CHANNEL01 attrTemplate speechcontrol_type_blind
 #closing section
-option:{ 1 }
+option:global
 get MAINCHANNEL configAll
 get MAINCHANNEL associationAll
 { fhem "trigger $FW_wname JS:location.href='$FW_ME?room=%23devspec%3dMAINCHANNEL,CHANNEL01,CHANNEL02'" if($cl && $cl->{TYPE} eq "FHEMWEB") }
@@ -204,6 +205,7 @@ par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attribu
 par:MAINCHANNEL;Main channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",0) }
 par:CHANNEL01;First channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",1) }
 par:CHANNEL02;Second channel of the device - do not proceed if it can't be identified!;{ FHEM::attrT_ZWave_Utils::identify_channel_devices("DEVICE",2) }
+par:IO_DEV_ID;Decimal value of the IO node ID - do not proceed if it can't be identified!;{ my $id = hex(InternalVal(AttrVal("DEVICE","IODev","unknown"),"nodeIdHex",0));  $id ? $id : undef }
 par:ICON;ICON as set, defaults to fts_shutter_updown;{ AttrVal("DEVICE","icon","fts_shutter_updown") }
 attr MAINCHANNEL,CHANNEL01,CHANNEL02 icon ICON
 attr CHANNEL01 devStateIcon { FHEM::attrT_ZWave_Utils::devStateIcon_shutter($name,"FGR223","venetian") }
@@ -211,10 +213,10 @@ attr CHANNEL01 eventMap { usr=>{'dim.100'=>'dim 99' } }
 attr CHANNEL01 webCmd dim
 attr CHANNEL01 widgetOverride dim:colorpicker,BRI,0,1,99
 attr CHANNEL01 userReadings dim:(dim|reportedState).* {$1 =~ /reportedState/ ? ReadingsNum($name,"reportedState",0):ReadingsNum($name,"state",0)}
-set MAINCHANNEL associationDel 1 1  ## just like for FGS-223 (module-internal setting)
-set MAINCHANNEL mcaAdd 1 0 1 0      ## needs to be veryfied!
-set MAINCHANNEL mcaAdd 2 0 1 1
-set MAINCHANNEL mcaAdd 3 0 1 2
+set MAINCHANNEL associationDel 1 IO_DEV_ID  ## just like for FGS-223 (module-internal setting)
+set MAINCHANNEL mcaAdd 1 0 IO_DEV_ID 0      ## needs to be veryfied!
+set MAINCHANNEL mcaAdd 2 0 IO_DEV_ID 1
+set MAINCHANNEL mcaAdd 3 0 IO_DEV_ID 2
 set MAINCHANNEL configEnergyReportsOnChange 10
 option:{ RADIO_SCENES_ACTIVATION }
 set MAINCHANNEL configByte 40 15 ## configS1SwitchScenesSent 15 (=1+2+4+8=all keypress types)
@@ -222,14 +224,14 @@ set MAINCHANNEL configByte 41 15 ## configS2SwitchScenesSent 15
 option:{ RADIO_ASSOCIATIONS_ACTIVATION }
 set MAINCHANNEL configByte 40 0  ## configS1SwitchScenesSent 0
 set MAINCHANNEL configByte 41 0  ## configS2SwitchScenesSent 0
-option:{ 1 }
+option:global
 set MAINCHANNEL configByte 20 SWITCHTYPE
 set MAINCHANNEL configByte 151 2 ## configOperatingMode VenetianBlind
 set MAINCHANNEL configByte 150 2 ## configForceCalibration ForceDeviceCalibration
 option:{ CALLSPEECHRECOGN }  
 set CHANNEL01 attrTemplate speechcontrol_type_blind
 #closing section
-option:{ 1 }  
+option:global
 get MAINCHANNEL configAll
 get MAINCHANNEL associationAll
 { fhem "trigger $FW_wname JS:location.href='$FW_ME?room=%23devspec%3dMAINCHANNEL,CHANNEL01,CHANNEL02'" if($cl && $cl->{TYPE} eq "FHEMWEB") }
@@ -261,7 +263,7 @@ set MAINCHANNEL configByte   3 1       ## configSelectiveReporting Enable
 attr MAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03 stateFormat energy_kWh
 attr MAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03 userReadings energy_kWh:energy:.* monotonic {ReadingsNum("$name","energy",0)}
 #closing section
-option:{ 1 }  
+option:global
 get MAINCHANNEL configAll
 get MAINCHANNEL associationAll
 { fhem "trigger $FW_wname JS:location.href='$FW_ME?room=%23devspec%3dMAINCHANNEL,CHANNEL01,CHANNEL02,CHANNEL03'" if($cl && $cl->{TYPE} eq "FHEMWEB") }
@@ -280,7 +282,7 @@ option:{ RADIO_REPORT_UV}
 set DEVICE configByte 101 241  ## configGroup1Reports 241 (1+16+32+64+128)
 option:{ RADIO_NO_UV_REPORT }
 set DEVICE configByte 101 225  ## configGroup1Reports 225 (1+32+64+128)
-option:{ 1 }  
+option:global
 get DEVICE config 111          ## configGroup1Interval
 get DEVICE config  40          ## configReportOnlyOnThresholds
 get DEVICE config 101          ## configGroup1Reports
@@ -300,7 +302,48 @@ set DEVICE configByte 101 240 ## configGroup1Reports 240 (16+32+64+128)
 option:{ RADIO_NO_UV_REPORT }
 set DEVICE configByte 101 224 ## configGroup1Reports 224 (32+64+128)
 #closing section
-option:{ 1 }  
+option:global
 get DEVICE configAll
 setreading DEVICE attrTemplateVersion ZW100_Multisensor_USB_20201007
 
+
+name:----Eurotronic-devices-section--------
+filter:TYPE=ZWave
+order:04EUROTRONIC00000
+desc:Templates for Eurotronics devices. <br>Note: Manufacturer does not provide free updates; functionality is less than advertised!
+
+
+# Eurotronic Spirit ZWave version
+name:Eurotronic_Spirit
+desc: First version, see <a href="https://forum.fhem.de/index.php/topic,112955.0.html">Forum Thread</a> for details
+order:04EUROTRONIC00001
+filter:TYPE=ZWave
+par:RADIO_NO_EXTERNAL_TEMP;Use internal temperature sensor for regulation;{ undef }
+par:RADIO_ZWAVE_EXTERNAL_TEMP;Use an external Zwave temperature sensor. Association has to be set seperately!;{ undef }
+par:RADIO_NONZWAVE_EXTERNAL_TEMP;Use an external (non-Zwave) temperature sensor. Make sure, sensor data is regularly updated!;{ undef }
+par:RADIO_DIRECT_VALVE_CONTROL;Change mode to direct valve control (needs additional logic, e.g. provided by PID20 FHEM module.;{ undef }
+par:ICON;ICON as set, defaults to hm-cc-rt-dn;{ AttrVal("DEVICE","icon","hm-cc-rt-dn") }
+attr DEVICE icon ICON
+set DEVICE configByte  4 1  ## should set "send battery reports once a day"
+set DEVICE configByte  5 1  ## should set "Temperature Report Threshold" to 1 (lowest value)
+option:{ RADIO_NONZWAVE_EXTERNAL_TEMP + RADIO_ZWAVE_EXTERNAL_TEMP + RADIO_NO_EXTERNAL_TEMP }
+set DEVICE configByte  6 1  ## should set valve reports to 1% delta - might not lead to any report...
+option:{ RADIO_DIRECT_VALVE_CONTROL }
+set DEVICE configByte 64 31 ## should set "manufacturer specific"
+option:{ RADIO_NO_EXTERNAL_TEMP }
+set DEVICE configByte  8 0  ## note: no offset!
+#deleteattr DEVICE setList
+option:{ RADIO_ZWAVE_EXTERNAL_TEMP }
+set DEVICE configByte  8 128  ## note: disables internal sensor, make sure to associate one (ZWave type)
+#deleteattr DEVICE setList
+option:{ RADIO_NONZWAVE_EXTERNAL_TEMP }
+set DEVICE configByte  8 128  ## disables internal sensor, make sure to regularly update, e.g. using notify like  n_extTemp notify EG_sz_sensor:temperature:.* set DEVICE  sml_temperature $EVTPART1 C
+attr DEVICE setList sml_temperature
+#closing section
+option:global
+attr DEVICE webCmd desired-temp
+attr DEVICE userReadings energySaveHeating:setpointTemp.+energySaveHeating {ReadingsNum($name,"setpointTemp",0)}, heating:setpointTemp.+heating {ReadingsNum($name,"setpointTemp",0)}, thermostatMode:setpointTemp.+ {ReadingsVal($name,"setpointTemp",0)=~m/(heating|energySaveHeating)/; $1?$1:undef}
+attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
+get  DEVICE configAll
+set DEVICE attrTemplate speechcontrol_type_thermostat
+setreading DEVICE attrTemplateVersion Eurotronic_Spirit_20201029
