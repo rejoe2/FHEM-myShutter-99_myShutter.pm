@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 99_attrT_ZWave_Utils.pm 22883 2020-09-29 06:32:25Z Beta-User $
+# $Id: 99_attrT_ZWave_Utils.pm Test Ack-userReadings 2020-10-30  Beta-User $
 #
 
 # packages ####################################################################
@@ -17,14 +17,14 @@ BEGIN {
     # Import from main context
     GP_Import(
         qw(
-          defs
-          AttrVal
           InternalVal
+          readingsSingleUpdate
+          ReadingsVal
           ReadingsNum
-          CommandGet
+          ReadingsAge
           devspec2array
-          FW_makeImage 
-          Log3
+          FW_makeImage
+          defs
           )
     );
 }
@@ -100,31 +100,40 @@ sub devStateIcon_shutter {
 
 }
 
-#original source: https://forum.fhem.de/index.php/topic,77598.msg710737.html#msg710737
-sub sendDataToDevice {
-  my $device = shift // return "Target device name is mandatory!";
-  my $data   = shift // return "Data to send is mandatory!";
-  my $dType  = shift // "temperature";
-  my $ioDev = AttrVal($device, "IODev", 0);
-  my $nodeIdHex = InternalVal($device, "nodeIdHex", 0);
-  return Log3 ($defs{$device}, 2,  "[sendDataToDevice] No IODev or nodeIdHex found for $device.") if !$nodeIdHex || !$ioDev ;
-  if ($dType eq "temperature") { 
-    my $cmdTemp = substr("0000" . sprintf("%x", $data * 10), -4);
-    my $cmdCallbackId = substr("00" . sprintf("%x", int(rand(256))), -2);
-    return CommandGet(undef,"$ioDev raw 13${$nodeIdHex}0631050122${cmdTemp}25${cmdCallbackId}");
+sub desiredTemp {
+  my $name = shift // return;
+  my $call = shift // 'OK';
+  
+  my $hash = $defs{$name} // return;
+  my $now = time;
+  my $state = ReadingsVal($name,'state','unknown');
+  my $stateNum = ReadingsNum($name,'state',20);
+  return if ReadingsAge($name,'state',10000000) > 3;
+  
+  if ($state =~ m,desired-temp|thermostatSetpointSet,) {
+    readingsBulkUpdate($hash, 'desired-temp',$stateNum,1);
+    return;
   }
-
+  if ($state =~ m,tmAuto|tmManual|tmHeating,) {
+    readingsBulkUpdate($hash, 'desired-temp',ReadingsVal($name,'heating','unknown'),1);
+    return;
+  }
+  if ($state =~ m,tmEnergySaveHeating,) {
+    readingsBulkUpdate($hash, 'desired-temp',ReadingsVal($name,'energySaveHeating','unknown'),1);
+    return;
+  }
+  
+  if ($state =~ m,off,) {
+    readingsBulkUpdate($hash, 'desired-temp',6,'unknown',1);
+    return;
+  }
+  return;
 }
-
 
 1;
 
 __END__
 =pod
-=encoding utf8
-=item helper
-=item summary helper functions to ZWave attrTemplate.
-=item summary_DE Hilfsfunktionen für ZWave attrTemplate.
 =begin html
 
 <a name="attrT_ZWave_Utils"></a>
@@ -142,20 +151,6 @@ or <br>
 </code><br>
    Code can be used for blinds with or without venetian blind mode. In cas if and slat level is not part of the main device (like Fibaro FGR223, the second FHEM device to control slat level has to have a userReadings attribute for state like this:<br>
  <code>attr ZWave_SWITCH_MULTILEVEL_8.02 userReadings state:swmStatus.* {ReadingsNum($name,"swmStatus",0)}</code>
-  </ul>
-</ul>
-<ul>
-<b>sendDataToDevice</b>
-  <br>
-  Use this to send external data to any ZWave device. Can be used e.g. to send arbitrary temperature values to a valve control like Eurotronic Spirit.<br>
-  Note 1: atm. only sending temperature type values is supported...
-  <br>
-  Note 2: Limiting events to some extents may be usefull, as sending out data to battery powered devices will consume some power. 
-  <br>
-  Example notify to use e.g. HUEDevice temp sensor data: 
-  <ul>
-   <code>n_Virtual_Temp_notify notify EG_sz_Tempsensor:temperature:.* { attrT_ZWave_Utils::sendDataToDevice("EG_sz_THERM", "$EVTPART1", "temperature") }
-   </code><br>
   </ul>
 </ul>
 =end html
