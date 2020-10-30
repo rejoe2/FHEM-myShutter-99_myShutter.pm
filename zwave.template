@@ -243,6 +243,7 @@ filter:TYPE=ZWave
 order:03AEOTEC00000
 desc:Templates for AEOTEC/AEON Labs devices. <br>Manufacturer info can be found <a href="https://aeotec.freshdesk.com/support/solutions/6000084017">here</a>. <br>firmware updates are available for some devices, but for updating, you have to use a separate Windows machine.
 
+
 #AEON Labs ZW095 Home Energy Meter Gen5
 name:ZW095_Home_Energy_Meter
 filter:TYPE=ZWave
@@ -305,6 +306,13 @@ set DEVICE configByte 101 224 ## configGroup1Reports 224 (32+64+128)
 option:global
 get DEVICE configAll
 setreading DEVICE attrTemplateVersion ZW100_Multisensor_USB_20201007
+
+name:ZWA005_TriSensor
+filter:TYPE=ZWave
+order:03AEOTEC0000ZWA005
+desc:Applies to AEON Labs ZWA005 TriSensor.<br>NOTE: early version!<br>The template is based on this <a href="https://forum.fhem.de/index.php/topic,115396.0.html">forum thread</a>, manufacturer info can be found <a href="https://aeotec.freshdesk.com/support/solutions/folders/6000232835">here</a>. Having an up-to-date firmware is highly recommended!
+set DEVICE configByte  4 1    ## Binary Sensor Report Enable (for seperate motion reporting)
+setreading DEVICE attrTemplateVersion ZWA005_TriSensor_20201030
 
 
 name:----Eurotronic-devices-section--------
