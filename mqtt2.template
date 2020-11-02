@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 22883 2020-09-30 add z2t light conf. Beta-User $
+# $Id: mqtt2.template add shellygas 2020-11-02 Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -21,6 +21,7 @@ name:MQTT2_CLIENT_general_bridge
 filter:TYPE=MQTT2_DEVICE
 desc:recommended to use this as general bridgeing device when using MQTT2_CLIENT as IO to get around missing CID info for distinguishing different popular devices<br>NOTE:<br>This might create a new MQTT2-device or change existing ones, especially destroy readingList attributes!
 order:000001
+farewell:As you are using MQTT2_CLIENT, you should consider also setting an appropriate ignoreRegexp attribute to the MQTT2_CLIENT device! See attrTemplate MQTT2_IO_ignoreRegexp_basic for details.
 #par:DEVCID;CID of the device as written in the DEF; { InternalVal(AttrVal("DEVICE","IODev",""),"clientId","mosquitto") eq InternalVal("DEVICE","DEF","mosquitto") ? "MQTT2_GeneralBridge" : InternalVal("DEVICE","DEF","mosquitto")}
 par:ICON;ICON as set, defaults to mqtt_bridge_2;{ AttrVal("DEVICE","icon","mqtt_bridge_2") }
 attr DEVICE icon ICON
@@ -713,6 +714,37 @@ attr DEVICE model zigbee2mqtt_symfonsik_sound_controller
 attr DEVICE userReadings volume:brightness.* {int(ReadingsVal($name,"brightness",10)/2.55)}
 deletereading -q DEVICE (?!associatedWith).*
 setreading DEVICE attrTemplateVersion 20200904
+
+
+# Eurotronic Spirit ZigBee version
+name:zigbee2mqtt_eurotronic_spirit
+desc: First version for <a href="https://www.zigbee2mqtt.io/devices/SPZB0001.html">Eurotronic SPZB0001</a> via zigbee2mqtt <br>Not yet tested... <br>tbd (?): map eurotronic_system_mode to readings (userReadings?)
+filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
+order:L_17
+par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^/:]+)[/].+, ? $1 : undef }
+par:DEV_ID;name of the device in the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[^/]+[/]([^/:]+).*, ? $1 : undef }
+par:ICON;ICON as set, defaults to hm-cc-rt-dn;{ AttrVal("DEVICE","icon","hm-cc-rt-dn") }
+attr DEVICE icon ICON
+attr DEVICE devicetopic BASE_TOPIC/DEV_ID
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
+attr DEVICE setList \
+  boost:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"boost": $EVTPART1 }}\
+  child_protection:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"child_protection": $EVTPART1 }}\
+  desired-temp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"current_heating_setpoint": $EVTPART1 }\
+  daytemp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"occupied_heating_setpoint": $EVTPART1 }\
+  nighttemp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"unoccupied_heating_setpoint": $EVTPART1 }\
+  window_open:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"window_open": $EVTPART1 }}\
+  boost:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"boost": $EVTPART1 }}\
+  x_mirror_display:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"mirror_display": $EVTPART1 }}
+attr DEVICE stateFormat Measured: measured-temp Battery: battery %
+attr DEVICE webCmd desired-temp
+attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
+attr DEVICE jsonMap occupied_heating_setpoint:daytemp unoccupied_heating_setpoint:nighttemp current_heating_setpoint:desired-temp local_temperature:measured-temp
+attr DEVICE setStateList on off
+attr DEVICE model zigbee2mqtt_eurotronic_spirit
+set DEVICE attrTemplate speechcontrol_type_thermostat
+deletereading -q DEVICE (?!associatedWith).*
+setreading DEVICE attrTemplateVersion 20201014
 
 
 ###########################################
@@ -1736,7 +1768,6 @@ order:A_01u02
 par:CMNDTOPIC;Command topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*)?/[^/]+/SENSOR:, ? "${1}cmnd$3" : undef }
 par:TELETOPIC;info topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*/[^/]+/SENSOR)?:, ? "${1}tele$3" : undef }
 par:DEV_ID;ZigBee short ID, hex value without leading 0x;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)/.*/([^/]+)/SENSOR?:, ? "$3" : undef }
-par:IO_DEV;Currently used IO;{ InternalVal("DEVICE","LASTInputDev",AttrVal("DEVICE","IODev",undef)) }
 par:ICON;ICON as set, defaults to light_control;{ AttrVal("DEVICE","icon","light_control") }
 par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attributes;{ 1 }
 attr DEVICE icon ICON
@@ -1753,10 +1784,9 @@ attr DEVICE setExtensionsEvent 1
 attr DEVICE jsonMap Dimmer:brightness Power:state Device:0 Hue:hue Sat:saturation CT:ct
 deletereading -q DEVICE (?!associatedWith).*
 option:{ CALLSPEECHRECOGN }  
-set IO_DEV publish CMNDTOPIC/ZbLight 0xDEV_ID,1
 set DEVICE attrTemplate speechcontrol_type_light_255
 attr DEVICE model tasmota_zigbee2tasmota_light_dimmer
-setreading DEVICE attrTemplateVersion 20200930
+setreading DEVICE attrTemplateVersion 20200805_1
 
 
 name:tasmota_zigbee2tasmota_light_cct
@@ -1784,9 +1814,7 @@ desc:This template is meant to configure a dimmable bulb device with ful hue opt
 order:A_01u02c
 par:CMNDTOPIC;Command topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*)?/[^/]+/SENSOR:, ? "${1}cmnd$3" : undef }
 par:DEV_ID;ZigBee short ID, hex value without leading 0x;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)/.*/([^/]+)/SENSOR?:, ? "$3" : undef }
-par:IO_DEV;Currently used IO;{ InternalVal("DEVICE","LASTInputDev",AttrVal("DEVICE","IODev",undef)) }
 set DEVICE attrTemplate tasmota_zigbee2tasmota_light_dimmer \CALLSPEECHRECOGN=1
-set IO_DEV publish CMNDTOPIC/ZbLight 0xDEV_ID,5
 attr DEVICE setList on CMNDTOPIC/ZbSend {"device":"0xDEV_ID","send":{"Power":"On"}}\
   off CMNDTOPIC/ZbSend {"device":"0xDEV_ID","send":{"Power":"Off"}}\
   brightness:colorpicker,BRI,0,5,254 CMNDTOPIC/ZbSend { "device":"0xDEV_ID", "send":{"Dimmer":$EVTPART1} }\
@@ -1796,7 +1824,7 @@ attr DEVICE setList on CMNDTOPIC/ZbSend {"device":"0xDEV_ID","send":{"Power":"On
   hue:colorpicker,HUE,0,1,254 CMNDTOPIC/ZbSend { "device":"0xDEV_ID", "send":{"Hue":$EVTPART1} }\
   saturation:colorpicker,BRI,0,1,254 CMNDTOPIC/ZbSend { "device":"0xDEV_ID", "send":{"Sat":$EVTPART1} }
 attr DEVICE model tasmota_zigbee2tasmota_light_cct_hue
-setreading DEVICE attrTemplateVersion 20200930
+setreading DEVICE attrTemplateVersion 20200805
 
 
 name:tasmota_zigbee2tasmota_single_switch
@@ -2147,6 +2175,7 @@ attr DEVICE readingList \
   shellies/DEVNAME/roller/0:.* current\
   shellies/DEVNAME/roller/0:open {{'state' => 'opening'}}\
   shellies/DEVNAME/roller/0:close {{'state' => 'closing'}}\
+  shellies/DEVNAME/roller/0/pos:.* {'state' => 100-$EVENT}\
   shellies/DEVNAME/input/1:.* input1\
   shellies/DEVNAME/input/0:.* input0\
   shellies/DEVNAME/relay/power:.* power\
@@ -2405,6 +2434,26 @@ deletereading -q DEVICE (?!associatedWith).*
 set DEVICE x_mqttcom announce
 attr DEVICE model shellyflood
 setreading DEVICE attrTemplateVersion 20200522 or prior
+
+# shellygas using original firmware
+name:shellygas
+filter:TYPE=MQTT2_DEVICE:FILTER=readingList=.*shellies.*
+desc:shellygas using original firmware <br>Just adds stateFormat, setlist, icon, devStateIcon
+order:A_16b
+par:DEVNAME;name of this shelly;{ AttrVal("DEVICE","readingList","") =~ m,shellies/([^/]+)/, ? $1 : undef }
+attr DEVICE icon feinstaub
+attr DEVICE devStateIcon none:ampel_gruen mild:ampel_gelb heavy:ampel_rot test:ampel_gruen
+attr DEVICE setList \
+  start_self_test:noArg shellies/DEVNAME/sensor/start_self_test\
+  mute:noArg shellies/DEVNAME/sensor/mute\
+  unmute:noArg shellies/DEVNAME/sensor/unmute\
+  x_update:noArg shellies/DEVNAME/command update_fw\
+  x_mqttcom shellies/DEVNAME/command $EVTPART1
+attr DEVICE stateFormat gas
+deletereading -q DEVICE (?!associatedWith).*
+set DEVICE x_mqttcom announce
+attr DEVICE model shellygas
+setreading DEVICE attrTemplateVersion 20201102
 
 # shellydw using original firmware
 # contributed by majestro84, https://forum.fhem.de/index.php/topic,94060.msg1054466.html#msg1054466
@@ -3814,25 +3863,29 @@ desc:The sonos2mqtt bridge including automated setup for speaker devices (adds 2
 filter:TYPE=MQTT2_DEVICE
 order:M_05c
 set DEVICE attrTemplate sonos2mqtt_bridge
-define n_configSonos1 notify global:DEFINED.MQTT2_RINCON_[A-Z0-9]+ sleep 1;\
+attr DEVICE setList PauseAll:noArg sonos/cmd/pauseall\
+CheckSubscription:noArg sonos/cmd/check-subscriptions
+defmod n_configSonos1 notify global:DEFINED.MQTT2_RINCON_[A-Z0-9]+ sleep 1;\
   set $EVTPART1 attrTemplate sonos2mqtt_speaker;\
   set $EVTPART1 x_raw_payload {"command": "adv-command","input": {"cmd":"GetZoneInfo","reply":"ZoneInfo"}}
-define n_configSonos2 notify MQTT2_RINCON_[A-Z0-9]+:IPAddress:.* {\
+defmod n_configSonos2 notify MQTT2_RINCON_[A-Z0-9]+:IPAddress:.* {\
   my @tv = ("S14","S11","S9");\
+  my @line = ("S5","Z90","ZP120");\
   my $url="http://$EVTPART1:1400";\
   my $xmltext = GetFileFromURL("$url/xml/device_description.xml");\
-  my ($mn)=$xmltext =~ /<modelNumber>(S[0-9]+)/;\
-  my ($img)=$xmltext =~ /<url>(.*)<\/url>/;\
+  my ($mn)=$xmltext =~ /(S[0-9]+)/;\
+  my ($img)=$xmltext =~ /(.*)<\/url>/;\
   my $icon="Sonos2mqtt_icon-$mn";\
   my $setList=AttrVal($NAME,'setList','');\
   fhem("setreading $NAME modelNumber $mn");\
   fhem("\"wget -qO ./www/images/default/$icon.png $url$img\"");\
   fhem("attr $NAME icon $icon;sleep 4 WI;set WEB rereadicons");\
   if (grep(/$mn/, @tv)) {$setList=~s/input:Queue \{/input:Queue,TV \{/};\
+  if (grep(/$mn/, @line)) {$setList=~s/input:Queue \{/input:Queue,Line_In \{/};\
   $setList=~s/;/;;/g;\
   fhem("attr $NAME setList $setList")\
 }
-setreading DEVICE attrTemplateVersion 20200801
+setreading DEVICE attrTemplateVersion 20201102
 
   
 name:sonos2mqtt_speaker
