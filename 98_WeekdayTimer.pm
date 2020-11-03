@@ -43,7 +43,7 @@ sub WeekdayTimer_Initialize {
   $hash->{GetFn}   = "WeekdayTimer_Get";
   $hash->{AttrFn}  = "WeekdayTimer_Attr";
   $hash->{UpdFn}   = "WeekdayTimer_Update";
-  $hash->{AttrList}= "disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate ".
+  $hash->{AttrList}= "disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 bulkCommandDelay commandTemplate ".
      $readingFnAttributes;
   return;
 }
@@ -206,6 +206,10 @@ if ($v =~ m{\AWDT_Params}xms) {
     Log3( $hash, 3, "[$name] set $name $v" );
     return if !WeekdayTimer_UpdateWeekprofileReading($hash, $1, $2, $3);
     WeekdayTimer_DeleteTimer($hash);
+    
+    my $bulkCommandDelay = AttrVal($name, "bulkCommandDelay", 0);
+    return InternalTimer(time()+ $bulkCommandDelay, "WeekdayTimer_Start",$hash,0) if $bulkCommandDelay;
+    
     return WeekdayTimer_Start($hash);
   }
   return;
@@ -1293,6 +1297,10 @@ sub WeekdayTimer_Attr {
     return $err if ( $err );
     $attr{$name}{$attrName} = $attrVal;
   }
+  if ( $attrName eq "bulkCommandDelay" ) {
+    return "bulkCommandDelay can only be set to numbers" if !looks_like_number($attrVal);
+    $attr{$name}{$attrName} = $attrVal;
+  }
   
   return;
 }
@@ -1311,12 +1319,13 @@ sub WeekdayTimer_SetAllParms {            # {WeekdayTimer_SetAllParms()}
   my @wdtNames = $group eq 'all' ? devspec2array('TYPE=WeekdayTimer')
                                  : devspec2array("TYPE=WeekdayTimer:FILTER=WDT_Group=$group");
 
-  my $delay = 0;
   for my $wdName ( @wdtNames ) {
-    InternalTimer(time()+ $delay, WeekdayTimer_SetParm, $wdName,0);
-    $delay += 2;
+    my $bulkCommandDelay = AttrVal($wdName, "bulkCommandDelay", 0);
+    $bulkCommandDelay 
+      ? InternalTimer(time()+ $bulkCommandDelay, WeekdayTimer_SetParm, $wdName,0)
+      : WeekdayTimer_SetParm($wdName);
   }
-  Log3( undef,  3, "WeekdayTimer_SetAllParms() prepared on: ".join(" ",@wdtNames ) );
+  Log3( undef, 3, "WeekdayTimer_SetAllParms() done or prepared on: ".join(" ",@wdtNames ) );
   return;
 }
 
@@ -1592,6 +1601,11 @@ sub WeekdayTimer_GetWeekprofileReadingTriplett {
     <li><a href="#event-on-update-reading">event-on-update-reading</a></li>
     <li><a href="#event-on-change-reading">event-on-change-reading</a></li>
     <li><a href="#stateFormat">stateFormat</a></li>
+  <br>
+  </ul>
+  <li>bulkCommandDelay<br>
+    Seconds to wait in case of (potential) bulk commands are issued. A bulk command may be Perl <pre>{ WeekdayTimer_SetAllParms()}</pre> or the corresponding <pre>set <device> WDT_Params [one of: WDT_Group or all]</pre>. Setting a new weekprofile will be regarded as bulk update as well.
+    </li>
   <br>
   </ul>
 </ul>
