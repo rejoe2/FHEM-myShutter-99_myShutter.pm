@@ -22,7 +22,7 @@ sub milight_toggle_indirect {
   my $hash;
   for my $setdevice (split (/,/,$Target_Devices)) {
     $hash = $defs{$setdevice};
-    if(ReadingsVal($setdevice,"state","OFF") =~ /OFF|off/) {
+    if(lc(ReadingsVal($setdevice,"state","off")) eq "off") {
       CommandSet(undef, "$setdevice on");
       readingsSingleUpdate($hash,"myLastShort","1", 0);
       AnalyzeCommandChain(undef, "sleep 1; set $setdevice brightness 220");
@@ -47,9 +47,9 @@ sub milight_dimm_indirect {
   my $name  = shift;
   my $event = shift // return;
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
-  foreach my $setdevice (split (/,/,$Target_Devices)) {
+  for my $setdevice (split (/,/,$Target_Devices)) {
     if ($event =~ m/LongRelease/) {
-      AnalyzeCommand(undef,"deleteReading $setdevice myLastdimmLevel");
+      CommandDeleteReading(undef,"-q $setdevice myLastdimmLevel");
     } else {
       milight_dimm($setdevice);
     }
@@ -115,82 +115,98 @@ sub milight_FUT_to_HUE {
   my @devices = split m{\s+}xms, $names; 
   for my $name (@devices) {
 
+    for my $k (keys %ret) {
 
-  for my $k (keys %ret) {
+      my $string = qq($k $ret{$k});
+  
+      if($string =~ m/OFF|ON/i) {
+        my $command = $ret{$k};
+        CommandSet(undef, "$name $command");
+      }
+  
+      if ($string =~ /brightness/)  {
+        $string =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
+        CommandSet(undef, "$name $string");
+      }
 
-  my $string = qq($k $ret{$k});
+      if ($string =~ /hue/)  {
+        if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+          my $rgb = Color::hsv2hex($ret{$k},ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
+          CommandSet(undef, "$name rgb $rgb");
+        } else {
+          CommandSet(undef, "$name $Event");
+        }
+      }
   
-  if($string =~ m/OFF|ON/i) {
-    my $command = $ret{$k};
-    CommandSet(undef, "$name $command");
-  }
+      if ($string =~ /saturation/)  {
+        if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+          my $sat = int($ret{$k}*2.54);
+          CommandSet(undef, "$name sat $sat");
+        } else {
+          CommandSet(undef, "$name $Event");
+        }
+      }
   
-  if ($string =~ /brightness/)  {
-    $string =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
-    CommandSet(undef, "$name $string");
-  } 
-  
-  if ($string =~ /hue/)  {
-    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
-        my $rgb = Color::hsv2hex($ret{$k},ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
-        CommandSet(undef, "$name rgb $rgb");
-    } else {
-      CommandSet(undef, "$name $Event");
-    }
-  } 
-  
-  if ($string =~ /saturation/)  {
-    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
-      my $sat = int($ret{$k}*2.54);
-      CommandSet(undef, "$name sat $sat");
-    } else {
-      CommandSet(undef, "$name $Event");
-    }
-  } 
-  
-  if ($string =~ /command set_white/)  {
-    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") {
-      CommandSet(undef, "$name rgb $whitecol");
-    } else { 
-      CommandSet(undef, "$name command Weiss");
-    } 
- }  
+      if ($string =~ /command set_white/)  {
+        if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") {
+          CommandSet(undef, "$name rgb $whitecol");
+        } else { 
+          CommandSet(undef, "$name command Weiss");
+        }
+      }
 
-  } #end keys loop
- } #end devices loop
- return;
+    } #end keys loop
+  } #end devices loop
+  return;
 }
 
 sub milight_to_MPD {
   my $name  = shift;
   my $Event = shift // return;
   return "" if ReadingsVal($name,"presence","absent") eq "absent";
-  if($Event =~ /ON/) {
-    CommandSet(undef, "$name play") if ReadingsVal($name,"state","play") =~ /pause|stop/;
-  } elsif ($Event =~ /OFF/) {
-    my $command = (ReadingsVal($name,"state","play") eq "pause" ) ? "stop" : "pause";
-    CommandSet(undef, "$name $command");
-  } elsif ($Event =~ /brightness/)  {
-    my ($reading,$value) = split (/ /,$Event);
-    my $volume = int (round ($value/2,55)); 
-    CommandSet(undef, "$name volume $volume");
-  } elsif ($Event =~ /mode_speed_down/)  {
-    CommandSet(undef, "$name previous");
+  
+  my %ret; 
+  if(length($Event) < 10000 && $Event =~ m/^\s*[{[].*[}\]]\s*$/s) {
+        %ret = json2nameValue($Event);
+  }
+  my @parms; 
+  if(!keys %ret) {
+    $Event =~ s/://g;
+    $Event = "state ".lc($Event) if $Event =~ m/OFF|ON/i;
+    @parms = split  m{\s+}xms, $Event;     
+    $ret{$parms[0]} = $parms[1];
+  }
+  
+  for my $k (keys %ret) {
+    my $string = qq($k $ret{$k});
+  
+    if($string =~ /ON/) {
+      CommandSet(undef, "$name play") if ReadingsVal($name,"state","play") =~ /pause|stop/;
+    } elsif ($string =~ /OFF/) {
+      my $command = (ReadingsVal($name,"state","play") eq "pause" ) ? "stop" : "pause";
+      CommandSet(undef, "$name $command");
+    } elsif ($string =~ /brightness/)  {
+      my ($reading,$value) = split (/ /,$string);
+      my $volume = int (round ($value/2,55)); 
+      CommandSet(undef, "$name volume $volume");
+    } elsif ($string =~ /mode_speed_down/)  {
+      CommandSet(undef, "$name previous");
 
-  } elsif ($Event =~ /mode_speed_up/)  {
-    CommandSet(undef, "$name next");
+    } elsif ($string =~ /mode_speed_up/)  {
+      CommandSet(undef, "$name next");
 
-  } elsif ($Event =~ /mode: [0-8]/)  {
-    my $gainmode = CommandSet(undef, "$name mpdCMD replay_gain_status") =~ /album/ ? "auto" : "album"; 
-    
-    CommandSet(undef, "$name mpdCMD replay_gain_mode $gainmode");
- 
-  } elsif ($Event =~ /bulb_mode.*white/)  {
-    my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
-    CommandSet(undef, "$name mpdCMD consume $consumer");
+    } elsif ($string =~ /mode: [0-8]/)  {
+      my $gainmode = CommandSet(undef, "$name mpdCMD replay_gain_status") =~ /album/ ? "auto" : "album"; 
+        
+      CommandSet(undef, "$name mpdCMD replay_gain_mode $gainmode");
+     
+    } elsif ($string =~ /bulb_mode.*white/)  {
+      my $consumer = CommandSet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
+      CommandSet(undef, "$name mpdCMD consume $consumer");
 
-  } else {
+    } else {
 
+    }
   }
   return;
 }
@@ -332,6 +348,37 @@ sub milight_Deckenlichter {
       CommandSet(undef, "Licht_WoZi_(Hinten|Vorn)_(Aussen|Mitte):FILTER=state=on off") if ($Event eq "OFF");
     } else {
       CommandSet(undef, "Licht_WoZi_Vorn_Aussen on");
+    } 
+  }
+  return;
+}
+
+sub milight_4_Lights_matrix {
+  my $Event = shift;
+  my $devA  = shift // return;
+  my $devB  = shift // $devA;
+  my $devC  = shift // $devB;
+  my $devD  = shift // $devC;
+  
+  my $rets = json2nameValue($event);
+  
+  if (defined $rets->{mode_speed_up}){
+    return CommandSet(undef, "$devC toggle");
+  } 
+  if (defined $rets->{mode_speed_down}){
+    return CommandSet(undef, "$devA toggle");
+  } 
+  if ($rets->{command} eq "set_white"){
+    return CommandSet(undef, "$devB toggle");
+  } 
+  if ($rets->{mode}){
+    return CommandSet(undef, "$devD toggle");
+  } else {
+    my @ondevs = devspec2array("$devA|$devB|$devC|$devD):FILTER=state=on");
+    if (@ondevs) {
+      CommandSet(undef, "($devA|$devB|$devC|$devD):FILTER=state=on off") if ($rets->{state} eq "OFF");
+    } else {
+      CommandSet(undef, "$devA on");
     } 
   }
   return;
