@@ -354,7 +354,7 @@ sub milight_Deckenlichter {
 }
 
 sub milight_4_Lights_matrix {
-  my $Event = shift;
+  my $event = shift;
   my $devA  = shift // return;
   my $devB  = shift // $devA;
   my $devC  = shift // $devB;
