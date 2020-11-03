@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2020-10-12 Beta-User $
+# $Id: myUtils_MiLight.pm 2020-11-03 Beta-User $
 #
 
 package main;
@@ -280,7 +280,7 @@ sub milight_to_shutter2 {
   }
   if (defined $rets->{brightness}) {
     my ($reading,$value) = split (/ /,$event);
-    my $level = int (round ($rets->{brightness}/2,55));
+    my $level = int (round ($rets->{brightness}/2.55,0));
     $com = $type eq "ZWave" ? "dim" : "pct"; 
     $level = 99 if ($level == 100 && $type eq "ZWave");
     return CommandSet(undef, "$name $com $level");
