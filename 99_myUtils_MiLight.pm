@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_MiLight.pm 2020-11-03 Beta-User $
+# $Id: myUtils_MiLight.pm 2020-11-04 Beta-User $
 #
 
 package main;
@@ -276,21 +276,23 @@ sub milight_to_shutter2 {
   my $event = shift // return;
   my $type = InternalVal($name,"TYPE","MQTT2_DEVICE"); 
   my $moving = ReadingsVal($name,"motor","stop") =~ /stop/ ? 0 : 1;
-  $moving = 1 if (ReadingsNum($name,"power",0) > 1 && $type eq "ZWave");
+  $moving = 1 if ReadingsNum($name,"power",0) > 1 && $type eq "ZWave";
 
   my $rets = json2nameValue($event);
   
   my $com = "off";
   my $now = gettimeofday;
-  if (!$moving && $rets->{state} =~ m/ON|OFF/) {
+  if (!$moving && defined $rets->{state} && $rets->{state} =~ m/on|off/i) {
     if ($now - ReadingsVal($name, "myLastRCOnOff",$now) < 5) {
       CommandSetReading(undef,"$name myLastRCOnOff $now");
-      $com = lc($rets->{state});
-      return CommandSet(undef,"$name $com)");
+	  my $level = $rets->{state} =~ m/off/i ? 0 : 100;
+      $com = $type eq "ZWave" ? "dim" : "pct"; 
+      $level = 99 if ($level == 100 && $type eq "ZWave");
+      return CommandSet(undef, "$name $com $level");
     } 
     return CommandSetReading(undef,"$name myLastRCOnOff $now"); 
   } 
-  if ($rets->{state} =~ m/ON|OFF/) { 
+  if (defined $rets->{state} && $rets->{state} =~ m/on|off/i) { 
     CommandSetReading(undef,"$name myLastRCOnOff $now");
     return CommandSet(undef,"$name stop");
   }
@@ -362,21 +364,17 @@ sub milight_4_Lights_matrix {
   
   my $rets = json2nameValue($event);
   
-  if (defined $rets->{mode_speed_up}){
-    return CommandSet(undef, "$devC toggle");
+  if (defined $rets->{command}) {
+    return CommandSet(undef, "$devC toggle") if $rets->{command} eq "mode_speed_up";
+    return CommandSet(undef, "$devA toggle") if $rets->{command} eq "mode_speed_down";
+    return CommandSet(undef, "$devB toggle") if $rets->{command} eq "set_white";
   } 
-  if (defined $rets->{mode_speed_down}){
-    return CommandSet(undef, "$devA toggle");
-  } 
-  if ($rets->{command} eq "set_white"){
-    return CommandSet(undef, "$devB toggle");
-  } 
-  if ($rets->{mode}){
+  if (defined $rets->{mode}) {
     return CommandSet(undef, "$devD toggle");
   } else {
-    my @ondevs = devspec2array("$devA|$devB|$devC|$devD):FILTER=state=on");
+    my @ondevs = devspec2array("($devA|$devB|$devC|$devD):FILTER=state=on");
     if (@ondevs) {
-      CommandSet(undef, "($devA|$devB|$devC|$devD):FILTER=state=on off") if ($rets->{state} eq "OFF");
+      CommandSet(undef, "($devA|$devB|$devC|$devD):FILTER=state=on off") if (defined $rets->{state} && $rets->{state} eq "OFF");
     } else {
       CommandSet(undef, "$devA on");
     } 
