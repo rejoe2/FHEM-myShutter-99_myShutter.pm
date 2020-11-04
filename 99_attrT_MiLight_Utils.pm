@@ -31,6 +31,7 @@ BEGIN {
           CommandSet
           CommandSetReading
           defs
+		  round
           )
     );
 }
@@ -222,7 +223,7 @@ sub MPDcontrol {
     return { "CommandSet" => "$name $command" };
   }
   if (defined $rets->{brightness}) {
-    my $level = int (round ($rets->{brightness}/2.55,0));
+    my $level = round($rets->{brightness}/2.55,0);
     CommandSet(undef, "$name volume $level");
     return { "CommandSet" => "$name volume $level" };
   }
@@ -231,8 +232,12 @@ sub MPDcontrol {
     CommandSet(undef, "$avrname volume $avrVol");
     return { "CommandSet" => "$avrname volume $avrVol" };
   }
-  
-  if (defined $rets->{command}) {
+  if (defined $rets->{saturation}) {
+    my $avrVol = 100 - $rets->{saturation};
+	CommandSet(undef, "$avrname volume $avrVol");
+    return { "CommandSet" => "$avrname volume $avrVol" };
+  }
+    if (defined $rets->{command}) {
     if ($rets->{command} eq "mode_speed_up") {
       CommandSet(undef, "$name previous") ;
       return { "CommandSet" => "$name previous" } ;
@@ -287,7 +292,7 @@ sub shuttercontrol {
     return { "CommandSet" => "$name stop" };
   }
   if (defined $rets->{brightness}) {
-    my $level = int (round ($rets->{brightness}/2.55,0));
+    my $level = round($rets->{brightness}/2.55,0);
     $com = $type eq "ZWave" ? "dim" : "pct"; 
     $level = 99 if ($level == 100 && $type eq "ZWave");
     CommandSet(undef, "$name $com $level");
