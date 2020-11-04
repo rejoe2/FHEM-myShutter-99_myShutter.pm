@@ -6,6 +6,7 @@ package FHEM::attrT_MiLight_Utils;    ## no critic 'Package declaration'
 
 use strict;
 use warnings;
+use Time::HiRes qw( gettimeofday );
 
 use GPUtils qw(GP_Import);
 
@@ -29,7 +30,6 @@ BEGIN {
           CommandGet
           CommandSet
           CommandSetReading
-          gettimeofday
           defs
           )
     );
