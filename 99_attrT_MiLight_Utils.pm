@@ -203,6 +203,7 @@ sub FUT_to_HUE {
 sub MPDcontrol {
   my $name  = shift;
   my $event = shift // return;
+  my $avrname  = shift // $name;
   return {"CommandSet" => "$name not present, no command issued" } if ReadingsVal($name,"presence","absent") eq "absent";
   
   my $rets = json2nameValue($event);
@@ -225,6 +226,12 @@ sub MPDcontrol {
     CommandSet(undef, "$name volume $level");
     return { "CommandSet" => "$name volume $level" };
   }
+  if (defined $rets->{color_temp}) {
+    my $avrVol = 100 - ($rets->{color_temp}/(370-153))*100;
+    CommandSet(undef, "$avrname volume $avrVol");
+    return { "CommandSet" => "$avrname volume $avrVol" };
+  }
+  
   if (defined $rets->{command}) {
     if ($rets->{command} eq "mode_speed_up") {
       CommandSet(undef, "$name previous") ;
@@ -372,7 +379,7 @@ sub four_Lights_matrix {
   NOTE: As activation of a specific layer on the remote requires to press the "on" button, often the first "on" command will be ignored. You have to press the key twice within a few seconds in these cases. This is especially the case, when controlling other devices than lights to avoid unexpected or unintended behaviour (like starting a music player when only reduction of volume is intended as first step).  <br><br>
   For most It's recommended to setup a single MQTT2_DEVICE per remote to dispatch all received commands like this one:<br>
   <pre>defmod MiLight_RC_WZ MQTT2_DEVICE milight_0x5D47_0
-attr MiLight_RC_WZ readingList milight/updates/0x5D47/fut089/0:.* { FHEM::attrT_MiLight_Utils::MPDcontrol('myMPD',$EVENT) }\
+attr MiLight_RC_WZ readingList milight/updates/0x5D47/fut089/0:.* { FHEM::attrT_MiLight_Utils::MPDcontrol('myMPD',$EVENT, 'AVR_name') }\
 milight/updates/0x5D47/fut089/1:.* { FHEM::attrT_MiLight_Utils::FUT_to_RGBW('Licht_Stehlampe_links',$EVENT) }\
 milight/updates/0x5D47/fut089/2:.* { FHEM::attrT_MiLight_Utils::FUT_to_RGBW('Licht_Stehlampe_rechts',$EVENT) }\
 milight/updates/0x5D47/fut089/3:.* { FHEM::attrT_MiLight_Utils::four_Lights_matrix($EVENT, 'Licht_WoZi_Vorn_Aussen', 'Licht_WoZi_Vorn_Mitte', 'Licht_WoZi_Hinten_Aussen', 'Licht_WoZi_Hinten_Mitte') }\
@@ -408,6 +415,7 @@ milight/states/0x5D47/fut089/[0-8]:.* {}
 <ul>
   <b>FHEM::attrT_MiLight_Utils::MPDcontrol</b><br>
   Allows control of a MusicPlayerDeamon - basics like play, pause, stop and volume.<br>
+  Third argument is optional and allows control of volume channel of an AVR device (uses  saturation slider).<br>
   Additionally toggle two replay gain modes and "consumer" setting.
 </ul></ul>
 <ul>
