@@ -108,7 +108,7 @@ sub desiredTemp {
   my $now = time;
   my $state = ReadingsVal($name,'state','unknown');
   my $stateNum = ReadingsNum($name,'state',20);
-  return if ReadingsAge($name,'state',10000000) > 3;
+  # return if ReadingsAge($name,'state',10000000) - ReadingsNum($name,'timeToAck',0) > 1;
   
   if ($state =~ m,desired-temp|thermostatSetpointSet,) {
     readingsBulkUpdate($hash, 'desired-temp',$stateNum,1);
@@ -127,6 +127,7 @@ sub desiredTemp {
     readingsBulkUpdate($hash, 'desired-temp',6,'unknown',1);
     return;
   }
+  Log3($name, 3, "ZWave-utils desiredTemp called, but no match for state comparisons");
   return;
 }
 
