@@ -444,5 +444,22 @@ sub milight_4_Lights_matrix {
   <code>defmod MiLight_dimm notify Schalter_Spuele_Btn_0[124]:Long..*[\d]+_[\d]+.\(to.VCCU\) {milight_dimm_indirect($NAME,$EVENT)}<br>defmod MiLight_toggle notify Schalter_Spuele_Btn_0[124]:Short.[\d]+_[\d]+.\(to.VCCU\) {milight_toggle_indirect($NAME)}</code><br>
 </ul>
 </ul>
+<ul>
+<pre>defmod MiLight_RC_WZ MQTT2_DEVICE milight_0x5D47_0
+attr MiLight_RC_WZ DbLogExclude .*
+attr MiLight_RC_WZ IODev MQTT2_FHEM_Server
+attr MiLight_RC_WZ group Remote
+attr MiLight_RC_WZ readingList milight/updates/0x5D47/fut089/0:.* { milight_to_MPD('myMPD',$EVENT) }\
+milight/updates/0x5D47/fut089/1:.* { milight_FUT_to_RGBW('Licht_Stehlampe_links',$EVENT) }\
+milight/updates/0x5D47/fut089/2:.* { milight_FUT_to_RGBW('Licht_Stehlampe_rechts',$EVENT) }\
+milight/updates/0x5D47/fut089/3:.* { milight_4_Lights_matrix($EVENT, 'Licht_WoZi_Vorn_Aussen', 'Licht_WoZi_Vorn_Mitte', 'Licht_WoZi_Hinten_Aussen', 'Licht_WoZi_Hinten_Mitte') }\
+milight/updates/0x5D47/fut089/4:.* { milight_to_shutter2('Jalousie_WZ',$EVENT) }\
+milight/updates/0x5D47/fut089/5:.* { milight_to_shutter2('Rollladen_WZ_SSO',$EVENT) }\
+milight/updates/0x5D47/fut089/6:.* { milight_to_shutter2('Rollladen_WZ_SSW',$EVENT) }\
+milight/updates/0x5D47/fut089/7:.* {}\
+milight/updates/0x5D47/fut089/8:.* {}\
+milight/states/0x5D47/fut089/[0-8]:.* {}
+</pre>
+</ul>
 =end html
 =cut
