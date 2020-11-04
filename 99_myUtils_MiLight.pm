@@ -80,98 +80,95 @@ sub milight_dimm {
 
 sub milight_FUT_to_RGBW {
   my $name  = shift;
-  my $Event = shift // return;
-  my %ret; 
-  if(length($Event) < 10000 && $Event =~ m/^\s*[{[].*[}\]]\s*$/s) {
-        %ret = json2nameValue($Event);
-  }
-  my @parms; 
-  if(!keys %ret) {
-    $Event =~ s/://g;
-    $Event = "state ".lc($Event) if $Event =~ m/OFF|ON/i;
-    @parms = split  m{\s+}xms, $Event;     
-    $ret{$parms[0]} = $parms[1];
-  }
-  for my $k (keys %ret) {
-    my $string = qq($k $ret{$k});
+  my $event = shift // return;
   
-    if($string =~ /OFF|ON/) {
-      my $command = lc ($Event);
-      CommandSet(undef, "$name $command");
-    } elsif ($string =~ /brightness|hue/)  {
-      $string =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
-      CommandSet(undef, "$name $string");
-    } elsif ($string =~ /command set_white/)  {
-      CommandSet(undef, "$name command Weiss");
+  my $rets = json2nameValue($event);
+  
+  if (defined $rets->{state} && $rets->{state} =~ m/on|off/i) { 
+    my $newState = lc($rets->{state});
+    CommandSet(undef, "$name $newState");      
+    return { "CommandSet" => "$name $newState" };
+  }
+  if (defined $rets->{brightness}) {
+    my $bri = InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice" ? "bri" : "brightness";
+    CommandSet(undef, "$name $bri $rets->{brightness}");
+    return { "CommandSet" => "$name $bri $rets->{brightness}" };
+  }
+  if (defined $rets->{hue}) {
+    CommandSet(undef, "$name hue $rets->{hue}");
+    return { "CommandSet" => "$name hue $rets->{hue}" };
+  }
+  if (defined $rets->{command}) {
+    if  ($rets->{command} =~ m/white/) {
+       CommandSet(undef, "$name command Weiss");
+       return { "CommandSet" => "$name command Weiss" };
+    }
+    return { "CommandSet" => "$rets->{command} not assigned" };
+  }
+  if (defined $rets->{saturation}) {
+    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+      my $sat = int($rets->{saturation}*2.54);
+      CommandSet(undef, "$name sat $sat");
+      return { "CommandSet" => "$name sat $sat" };
     } else {
-
-    }  
+       CommandSet(undef, "$name saturation $rets->{saturation}");
+       return { "CommandSet" => "$name saturation $rets->{saturation}" };
+    }
   }
 }
 
 sub milight_FUT_to_HUE {
-  my $names  = shift;
-  my $Event = shift // return;
+  my $name  = shift;
+  my $event = shift // return;
+  
+  my $rets = json2nameValue($event);
+  
   my $whitecol = shift // 'FFFFFF';
-  my %ret; 
-  if(length($Event) < 10000 && $Event =~ m/^\s*[{[].*[}\]]\s*$/s) {
-        %ret = json2nameValue($Event);
+  
+  if (defined $rets->{state} && $rets->{state} =~ m/on|off/i) { 
+    my $newState = lc($rets->{state});
+    CommandSet(undef, "$name $newState");      
+    return { "CommandSet" => "$name $newState" };
   }
-  my @parms; 
-  if(!keys %ret) {
-    $Event =~ s/://g;
-    $Event = "state ".lc($Event) if $Event =~ m/OFF|ON/i;
-    @parms = split  m{\s+}xms, $Event;     
-    $ret{$parms[0]} = $parms[1];
+  if (defined $rets->{brightness}) {
+    my $bri = InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice" ? "bri" : "brightness";
+    CommandSet(undef, "$name $bri $rets->{brightness}");
+    return { "CommandSet" => "$name $bri $rets->{brightness}" };
   }
-  
-  my @devices = split m{\s+}xms, $names; 
-  for my $name (@devices) {
-
-    for my $k (keys %ret) {
-
-      my $string = qq($k $ret{$k});
-  
-      if($string =~ m/OFF|ON/i) {
-        my $command = $ret{$k};
-        CommandSet(undef, "$name $command");
+  if (defined $rets->{hue}) {
+    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+      my $rgb = Color::hsv2hex($rets->{hue},ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
+      CommandSet(undef, "$name rgb $rgb");
+      return { "CommandSet" => "$name rgb $rgb" };
+    } else {
+      CommandSet(undef, "$name hue $rets->{hue}");
+      return { "CommandSet" => "$name hue $rets->{hue}" };
+    }
+  }
+  if (defined $rets->{command}) {
+    if  ($rets->{command} =~ m/white/) {
+      if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") {
+        CommandSet(undef, "$name rgb $whitecol");
+        return { "CommandSet" => "$name rgb $whitecol" };
+      } else { 
+        CommandSet(undef, "$name command Weiss");
+        return { "CommandSet" => "$name command Weiss" };
       }
-  
-      if ($string =~ /brightness/)  {
-        $string =~ s/brightness/bri/g if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice"); 
-        CommandSet(undef, "$name $string");
-      }
-
-      if ($string =~ /hue/)  {
-        if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
-          my $rgb = Color::hsv2hex($ret{$k},ReadingsVal($name,"sat",100)/100,sprintf("%.2f",ReadingsVal($name,"bri",255)/255));
-          CommandSet(undef, "$name rgb $rgb");
-        } else {
-          CommandSet(undef, "$name $Event");
-        }
-      }
-  
-      if ($string =~ /saturation/)  {
-        if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
-          my $sat = int($ret{$k}*2.54);
-          CommandSet(undef, "$name sat $sat");
-        } else {
-          CommandSet(undef, "$name $Event");
-        }
-      }
-  
-      if ($string =~ /command set_white/)  {
-        if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") {
-          CommandSet(undef, "$name rgb $whitecol");
-        } else { 
-          CommandSet(undef, "$name command Weiss");
-        }
-      }
-
-    } #end keys loop
-  } #end devices loop
-  return;
+    }
+    return { "CommandSet" => "$rets->{command} not assigned" };
+  }
+  if (defined $rets->{saturation}) {
+    if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") { 
+      my $sat = int($rets->{saturation}*2.54);
+      CommandSet(undef, "$name sat $sat");
+      return { "CommandSet" => "$name sat $sat" };
+    } else {
+       CommandSet(undef, "$name saturation $rets->{saturation}");
+       return { "CommandSet" => "$name saturation $rets->{saturation}" };
+    }
+  }
 }
+
 
 sub milight_to_MPD {
   my $name  = shift;
@@ -225,65 +222,7 @@ sub milight_to_MPD {
   return;
 }
 
-sub milight_to_shutter {
-  #foreach my $setdevice (split (/ /,$Target_Devices)) {
-  my $name  = shift;
-  my $event = shift // return;
-  my $type = InternalVal($name,"TYPE","MQTT2_DEVICE"); 
-  my $moving = ReadingsVal($name,"motor","stop") =~ /stop/ ? 0 : 1;
-  $moving = 1 if (ReadingsNum($name,"power",0) > 1 && $type eq "ZWave");
-  
-  my $com = lc($event);
-  my $now = gettimeofday;
-  if (!$moving && $event =~ m/ON|OFF/) {
-    if ($now - ReadingsVal($name, "myLastRCOnOff",$now) < 5) {
-      CommandSetReading(undef,"$name myLastRCOnOff $now");
-      return CommandSet(undef,"$name $com");
 
-    } else {
-      return CommandSetReading(undef,"$name myLastRCOnOff $now");
-    } 
-  } 
-  if ($event =~ m/ON|OFF/) { 
-    CommandSetReading(undef,"$name myLastRCOnOff $now");
-    return CommandSet(undef,"$name stop");
-  }
-  if ($event =~ /brightness/) {
-    my ($reading,$value) = split (/ /,$event);
-    my $level = int (round ($value/2,55));
-    $com = $type eq "ZWave" ? "dim" : "pct"; 
-    $level = 99 if ($level == 100 && $type eq "ZWave");
-    return CommandSet(undef, "$name $com $level");
-  } 
-  if ($event =~ /saturation/) {
-    my ($reading,$value) = split (/ /,$event);
-    my $slatname = $name;
-    my $slatlevel = 100 - $value;
-    $com = $type eq "ZWave" ? "dim" : "slats"; 
-    $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
-    my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
-    $defnr++;
-    my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
-    $slatname = shift @slatnames;
-    
-    return CommandSet(undef, "$slatname $com $slatlevel");
-
-  } 
-  if ($event =~ /color_temp/) {
-    my ($reading,$value) = split (/ /,$event);
-    my $slatname = $name;
-    my $slatlevel = 100 - ($value/(370-153))*100;
-    $com = $type eq "ZWave" ? "dim" : "slats"; 
-    $slatlevel = 99 if ($slatlevel == 100 && $type eq "ZWave");
-    my ($def,$defnr) = split(" ", InternalVal($name,"DEF",$name));
-    $defnr++;
-    my @slatnames = devspec2array("DEF=$def".'.'.$defnr);
-    $slatname = shift @slatnames;
-    
-    return CommandSet(undef, "$slatname $com $slatlevel");
-  }
-  return;
-}
 
 sub milight_to_shutter2 {
   my $name  = shift;
@@ -348,30 +287,6 @@ sub milight_to_shutter2 {
   return;
 }
 
-sub milight_Deckenlichter {
-  my $Event = shift // return;
-  if ($Event =~ /mode_speed_up/){
-    return CommandSet(undef, "Licht_WoZi_Hinten_Aussen toggle");
-  } 
-  if ($Event =~ /mode_speed_down/){
-    return CommandSet(undef, "Licht_WoZi_Vorn_Aussen toggle");
-  } 
-  if ($Event =~ /command: set_white/){
-    return CommandSet(undef, "Licht_WoZi_Vorn_Mitte toggle");
-  } 
-  if ($Event =~ /mode: [0-8]/){
-    return CommandSet(undef, "Licht_WoZi_Hinten_Mitte toggle");
-  } else {
-    my @ondevs = devspec2array("Licht_WoZi_(Hinten|Vorn)_(Aussen|Mitte):FILTER=state=on");
-    if (@ondevs) {
-      CommandSet(undef, "Licht_WoZi_(Hinten|Vorn)_(Aussen|Mitte):FILTER=state=on off") if ($Event eq "OFF");
-    } else {
-      CommandSet(undef, "Licht_WoZi_Vorn_Aussen on");
-    } 
-  }
-  return;
-}
-
 sub milight_4_Lights_matrix {
   my $event = shift;
   my $devA  = shift // return;
@@ -383,17 +298,17 @@ sub milight_4_Lights_matrix {
   
   if (defined $rets->{command}) {
     if ($rets->{command} eq "mode_speed_up") {
-	  CommandSet(undef, "$devC toggle") ;
-	  return { "CommandSet" => "$devC toggle" } ;
-	}
-    if  ($rets->{command} eq "mode_speed_down") {
-	  CommandSet(undef, "$devA toggle");
-	  return { "CommandSet" => "$devA toggle" };
+    CommandSet(undef, "$devC toggle") ;
+    return { "CommandSet" => "$devC toggle" } ;
     }
-	if ($rets->{command} eq "set_white") {
-	  CommandSet(undef, "$devB toggle");
-	  return { "CommandSet" => "$devB toggle" };
-	}
+    if  ($rets->{command} eq "mode_speed_down") {
+    CommandSet(undef, "$devA toggle");
+    return { "CommandSet" => "$devA toggle" };
+    }
+    if ($rets->{command} eq "set_white") {
+    CommandSet(undef, "$devB toggle");
+    return { "CommandSet" => "$devB toggle" };
+    }
   } 
   if (defined $rets->{mode}) {
     CommandSet(undef, "$devD toggle");
@@ -402,10 +317,10 @@ sub milight_4_Lights_matrix {
     my @ondevs = devspec2array("($devA|$devB|$devC|$devD):FILTER=state=on");
     if (@ondevs) {
       CommandSet(undef, "($devA|$devB|$devC|$devD):FILTER=state=on off") if (defined $rets->{state} && $rets->{state} eq "OFF");
-	  defined $rets->{state} && $rets->{state} eq "OFF" ? return { "CommandSet" => "($devA|$devB|$devC|$devD):FILTER=state=on off" } : return { "CommandSet" => "nothing to do, all already off" };
+      defined $rets->{state} && $rets->{state} eq "OFF" ? return { "CommandSet" => "($devA|$devB|$devC|$devD):FILTER=state=on off" } : return { "CommandSet" => "nothing to do, all already off" };
     } else {
       CommandSet(undef, "$devA on");
-	  return { "CommandSet" => "$devA on" };
+      return { "CommandSet" => "$devA on" };
     } 
   }
   return;
@@ -424,38 +339,49 @@ sub milight_4_Lights_matrix {
   All MiLight hardware (bulbs and remotes) are represented by MQTT2_DEVICE using a esp8266_milight_hub as described here: https://github.com/sidoh/esp8266_milight_hub.<br>
   This pieces of code offer options to build links between MiLight@MQTT2_DEVICE and "other" FHEM devices (e.g. HUE bulbs, shutter devices, Homematic remotes) and can also be used to built an indirect bridge between V6 remotes and V5 bulbs.
 </ul>
-<ul>
+<ul><ul>
   <b>Routines to use MiLight remotes as input device</b><br>
-  NOTE: As one has to press the "on" button to activate a specific layer of the remote, often the first "on" command received will be ignored. You have to press the key twice within a few seconds in these cases. This is especially the case, when controlling other devices than lights to avoid unexpected or unintended behaviour (like starting a music player when only reduction of volume is intended as first step).  <br><br>
-  All remote keys are configured as seperate MQTT2_DEVICE instances like this one:<br>
-  <code>defmod MiLight_RC1_0 MQTT2_DEVICE milight_0xABCD_0<br>
-  attr MiLight_RC1_0 readingList milight/updates/0xABCD/fut089/0:.* { json2nameValue($EVENT) }\<br>
-  milight/states/0xABCD/fut089/0:.* {}</code><br><br>
-  The Perl routines typically are called from within a notify listining to just one of the MQTT2_DEVICEs, not all of the buttons might be used:<br>
-  <code>defmod n_MiLight_RC1_1 notify MiLight_RC1_1:(ON|OFF|(brightness|command|bulb_mode|hue|mode|saturation).*) {milight_to_MPD("myHueDevice",$EVENT)}</code><br>
-  <code>defmod n_MiLight_RC1_0 notify MiLight_RC1_0:(ON|OFF|(brightness|command|bulb_mode|mode).*) {milight_to_MPD("myMPD",$EVENT)}</code><br>
-  Typically the device to switch and the $EVENT are handed over to the routines, in case it's just one parameter, it's $EVENT only.<br><br>
+  NOTE: As activation of a specific layer on the remote requires to press the "on" button, often the first "on" command will be ignored. You have to press the key twice within a few seconds in these cases. This is especially the case, when controlling other devices than lights to avoid unexpected or unintended behaviour (like starting a music player when only reduction of volume is intended as first step).  <br><br>
+  For most It's recommended to setup a single MQTT2_DEVICE per remote to dispatch all received commands like this one:<br>
+  <pre>defmod MiLight_RC_WZ MQTT2_DEVICE milight_0x5D47_0
+attr MiLight_RC_WZ readingList milight/updates/0x5D47/fut089/0:.* { milight_to_MPD('myMPD',$EVENT) }\
+milight/updates/0x5D47/fut089/1:.* { milight_FUT_to_RGBW('Licht_Stehlampe_links',$EVENT) }\
+milight/updates/0x5D47/fut089/2:.* { milight_FUT_to_RGBW('Licht_Stehlampe_rechts',$EVENT) }\
+milight/updates/0x5D47/fut089/3:.* { milight_4_Lights_matrix($EVENT, 'Licht_WoZi_Vorn_Aussen', 'Licht_WoZi_Vorn_Mitte', 'Licht_WoZi_Hinten_Aussen', 'Licht_WoZi_Hinten_Mitte') }\
+milight/updates/0x5D47/fut089/4:.* { milight_to_shutter2('Jalousie_WZ',$EVENT) }\
+milight/updates/0x5D47/fut089/5:.* { milight_to_shutter2('Rollladen_WZ_SSO',$EVENT) }\
+milight/updates/0x5D47/fut089/6:.* { milight_to_shutter2('Rollladen_WZ_SSW',$EVENT) }\
+milight/updates/0x5D47/fut089/7:.* {}\
+milight/updates/0x5D47/fut089/8:.* {}\
+milight/states/0x5D47/fut089/[0-8]:.* {}
+</pre>
+  The last three lines will just prevent further actions derived frim the not used channels (or the states info including everything) from to hub.<br>
+  All routines expect one or more target device names to be switched, the received JSON ($EVENT) will be handed over as is and is analysed within the routines.<br><br>
 <ul>
-  <b>milight_FUT_to_RGBW($$)</b><br>
+  <b>milight_FUT_to_RGBW</b><br>
   Allows indirect control of 
   <li>other MiLight devices using a different protocol or </li> 
   <li>other light devices. Especially HUEDevice should work also for brightness and hue commands.</li> 
 </ul><br>
 <ul>
-  <b>milight_to_shutter($$)</b><br>
+  <b>milight_FUT_to_HUE</b><br>
+  Just like milight_FUT_to_RGBW, but with extended support for HUEDevice type target devices.
+</ul><br>
+<ul>
+  <b>milight_to_shutter2</b><br>
   Allows control of shutter devices. Tested with following devices:<br>
   <li>HM-LC-Bl1PBU-FM as CUL_HM, shutters only</li> 
-  <li>ZWave actor FGR-223 in venetian mode - lamella position can be controlled via saturation slider</li> <br>
+  <li>ZWave actor FGR-223 in venetian mode - lamella position can be controlled via saturation slider</li>
 </ul><br>
 <ul>
-  <b>milight_Deckenlichter ($)</b><br>
-  Allows control of a group of 4 channels of on/off devices.<br>
+  <b>milight_4_Lights_matrix</b><br>
+  Allows to control a group of 4 simple on/off devices using the four mode buttons (in the middle of the remote).<br>
 </ul><br>
 <ul>
-  <b>milight_to_MPD($$)</b><br>
+  <b>milight_to_MPD</b><br>
   Allows control of a MusicPlayerDeamon - basics like play, pause, stop and volume.<br>
   Additionally toggle two replay gain modes and "consumer" setting.
-</ul>
+</ul></ul>
 <ul>
   <br><br>
   <b>Routines to use other remote types to control MiLight bulbs</b><br>
@@ -474,21 +400,7 @@ sub milight_4_Lights_matrix {
 </ul>
 </ul>
 <ul>
-<pre>defmod MiLight_RC_WZ MQTT2_DEVICE milight_0x5D47_0
-attr MiLight_RC_WZ DbLogExclude .*
-attr MiLight_RC_WZ IODev MQTT2_FHEM_Server
-attr MiLight_RC_WZ group Remote
-attr MiLight_RC_WZ readingList milight/updates/0x5D47/fut089/0:.* { milight_to_MPD('myMPD',$EVENT) }\
-milight/updates/0x5D47/fut089/1:.* { milight_FUT_to_RGBW('Licht_Stehlampe_links',$EVENT) }\
-milight/updates/0x5D47/fut089/2:.* { milight_FUT_to_RGBW('Licht_Stehlampe_rechts',$EVENT) }\
-milight/updates/0x5D47/fut089/3:.* { milight_4_Lights_matrix($EVENT, 'Licht_WoZi_Vorn_Aussen', 'Licht_WoZi_Vorn_Mitte', 'Licht_WoZi_Hinten_Aussen', 'Licht_WoZi_Hinten_Mitte') }\
-milight/updates/0x5D47/fut089/4:.* { milight_to_shutter2('Jalousie_WZ',$EVENT) }\
-milight/updates/0x5D47/fut089/5:.* { milight_to_shutter2('Rollladen_WZ_SSO',$EVENT) }\
-milight/updates/0x5D47/fut089/6:.* { milight_to_shutter2('Rollladen_WZ_SSW',$EVENT) }\
-milight/updates/0x5D47/fut089/7:.* {}\
-milight/updates/0x5D47/fut089/8:.* {}\
-milight/states/0x5D47/fut089/[0-8]:.* {}
-</pre>
+
 </ul>
 =end html
 =cut
