@@ -12,6 +12,22 @@ sub incrementHerdLicht() {
   }
 }
 
+#own code, see https://forum.fhem.de/index.php/topic,115722.msg1100046.html#msg1100046
+sub myDimUp_PctToMax {
+  my $name   = shift // return;
+  my $maxval = shift // 100;
+  my $remote = shift;
+  my $remotestop = shift // '1003';
+ 
+  my $pct = ReadingsNum($name, 'pct', 0) +3;
+  my $schalter = ReadingsVal($remote, "state", "");
+  if ($pct < 103 && $schalter ne $remotestop) {
+    fhem("set $name pct $pct");
+    fhem("sleep 0.5;{myDimUp_PctToMax($name, 100, $remote, $remotestop)}");
+  }
+}
+
+
 #https://forum.fhem.de/index.php/topic,29438.msg898855.html#msg898855
 sub randomtime_with_realtime($;$)
 {
