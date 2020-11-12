@@ -1,3 +1,54 @@
+###############################################
+#weekprofile für Homematic- Templates (über HMinfo-Heizungstemplates) nutzen
+#https://forum.fhem.de/index.php/topic,70494.0.html
+#preparation
+#define KG.HZ.Profile weekprofile
+#define test1 weekprofile OG.SZ.Heizung_Clima
+
+#############################
+###  Thermostat kopieren  ###
+#############################
+
+sub kopieren {
+    #Templatenamen aus dem Thermostat holen
+    my $Name = AttrVal(InternalVal("test1","DEF",0),"tempListTmpl",1);
+    #Profil aus dem Thermostat
+    my $daten = fhem("get test1 profile_data master");
+   
+    #Profil zum Editor hinzufügen
+    fhem("set KG.HZ.Profile profile_data ".$Name." ".$daten);
+}
+
+#code für userReaddings
+# Das UserReading gehört zun Device "weekplan", aus dem Du über $name die Profildaten holst.
+M_Info {
+  my $confFile = "./FHEM/wochenplan-tempList.cfg";
+  my $entit = fhem("get $name profile_names");
+  my $ret="\#               bis   Soll bis   Soll bis   Soll bis   Soll\n";
+  my @lines = split /,/, $entit;
+  my @D = ("Sat","Sun","Mon","Tue","Wed","Thu","Fri");
+  my ($text,$tmp)="";
+  foreach my $Raum (@lines)  {
+      $tmp = fhem("get $name profile_data $Raum");
+      $text = decode_json($tmp);
+      $ret.="entities:".$Raum."\n";
+      for my $i (0..6) {
+          $ret.="R_".$i."_tempList".$D[$i].">";
+          for my $j (0..7) {
+              if (defined $text->{$D[$i]}{'time'}[$j]) {
+              $ret.=$text->{$D[$i]}{'time'}[$j]." ".$text->{$D[$i]}{'temp'}[$j]." ";
+              } }
+      $ret.="\n";
+      }
+  }
+  open IMGFILE, '>'.$confFile;
+  print IMGFILE $ret;
+  close IMGFILE;
+  return "HMinfo configTempFile written to $confFile"   
+}
+
+##################################################################
+
 #Beispiel für Hash-Nutzung in userReadings:
 # { my %rets = ("Error"  => "Error","0" => "ist aus","1" => "Standby","2" => "initialisiert","3" => "wird geladen","4" => "wird entladen","5" => "Fehler","6"  => "Leerlauf","7"  => "Leerlauf",);; my $val = ReadingsVal("SolarEdge", "Batt_State", "Error");; my $val = ReadingsVal("SolarEdge", "Batt_State", "Error");; $rets{$val};;}
 
