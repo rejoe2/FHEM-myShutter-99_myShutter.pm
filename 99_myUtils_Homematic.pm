@@ -339,43 +339,47 @@ sub hm_copy_HMInfoTowp {
   return "No device $name defined!"   if !defined $defs{$name};
   return "No device $target defined!" if !defined $defs{$target};
   return "$target is not a HMinfo device!" if InternalVal($name,'TYPE','unknown') ne "HMinfo";
-  my $confFile = './'.AttrVal($name,'configDir','FHEM').'/';
-  $confFile .= AttrVal($name,'configTempFile',"weekprofile-tempList.cfg");
-  my ($err, @cfgDataAll) = FileRead( $confFile );
+  my $confDir = AttrVal($name,'configDir','FHEM');
+  my $confFile = AttrVal($name,'configTempFile',"weekprofile-tempList.cfg");
+  my ($err, @cfgDataAll) = FileRead( qq(./$confDir/$confFile) );
   return $err if $err;
   
   my ($Raum,$prfDev);
-  my @rawdef;
+  my $json = JSON->new->allow_nonref;
+	
   for (my $i = 0; $i < @cfgDataAll ; $i++) {
-    my $prfDev = {};
     if ($cfgDataAll[$i] =~ /^entities:(.*)/x) {
-      CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev") if $i;
+	  if ($i>0) {
+		$prfDev = $json->encode($prfDev);
+	    CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev");
+	  }
       $Raum = $1;
-      $prfDev = {};
-    } else {
+      $prfDev = undef;
+    } elsif ( $cfgDataAll[$i] =~ m/^R_.*tempList.*/x ) {
        #R_0_tempListSat>24:00 18.0 
-       my ($day, $prf) = split m/>/x, $cfgDataAll[$i], 2; 
+       my ($day, $prf) = split m/[>]/x, $cfgDataAll[$i]; 
        # split into time temp time temp etc.
        # 06:00 17.0 22:00 21.0 24:00 17.0
-       my @timeTemp = split(m/ /x, $prf);
-       next if $day =~ m/^R_P[23].*tempList(...)$/x; # skip other than first WT profiles
-       $day =~ m/^R_.*tempList(...)$/x; 
-       $day = $1;
+       my @timeTemp = split m/[ ]/x, $prf;
+       next if $day =~ m/^R_P[23].*tempList(...)/x; # skip other than first WT profiles
+       $day = $day =~ m/^R_.*tempList(...)/x ? $1 : $day;
        my (@times,@temps);
        for(my $j = 0; $j < scalar(@timeTemp); $j += 2) {
          push(@times, $timeTemp[$j]);
-         push(@temps, $timeTemp[$j+1]);
+         push(@temps, $timeTemp[1+$j]);
        }
        if (scalar(@times)==0) {
           push(@times, "24:00");
           push(@temps, "18.0");
        }
-       $prfDev{$day}{temp} = @temps;
-       $prfDev{$day}{time} = @times;
+       $prfDev->{$day}->{"temp"} = \@temps;
+       $prfDev->{$day}->{"time"} = \@times;
     } 
   }
-  CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev") if $prfDev;
-  
+  if ( $prfDev ) {
+    $prfDev = $json->encode($prfDev);
+	CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev") ;
+  }
   return "HMinfo configTempFile $confFile imported";
 }
 
