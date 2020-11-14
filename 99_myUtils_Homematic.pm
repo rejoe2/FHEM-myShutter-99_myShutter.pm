@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtils_Homematic.pm weekprofile edition 2020-11-12 Beta-User $
+# $Id: myUtils_Homematic.pm weekprofile edition 2020-11-14 Beta-User $
 #
 
 package main;
@@ -291,24 +291,29 @@ sub hm_copy_wpToHMInfo {
   my $name   = shift // return "provide weekprofile source name!";
   my $target = shift // return "provide HMinfo device name!";
   my $mode = shift // 1;
+  my $naming = shift // 1; #not use wp name as prefix
+  
   return "No device $name defined!"   if !defined $defs{$name};
   return "No device $target defined!" if !defined $defs{$target};
   return "$target is not a HMinfo device!" if InternalVal($target,'TYPE','unknown') ne "HMinfo";
-  my $confFile = './'.AttrVal($target,'configDir','FHEM').'/';
-  $confFile .= AttrVal($target,'configTempFile',"weekprofile-tempList.cfg");
+  use JSON;         #libjson-perl
   
   my @topicnames = split m/:/xms, ReadingsVal($name,'topics','default');
-  my $ret="\#               bis   Soll bis   Soll bis   Soll bis   Soll\n";
   my @D = ("Sat","Sun","Mon","Tue","Wed","Thu","Fri");
   my ($text,$tmp)="";
   for my $topic (@topicnames) {
+    my $confFile = './'.AttrVal($target,'configDir','FHEM').'/';
+    $confFile .= "${name}_" if $naming;
+	$confFile .= "${topic}.cfg";
+    my $ret="\#               bis   Soll bis   Soll bis   Soll bis   Soll\n";
     my $profilenames = CommandGet(undef, "$name profile_names $topic");
     my @lines = split /,/, $profilenames;
     for my $Raum (@lines)  {
       $tmp = CommandGet(undef,"$name profile_data $topic:$Raum");
       if ($tmp !~ m{(profile.*not.found|usage..profile_data..name)}xms ) {
         $text = decode_json($tmp);
-        $ret.="entities:${topic}_${Raum}\n";
+        $ret.="\n" if $ret ne "";
+        $ret.="entities:${Raum}\n";
         for my $i (0..6) {
           $ret.="R_".$i."_tempList".$D[$i].">";
           for my $j (0..7) {
@@ -320,16 +325,13 @@ sub hm_copy_wpToHMInfo {
         }
       }
     }
+    my ($err, @content) = FileRead($confFile);
+    @content="" if !$mode;
+    push (@content, $ret);
+    $err = FileWrite($confFile,@content);
+    return $err if $err;
   }
-  my ($err, @content) = FileRead($confFile);
-  #return $err if $err;
-  
-  @content="" if !$mode;
-  push (@content, $ret);
-  $err = FileWrite($confFile,@content);
-  return $err if $err;
-
-  return "HMinfo configTempFile written to $confFile";
+  return "HMinfo configTempFile(s) written";
 }
 
 
@@ -339,48 +341,61 @@ sub hm_copy_HMInfoTowp {
   return "No device $name defined!"   if !defined $defs{$name};
   return "No device $target defined!" if !defined $defs{$target};
   return "$target is not a HMinfo device!" if InternalVal($name,'TYPE','unknown') ne "HMinfo";
+  return "$target is not prepared for topic use!" if !AttrVal($target,'useTopics',0);
+  use JSON;         #libjson-perl
+
   my $confDir = AttrVal($name,'configDir','FHEM');
-  my $confFile = AttrVal($name,'configTempFile',"weekprofile-tempList.cfg");
-  my ($err, @cfgDataAll) = FileRead( qq(./$confDir/$confFile) );
-  return $err if $err;
-  
-  my ($Raum,$prfDev);
-  my $json = JSON->new->allow_nonref;
-	
-  for (my $i = 0; $i < @cfgDataAll ; $i++) {
-    if ($cfgDataAll[$i] =~ /^entities:(.*)/x) {
-	  if ($i>0) {
-		$prfDev = $json->encode($prfDev);
-	    CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev");
+  my $confFiles = AttrVal($name,'configTempFile',"weekprofile-tempList.cfg");
+  my @files = split m/,/x, $confFiles; 
+
+  for (my $h = 0; $h < @files ; $h++) {
+    my $confFile = $files[$h];
+    my ($err, @cfgDataAll) = FileRead( qq(./$confDir/$confFile) );
+    return $err if $err;
+    $confFile =~s/.cfg//g; #delete file extension
+    
+    my ($Raum,$prfDev,@rooms);
+    my $json = JSON->new->allow_nonref;
+
+    for (my $i = 0; $i < @cfgDataAll ; $i++) {
+      if ($cfgDataAll[$i] =~ /^entities:(.*)/x) {
+        if ($i>0) {
+        $prfDev = $json->encode($prfDev);
+        CommandSet(undef, "$target profile_data $Raum:$confFile $prfDev");
+      }
+        @rooms = split m/,/x, $1;
+		$Raum = $rooms[0];
+        $prfDev = undef;
+      } elsif ( $cfgDataAll[$i] =~ m/^R_.*tempList.*/x ) {
+         #R_0_tempListSat>24:00 18.0 
+         my ($day, $prf) = split m/[>]/x, $cfgDataAll[$i]; 
+         # split into time temp time temp etc.
+         # 06:00 17.0 22:00 21.0 24:00 17.0
+         my @timeTemp = split m/[ ]/x, $prf;
+         next if $day =~ m/^R_P[23].*tempList(...)/x; # skip other than first WT profiles
+         $day = $day =~ m/^R_.*tempList(...)/x ? $1 : $day;
+         my (@times,@temps);
+         for(my $j = 0; $j < scalar(@timeTemp); $j += 2) {
+           push(@times, $timeTemp[$j]);
+           push(@temps, $timeTemp[1+$j]);
+         }
+         if (scalar(@times)==0) {
+           push(@times, "24:00");
+           push(@temps, "18.0");
+         }
+         $prfDev->{$day}->{"temp"} = \@temps;
+         $prfDev->{$day}->{"time"} = \@times;
+      }
+    }
+    if ( $prfDev ) {
+      $prfDev = $json->encode($prfDev);
+      CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev") ;
+	  for(my $j = 1; $j < scalar(@rooms); $j ++) {
+	    CommandSet(undef, "$target reference_profile $confFile:$Raum $confFile:$rooms[$j]") if defined $rooms[$j];
 	  }
-      $Raum = $1;
-      $prfDev = undef;
-    } elsif ( $cfgDataAll[$i] =~ m/^R_.*tempList.*/x ) {
-       #R_0_tempListSat>24:00 18.0 
-       my ($day, $prf) = split m/[>]/x, $cfgDataAll[$i]; 
-       # split into time temp time temp etc.
-       # 06:00 17.0 22:00 21.0 24:00 17.0
-       my @timeTemp = split m/[ ]/x, $prf;
-       next if $day =~ m/^R_P[23].*tempList(...)/x; # skip other than first WT profiles
-       $day = $day =~ m/^R_.*tempList(...)/x ? $1 : $day;
-       my (@times,@temps);
-       for(my $j = 0; $j < scalar(@timeTemp); $j += 2) {
-         push(@times, $timeTemp[$j]);
-         push(@temps, $timeTemp[1+$j]);
-       }
-       if (scalar(@times)==0) {
-          push(@times, "24:00");
-          push(@temps, "18.0");
-       }
-       $prfDev->{$day}->{"temp"} = \@temps;
-       $prfDev->{$day}->{"time"} = \@times;
-    } 
+    }
   }
-  if ( $prfDev ) {
-    $prfDev = $json->encode($prfDev);
-	CommandSet(undef, "$target profile_data $confFile:$Raum $prfDev") ;
-  }
-  return "HMinfo configTempFile $confFile imported";
+  return "HMinfo configTempFile $confFiles imported";
 }
 
 
@@ -424,6 +439,41 @@ __END__
    <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","21.5","3600","9000")}</code><br>
    <code>{easy_HM_TC_Holiday("Thermostat_Esszimmer_Gang","21.5","1:5","32:14")}</code><br>
   </ul>
+  
+  <b>HM_TC_Holiday</b>
+  <br>
+  Use this to set one RT or WT device in party mode<br>
+  Parameters: Device, Temperature, start date, start time, end date, end time<br>
+  NOTE: as these devices only accept time settings to 00 minutes and 30 minutes, all other figures will be rounded down to 00 or 30 minutes. Don't bother to do it by yourself, but note, effectively, the result could be a shorter periode of party mode.<br>
+  Example: 
+  <ul>
+   <code>{HM_TC_Holiday ("Thermostat_Esszimmer_Gang","16", "14.02.19", "16:30", "15.02.19" ,"05:00")}</code><br>
+  </ul>
+  
+  <b>hm_copy_HMInfoTowp</b>
+  <br>
+  Use this to import existant CUL_HM-tempList file(s) to weekprofile (useTopics has to be enabled there). Filename will be used as topic, "entities" will be used as profile names.
+  <br>
+    NOTE: May not work, if there's a comma-separated list of entities in the file.<br>
+  Example: 
+  <ul>
+   <code>{hm_copy_HMInfoTowp("hm","weekprofiles")}</code><br>
+  
+  </ul>
+  
+  <b>hm_copy_wpToHMInfo</b>
+  <br>
+  Use this to export existant weekprofiles to CUL_HM-comatible tempList file(s). Filename(s) will be derived from weekprofile device name and topic, you can decide with an optional third argument wheather existant content shall be kept (1) or overwritten (0) (default is 1=keep), or if there should be the weekprofile name as prefix in filenames.
+  
+  <br>
+  Examples: 
+  <ul>
+   <code>{hm_copy_wpToHMInfo("weekprofiles","hm")}</code><br>
+   <code>{hm_copy_wpToHMInfo("weekprofiles","hm",0)}</code><br>
+   <code>{hm_copy_wpToHMInfo("weekprofiles","hm",0,0)}</code><br>
+
+  </ul>
+  
 </ul>
 =end html
 =cut
