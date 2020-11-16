@@ -1,5 +1,5 @@
 ##############################################
-# $Id: attrT_MiLight_Utils.pm 2020-11-15 Beta-User $
+# $Id: attrT_MiLight_Utils.pm 2020-11-14 Beta-User $
 #
 
 package FHEM::attrT_MiLight_Utils;    ## no critic 'Package declaration'
@@ -400,6 +400,7 @@ sub four_Lights_matrix {
 
 sub Show_keyValue {
   my $event = shift // return;
+  my $name = shift;
   
   my $rets = json2nameValue($event);
   
@@ -408,6 +409,7 @@ sub Show_keyValue {
     $ret .= '\n' if $ret;
 	$ret .= "$k $rets->{$k}";
   }
+  return { "CommandSet" => "$name Key->Value is $ret" } if defined $name;
   return { "CommandSet" => "Key->Value is $ret" };
 }
 
@@ -438,12 +440,14 @@ milight/updates/0x5D47/fut089/3:.* { FHEM::attrT_MiLight_Utils::four_Lights_matr
 milight/updates/0x5D47/fut089/4:.* { FHEM::attrT_MiLight_Utils::shuttercontrol('Jalousie_WZ',$EVENT) }\
 milight/updates/0x5D47/fut089/5:.* { FHEM::attrT_MiLight_Utils::shuttercontrol('Rollladen_WZ_SSO',$EVENT) }\
 milight/updates/0x5D47/fut089/6:.* { FHEM::attrT_MiLight_Utils::shuttercontrol('Rollladen_WZ_SSW',$EVENT) }\
-milight/updates/0x5D47/fut089/7:.* {}\
+milight/updates/0x5D47/fut089/7:.* { FHEM::attrT_MiLight_Utils::Show_keyValue($EVENT,'layer7') }\
 milight/updates/0x5D47/fut089/8:.* {}\
 milight/states/0x5D47/fut089/[0-8]:.* {}
 </pre>
-  The last three lines will just prevent further actions derived frim the not used channels (or the states info including everything) from to hub.<br>
-  All routines expect one or more target device names to be switched, the received JSON $EVENT will be handed over as is and is analysed within the routines.<br><br>
+  The last two lines will just prevent further actions derived frim the not used channels (or the states info including everything) from to hub.<br>
+  All routines expect one or more target device names to be switched, the received JSON $EVENT will be handed over as is and is analysed within the routines.<br>
+  If there's no specific action assigned, the reading CommandSet will contain some more info about which routine was called and what key had been pressed. Might help to derive other/additional event handling routines...<br> 
+  <br>
 <ul>
   <b>FHEM::attrT_MiLight_Utils::FUT_to_RGBW</b><br>
   Allows indirect control of <br>
@@ -468,8 +472,18 @@ milight/states/0x5D47/fut089/[0-8]:.* {}
   <b>FHEM::attrT_MiLight_Utils::MPDcontrol</b><br>
   Allows control of a MusicPlayerDeamon - basics like play, pause, stop and volume.<br>
   Third argument is optional and allows control of volume channel of an AVR device (uses  saturation slider).<br>
-  Additionally toggle two replay gain modes and "consumer" setting.
-</ul></ul>
+  Additionally toggle two replay gain modes and "consumer" setting.<br> 
+  If state of the AVR device is off, you'll get an additional event, allowing to switch it on, e.g. by using a notify like<br>
+  <code>defmod MiLight_RC_WZ_notify_1 notify MiLight_RC_WZ:CommandSet:.Yamaha_Main.not.on,.Yamaha_Main.not.set.to.volume.* set $EVTPART1 on;; sleep 2.5 $EVTPART1;; set $EVTPART1 volume $EVTPART9;; set $EVTPART1 input hdmi4;; set $EVTPART1 dsp 7chstereo }
+</code><br><br>
+</ul>
+<ul>
+  <b>FHEM::attrT_MiLight_Utils::Show_keyValue</b><br>
+  Helper function to get some info about the received $EVENT without the need of a separate device. Might be usefull to derive own actions, just like with other unassigned buttons in one of the functions above. 2. parameter is optional, but might e.g. help to identify respective remote channel or hand over target device.
+</ul>
+</ul>
+
+
 <ul>
   <br><br>
   <b>Routines to use other remote types to control MiLight bulbs</b><br>
