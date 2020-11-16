@@ -1,5 +1,5 @@
 ##############################################
-# $Id: attrT_MiLight_Utils.pm 2020-11-04 Beta-User $
+# $Id: attrT_MiLight_Utils.pm 2020-11-15 Beta-User $
 #
 
 package FHEM::attrT_MiLight_Utils;    ## no critic 'Package declaration'
@@ -51,7 +51,7 @@ sub toggle_indirect {
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
   my $dimmLevel;
   my $hash;
-  for my $setdevice (split (/,/,$Target_Devices)) {
+  for my $setdevice (split (/,/x,$Target_Devices)) {
     $hash = $defs{$setdevice};
     if(lc(ReadingsVal($setdevice,"state","off")) eq "off") {
       CommandSet(undef, "$setdevice on");
@@ -78,7 +78,7 @@ sub dimm_indirect {
   my $name  = shift;
   my $event = shift // return;
   my $Target_Devices = AttrVal($name,"Target_Device","devStrich0");
-  for my $setdevice (split (/,/,$Target_Devices)) {
+  for my $setdevice (split (/,/x,$Target_Devices)) {
     if ($event =~ m/LongRelease/) {
       CommandDeleteReading(undef,"-q $setdevice myLastdimmLevel");
     } else {
@@ -107,6 +107,7 @@ sub dimm {
   }
   CommandSet(undef, "$Target_Device brightness $dimmLevel");
   readingsSingleUpdate($defs{$Target_Device}, "myLastdimmLevel",$dimmLevel, 0);
+  return;
 }
 
 sub FUT_to_RGBW {
@@ -115,7 +116,7 @@ sub FUT_to_RGBW {
   
   my $rets = json2nameValue($event);
   
-  if (defined $rets->{state} && $rets->{state} =~ m/on|off/i) { 
+  if (defined $rets->{state} && $rets->{state} =~ m{on|off}ixms) { 
     my $newState = lc($rets->{state});
     CommandSet(undef, "$name $newState");      
     return { "CommandSet" => "$name $newState" };
@@ -130,7 +131,7 @@ sub FUT_to_RGBW {
     return { "CommandSet" => "$name hue $rets->{hue}" };
   }
   if (defined $rets->{command}) {
-    if  ($rets->{command} =~ m/white/) {
+    if  ($rets->{command} =~ m{white}ixms) {
        CommandSet(undef, "$name command Weiss");
        return { "CommandSet" => "$name command Weiss" };
     }
@@ -146,6 +147,12 @@ sub FUT_to_RGBW {
        return { "CommandSet" => "$name saturation $rets->{saturation}" };
     }
   }
+  my $ret;
+  for my $k (sort keys %$rets) {
+    $ret .= '\n' if $ret;
+	$ret .= "$k $rets->{$k}";
+  }
+  return { "CommandSet" => "$name FUT_to_RGBW not assigned: $ret" };
 }
 
 sub FUT_to_HUE {
@@ -156,7 +163,7 @@ sub FUT_to_HUE {
   
   my $whitecol = shift // 'FFFFFF';
   
-  if (defined $rets->{state} && $rets->{state} =~ m/on|off/i) { 
+  if (defined $rets->{state} && $rets->{state} =~ m{on|off}ixms) { 
     my $newState = lc($rets->{state});
     CommandSet(undef, "$name $newState");      
     return { "CommandSet" => "$name $newState" };
@@ -177,7 +184,7 @@ sub FUT_to_HUE {
     }
   }
   if (defined $rets->{command}) {
-    if  ($rets->{command} =~ m/white/) {
+    if  ($rets->{command} =~ m{white}ixms) {
       if (InternalVal($name,"TYPE","MQTT2_DEVICE") eq "HUEDevice") {
         CommandSet(undef, "$name rgb $whitecol");
         return { "CommandSet" => "$name rgb $whitecol" };
@@ -198,6 +205,12 @@ sub FUT_to_HUE {
        return { "CommandSet" => "$name saturation $rets->{saturation}" };
     }
   }
+  my $ret;
+  for my $k (sort keys %$rets) {
+    $ret .= '\n' if $ret;
+	$ret .= "$k $rets->{$k}";
+  }
+  return { "CommandSet" => "$name FUT_to_HUE not assigned: $ret" };
 }
 
 
@@ -209,15 +222,16 @@ sub MPDcontrol {
   
   my $rets = json2nameValue($event);
   
-  if (defined $rets->{state} && $rets->{state} =~ m/on/i) { 
-    if (ReadingsVal($name,"state","play") =~ /pause|stop/) {
+  if (defined $rets->{state} && $rets->{state} =~ m{on}ixms) { 
+    CommandSetReading(undef, "$avrname CommandSet not on, $avrname not set to volume 25" ) if $avrname ne $name && ReadingsVal($avrname,"state","off") ne "on";
+	if (ReadingsVal($name,"state","play") =~ m{pause|stop}ixms) {
       CommandSet(undef, "$name play");      
       return { "CommandSet" => "$name play" };
     } else { 
       return { "CommandSet" => "$name already playing" };
     }
   }
-  if (defined $rets->{state} && $rets->{state} =~ m/off/i) { 
+  if (defined $rets->{state} && $rets->{state} =~ m{off}ixms) { 
     my $command = (ReadingsVal($name,"state","play") eq "pause" ) ? "stop" : "pause";
     CommandSet(undef, "$name $command");
     return { "CommandSet" => "$name $command" };
@@ -228,12 +242,14 @@ sub MPDcontrol {
     return { "CommandSet" => "$name volume $level" };
   }
   if (defined $rets->{color_temp}) {
-    my $avrVol = 100 - ($rets->{color_temp}/(370-153))*100;
-    CommandSet(undef, "$avrname volume $avrVol");
+    my $avrVol = 100 - int(($rets->{color_temp}-153)/2.17);
+	return { "CommandSet" => "$avrname not on, $avrname not set to volume $avrVol" } if $avrname ne $name && ReadingsVal($avrname,"state","off") ne "on";
+	CommandSet(undef, "$avrname volume $avrVol");
     return { "CommandSet" => "$avrname volume $avrVol" };
   }
   if (defined $rets->{saturation}) {
     my $avrVol = 100 - $rets->{saturation};
+	return { "CommandSet" => "$avrname not on, $avrname not set to volume $avrVol" } if $avrname ne $name && ReadingsVal($avrname,"state","off") ne "on";
 	CommandSet(undef, "$avrname volume $avrVol");
     return { "CommandSet" => "$avrname volume $avrVol" };
   }
@@ -251,31 +267,36 @@ sub MPDcontrol {
     }
   }
   if (defined $rets->{mode}) {
-    my $gainmode = CommandGet(undef, "$name mpdCMD replay_gain_status") =~ /album/ ? "auto" : "album"; 
+    my $gainmode = CommandGet(undef, "$name mpdCMD replay_gain_status") =~ m{album}ixms ? "auto" : "album"; 
 
     CommandSet(undef, "$name mpdCMD replay_gain_mode $gainmode");
     return { "CommandSet" => "$name mpdCMD replay_gain_mode $gainmode" };
   }
-  if (defined $rets->{bulb_mode} && $rets->{bulb_mode} =~ m/white/) {
-    my $consumer = CommandGet(undef, "$name mpdCMD status") =~ /consume. 0/ ? "1" : "0"; 
+  if (defined $rets->{bulb_mode} && $rets->{bulb_mode} =~ m{white}ixms) {
+    my $consumer = CommandGet(undef, "$name mpdCMD status") =~ m{consume. 0}ixms ? "1" : "0"; 
     CommandSet(undef, "$name mpdCMD consume $consumer");
     return { "CommandSet" => "$name mpdCMD consume $consumer" };
   }
-  return;
+  my $ret;
+  for my $k (sort keys %$rets) {
+    $ret .= '\n' if $ret;
+	$ret .= "$k $rets->{$k}";
+  }
+  return { "CommandSet" => "$name MPDcontrol not assigned: $ret" };
 }
 
 sub shuttercontrol {
   my $name  = shift;
   my $event = shift // return;
   my $type = InternalVal($name,"TYPE","MQTT2_DEVICE"); 
-  my $moving = ReadingsVal($name,"motor","stop") =~ /stop/ ? 0 : 1;
+  my $moving = ReadingsVal($name,"motor","stop") =~ m{stop}ixms ? 0 : 1;
   $moving = 1 if ReadingsNum($name,"power",0) > 1 && $type eq "ZWave";
 
   my $rets = json2nameValue($event);
   
   my $com = "off";
   my $now = gettimeofday;
-  if (!$moving && defined $rets->{state} && $rets->{state} =~ m/on|off/i) {
+  if (!$moving && defined $rets->{state} && $rets->{state} =~ m{on|off}ixms) {
     if ($now - ReadingsVal($name, "myLastRCOnOff",$now) < 5) {
       CommandSetReading(undef,"$name myLastRCOnOff $now");
       my $level = $rets->{state} =~ m/off/i ? 0 : 100;
@@ -286,7 +307,7 @@ sub shuttercontrol {
     } 
     return CommandSetReading(undef,"$name myLastRCOnOff $now"); 
   } 
-  if (defined $rets->{state} && $rets->{state} =~ m/on|off/i) { 
+  if (defined $rets->{state} && $rets->{state} =~ m{on|off}ixms) { 
     CommandSetReading(undef,"$name myLastRCOnOff $now");
     CommandSet(undef,"$name stop");
     return { "CommandSet" => "$name stop" };
@@ -324,7 +345,12 @@ sub shuttercontrol {
     CommandSet(undef, "$slatname $com $slatlevel");
     return { "CommandSet" => "$slatname $com $slatlevel" };
   }
-  return;
+  my $ret;
+  for my $k (sort keys %$rets) {
+    $ret .= '\n' if $ret;
+	$ret .= "$k $rets->{$k}";
+  }
+  return { "CommandSet" => "$name shuttercontrol not assigned: $ret" };
 }
 
 sub four_Lights_matrix {
@@ -363,11 +389,32 @@ sub four_Lights_matrix {
       return { "CommandSet" => "$devA on" };
     } 
   }
-  return;
+  my $ret;
+  for my $k (sort keys %$rets) {
+    $ret .= '\n' if $ret;
+	$ret .= "$k $rets->{$k}";
+  }
+  return { "CommandSet" => "four_Lights_matrix not assigned: $ret" };
 }
+
+
+sub Show_keyValue {
+  my $event = shift // return;
+  
+  my $rets = json2nameValue($event);
+  
+  my $ret;
+  for my $k (sort keys %$rets) {
+    $ret .= '\n' if $ret;
+	$ret .= "$k $rets->{$k}";
+  }
+  return { "CommandSet" => "Key->Value is $ret" };
+}
+
 
 1;
 
+__END__
 
 =pod
 =begin html
