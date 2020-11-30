@@ -142,10 +142,21 @@ sub myCalendar2Holiday {
   my @singledays;
   for my $holiday (@holidaysraw) {
     my @tokens = split (" ",$holiday);
-    #my @elements = split( " ", $holiday ); 
     my $duration = pop @tokens;
-    
+   
     my $severalDays = $duration =~ m,[0-9]+h, ? 0 : 1;
+    
+    #$duration of several days preprocessing, code base: https://stackoverflow.com/a/56125332
+    if ($duration =~ m,([0-9]+)d) {
+      my @start = split('-',$tokens[1], 2);
+      my @stop  = split('-',$tokens[2], 2);
+      # Get the epoch seconds for midday today
+      # (we use midday to eliminate potential problems
+      # when entering or leaving daylight savings time)
+      my $midday = timelocal(0, 0, 12, $start[0], $start[1], $year);
+      my $midday_end = $midday + HOURSECONDS * $1;
+      $tokens[0] = strftime('%d-%m', localtime($midday_end));
+    }
     
     $holiday = join(' ', @tokens);
     if (!$severalDays) {
@@ -153,9 +164,14 @@ sub myCalendar2Holiday {
       splice @tokens, 2, 1;
       $holiday = join(' ', @tokens);
       push (@singledays, $holiday);
-    } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
+    } elsif ($stop[1] < $start[1] ) {
+      $holiday = "4 $tokens[1] 12-31 $tokens[3]";
+      push (@holidays,$holiday);
+      $holiday = "4 01-01 $tokens[2] $tokens[3]";
+      unshift (@holidays,$holiday);
+    } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/ ) {
       push (@holidays, $holiday);
-    } else { 
+    } else {
       $holiday = "4 $tokens[1] 12-31 $tokens[3]";
       push (@holidays,$holiday) if $month > 9;
       $holiday = "4 01-01 $tokens[2] $tokens[3]";
@@ -168,5 +184,4 @@ sub myCalendar2Holiday {
   unshift (@holidays, "# Created by myCalendar2Holiday on $today");
   FileWrite("./FHEM/${targetname}.holiday",@holidays);
 }
-
 1;
