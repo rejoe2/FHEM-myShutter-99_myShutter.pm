@@ -9,6 +9,22 @@
 ###  Thermostat kopieren  ###
 #############################
 
+#https://forum.fhem.de/index.php/topic,9900.msg62719.html#msg62719
+sub TimeOffset {
+  use Time::Local qw(timelocal);
+  my $PtimeOrg = shift // "";
+  my $Poffset  = shift // 0;
+
+  my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) = localtime;
+
+  $PtimeOrg = $hour.":".$min if $PtimeOrg !~ /[0-2][0-9]:[0-5][0-9]/ or substr($PtimeOrg,0,2) >= 24;
+
+  my $TimeP     =  timelocal(0, substr($PtimeOrg,3,2), substr($PtimeOrg,0,2), $mday, $month, $year); 
+
+  return strftime('%H:%M:%S', localtime($TimeP + $Poffset * 60));
+
+}
+
 sub kopieren {
     #Templatenamen aus dem Thermostat holen
     my $Name = AttrVal(InternalVal("test1","DEF",0),"tempListTmpl",1);
