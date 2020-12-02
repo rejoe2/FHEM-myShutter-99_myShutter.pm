@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 23255 2020-11-29 09:21:24Z Beta-User $
+# $Id: mqtt2.template 23255 2020-11-02 Testversion Forum Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -517,7 +517,7 @@ par:ICON;ICON as set, defaults to temperature_humidity;{ AttrVal("DEVICE","icon"
 attr DEVICE icon ICON
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
 attr DEVICE stateFormat {sprintf ("Temperature: %.1f°C Humidity: %.1f%% Pressure: %.1fhpa", ReadingsVal($name,"temperature",0), ReadingsVal($name,"humidity",0), ReadingsVal($name,"pressure",0)) }
-attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT) }
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model zigbee2mqtt_TempHumHpaSensor
 setreading DEVICE attrTemplateVersion 20200904
@@ -533,7 +533,7 @@ par:ICON;ICON as set, defaults to temperature_humidity;{ AttrVal("DEVICE","icon"
 attr DEVICE icon ICON
 attr DEVICE stateFormat {sprintf ("Temperature: %.1f°C Humidity: %.1f%%", ReadingsVal($name,"temperature",0), ReadingsVal($name,"humidity",0)) }
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
-attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT) }
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model zigbee2mqtt_TempHumSensor
 setreading DEVICE attrTemplateVersion 20200904
@@ -545,10 +545,10 @@ filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
 order:L_08
 set DEVICE attrTemplate zigbee2mqtt_Human_Motion_Sensor
 attr DEVICE jsonMap battery:batteryPercent 
-attr DEVICE stateFormat Motion: occupancy \
-Battery: batteryPercent%
+attr DEVICE stateFormat Motion: occupancy\
+ Battery: batteryPercent%
 attr DEVICE model zigbee2mqtt_human_body_movement
-setreading DEVICE attrTemplateVersion 20201201
+setreading DEVICE attrTemplateVersion 20201202
 
 #source post: https://forum.fhem.de/index.php/topic,94495.msg898198.html#msg898198, addon by TomLee, https://forum.fhem.de/index.php/topic,116310.msg1105927.html#msg1105927
 name:zigbee2mqtt_Human_Motion_Sensor
@@ -561,13 +561,14 @@ par:ICON;ICON as set, defaults to people_sensor;{ AttrVal("DEVICE","icon","peopl
 attr DEVICE icon ICON
 attr DEVICE devStateIcon Motion..true:people_sensor Motion..false:motion_detector
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
-attr DEVICE jsonMap battery:batteryPercent illuminance_lux:0
-attr DEVICE stateFormat Motion: occupancy \
-Luminance: illuminance Battery: batteryPercent%
-attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT) }
+attr DEVICE jsonMap battery:batteryPercent battery:batteryVoltage illuminance_lux:0
+attr DEVICE stateFormat Motion: occupancy\
+ Luminance: illuminance <br>Battery: batteryPercent%
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
+attr DEVICE userReadings batteryVoltage:batteryVoltage.* {ReadingsNum($name,'batteryVoltage',0)/1000}
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model zigbee2mqtt_Human_Motion_Sensor
-setreading DEVICE attrTemplateVersion 20201201
+setreading DEVICE attrTemplateVersion 20201202
 
 name:zigbee2mqtt_Light_Intensity_Sensor
 desc: Light Intensity Sensor via zigbee2mqtt <br>Tested with: Xiaomi MiJia light intensity sensor GZCGQ01LM
@@ -579,7 +580,7 @@ par:ICON;ICON as set, defaults to weather_sun;{ AttrVal("DEVICE","icon","weather
 attr DEVICE icon ICON
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
 attr DEVICE stateFormat Lux: illuminance_lux Luminance: illuminance
-attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT) }
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model zigbee2mqtt_Light_Intensity_Sensor
 setreading DEVICE attrTemplateVersion 20200904
@@ -595,7 +596,7 @@ par:DEV_ID;name of the device in the zigbee2mqtt bridge;{ AttrVal("DEVICE","devi
 attr DEVICE icon ICON
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
 attr DEVICE stateFormat Motion: occupancy T: temperature
-attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT) }
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model zigbee2mqtt_TempMotion_sensor
 setreading DEVICE attrTemplateVersion 20200904
@@ -1888,11 +1889,11 @@ attr DEVICE icon ICON
 attr DEVICE comment For forther configuration use e.g. stateFormat attribtue like T: temperature°C | H: humidity% | B: batteryPercent%
 attr DEVICE readingList \
 TELETOPIC:.* { $EVENT =~ m,^.*(..Device.+)..$, ?  json2nameValue($1,'',$JSONMAP) : $EVENT =~ m,0xDEV_ID.:(.*).., ?  json2nameValue($1,'',$JSONMAP) : undef }
-attr DEVICE jsonMap Battery:0 Device:0 BatteryPercentage:batteryPercent Temperature:temperature Humidity:humidity
+attr DEVICE jsonMap Device:0 Battery:0 BatteryPercentage:batteryPercent BatteryVoltage:batteryVoltage Temperature:temperature Humidity:humidity
 deletereading -q DEVICE (?!associatedWith).*
 option:{ CALLSPEECHRECOGN }
 attr DEVICE model tasmota_zigbee2tasmota_generic_battery_sensor
-setreading DEVICE attrTemplateVersion 20201129
+setreading DEVICE attrTemplateVersion 20201202
 
 
 name:tasmota_zigbee2tasmota_remote_control
@@ -1906,10 +1907,10 @@ par:ICON;ICON as set, defaults to tradfri_remote;{ AttrVal("DEVICE","icon","trad
 attr DEVICE icon ICON
 attr DEVICE readingList \
 TELETOPIC:.* { $EVENT =~ m,(([0-9])([0-9])([0-9])([0-9])!([0-9][0-9])), ? { 'state'=>"${5}${4}${3}${2}$6" } : $EVENT =~ m,^.*(..Device.+)..$, ?  json2nameValue($1,'',$JSONMAP) : $EVENT =~ m,0xDEV_ID.:(.*).., ?  json2nameValue($1,'',$JSONMAP) : undef }
-attr DEVICE jsonMap Battery:batteryPercent Device:0 BatteryPercentage:0 
+attr DEVICE jsonMap Device:0 Battery:0 BatteryPercentage:batteryPercent BatteryVoltage:batteryVoltage Temperature:temperature 
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model tasmota_zigbee2tasmota_remote_control
-setreading DEVICE attrTemplateVersion 20200814
+setreading DEVICE attrTemplateVersion 20201202
 
 
 name:tasmota_zigbee2tasmota_window_contact
@@ -1924,12 +1925,12 @@ par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attribu
 attr DEVICE icon ICON
 attr DEVICE readingList \
 TELETOPIC:.* { $EVENT =~ s/"Power":1/"state":"open"/g; $EVENT =~ s/"Power":0/"state":"closed"/g; $EVENT =~ m,^.*(..Device.+)..$, ?  json2nameValue($1,'',$JSONMAP) : $EVENT =~ m,0xDEV_ID.:(.*).., ?  json2nameValue($1,'',$JSONMAP) : undef  }
-attr DEVICE jsonMap Battery:batteryPercent Device:0 BatteryPercentage:0
+attr DEVICE jsonMap Device:0 Battery:0 BatteryPercentage:batteryPercent BatteryVoltage:batteryVoltage
 deletereading -q DEVICE (?!associatedWith).*
 option:{ CALLSPEECHRECOGN }
 set DEVICE attrTemplate speechcontrol_gdt_and_mapping GENERICDEVTYPE=contact HOMEBRIDGEMAPPING="ContactSensorState=state,values=closed:CONTACT_DETECTED;;open:CONTACT_NOT_DETECTED"
 attr DEVICE model tasmota_zigbee2tasmota_window_contact
-setreading DEVICE attrTemplateVersion 20200814
+setreading DEVICE attrTemplateVersion 20201202
 
 
 name:tasmota_zigbee2tasmota_motion_sensor
@@ -1944,11 +1945,11 @@ par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attribu
 attr DEVICE icon ICON
 attr DEVICE readingList \
 TELETOPIC:.* { $EVENT =~ m,^.*(..Device.+)..$, ?  json2nameValue($1,'',$JSONMAP) : $EVENT =~ m,0xDEV_ID.:(.*).., ?  json2nameValue($1,'',$JSONMAP) : undef }
-attr DEVICE jsonMap Battery:0 Device:0 BatteryPercentage:batteryPercent Temperature:temperature Humidity:humidity
+attr DEVICE jsonMap Device:0 Battery:0 BatteryPercentage:batteryPercent BatteryVoltage:batteryVoltage
 attr DEVICE stateFormat Motion: Occupancy
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model tasmota_zigbee2tasmota_motion_sensor
-setreading DEVICE attrTemplateVersion 20201129
+setreading DEVICE attrTemplateVersion 20201202
 
 
 # Eurotronic Spirit ZigBee version
@@ -1966,7 +1967,7 @@ attr DEVICE icon ICON
 attr DEVICE comment For forther configuration use e.g. stateFormat attribtue like T: temperature°C | H: humidity% | B: batteryPercent%
 attr DEVICE readingList \
 TELETOPIC:.* { $EVENT =~ m,^.*(..Device.+)..$, ?  json2nameValue($1,'',$JSONMAP) : $EVENT =~ m,0xDEV_ID.:(.*).., ?  json2nameValue($1,'',$JSONMAP) : undef }
-attr DEVICE jsonMap Battery:0 Device:0 BatteryPercentage:batteryPercent Temperature:temperature Humidity:humidity
+attr DEVICE jsonMap Device:0 Battery:0 BatteryPercentage:batteryPercent BatteryVoltage:batteryVoltage Temperature:temperature Humidity:humidity
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE setList desired-temp:slider,5.0,0.5,30.0,1 CMNDTOPIC/ZbSend {"device":"0xDEV_ID","Write":{"OccupiedHeatingSetpoint": $EVTPART1}}\
   temp-offset:slider,-10.0,0.5,10.0,1 CMNDTOPIC/ZbSend  {"device":"0xDEV_ID","Write":{"LocalTemperatureCalibration":$EVTPART1}}
@@ -1977,7 +1978,7 @@ attr DEVICE setStateList on off
 attr DEVICE jsonMap Battery:0 Device:0 BatteryPercentage:batteryPercent LocalTemperature:measured-temp OccupiedHeatingSetpoint:dayTemp UnoccupiedHeatingSetpoint:nightTemp CurrentTemperatureSetPoint:desired-temp PIHeatingDemand:valve
 option:{ CALLSPEECHRECOGN }
 set DEVICE attrTemplate speechcontrol_type_thermostat
-setreading DEVICE attrTemplateVersion 20201129
+setreading DEVICE attrTemplateVersion 20201202
 
 ###########################################
 # SHELLY
