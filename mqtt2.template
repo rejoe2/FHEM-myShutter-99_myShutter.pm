@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 23255 2020-11-02 Testversion Forum Beta-User $
+# $Id: mqtt2.template 23255 2020-11-29 09:21:24Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -544,14 +544,14 @@ desc: Human motion sensor via zigbee2mqtt <br>Tested with: Xiaomi MiJia human RT
 filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
 order:L_08
 set DEVICE attrTemplate zigbee2mqtt_Human_Motion_Sensor
-attr DEVICE jsonMap battery:batteryPercent 
+attr DEVICE jsonMap battery:batteryPercent battery:batteryVoltage
 attr DEVICE stateFormat Motion: occupancy\
  Battery: batteryPercent%
 attr DEVICE model zigbee2mqtt_human_body_movement
 setreading DEVICE attrTemplateVersion 20201202
 
 #source post: https://forum.fhem.de/index.php/topic,94495.msg898198.html#msg898198, addon by TomLee, https://forum.fhem.de/index.php/topic,116310.msg1105927.html#msg1105927
-name:zigbee2mqtt_Human_Motion_Sensor
+name:zigbee2mqtt_human_body_movement_illuminance
 desc: Human motion sensor with illumiuance measurement via zigbee2mqtt <br>Tested with: Xiaomi Aqara RTCGQ11LM Human Motion Sensor
 filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
 order:L_08a
@@ -563,11 +563,11 @@ attr DEVICE devStateIcon Motion..true:people_sensor Motion..false:motion_detecto
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
 attr DEVICE jsonMap battery:batteryPercent battery:batteryVoltage illuminance_lux:0
 attr DEVICE stateFormat Motion: occupancy\
- Luminance: illuminance <br>Battery: batteryPercent%
+ Luminance: illuminance Battery: batteryPercent%
 attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
 attr DEVICE userReadings batteryVoltage:batteryVoltage.* {ReadingsNum($name,'batteryVoltage',0)/1000}
 deletereading -q DEVICE (?!associatedWith).*
-attr DEVICE model zigbee2mqtt_Human_Motion_Sensor
+attr DEVICE model zigbee2mqtt_human_body_movement_illuminance
 setreading DEVICE attrTemplateVersion 20201202
 
 name:zigbee2mqtt_Light_Intensity_Sensor
