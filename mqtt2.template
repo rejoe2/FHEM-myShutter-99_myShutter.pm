@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template intermediate 2020-12-03 Beta-User $
+# $Id: mqtt2.template 23285 2020-12-03 06:15:12Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -548,7 +548,7 @@ attr DEVICE jsonMap battery:batteryPercent battery:batterymV
 attr DEVICE stateFormat Motion: occupancy\
  Battery: batteryPercent%
 attr DEVICE model zigbee2mqtt_human_body_movement
-setreading DEVICE attrTemplateVersion 20201202
+setreading DEVICE attrTemplateVersion 20201203
 
 #source post: https://forum.fhem.de/index.php/topic,94495.msg898198.html#msg898198, addon by TomLee, https://forum.fhem.de/index.php/topic,116310.msg1105927.html#msg1105927
 name:zigbee2mqtt_human_body_movement_illuminance
@@ -565,10 +565,10 @@ attr DEVICE jsonMap battery:batteryPercent battery:batteryVoltage illuminance_lu
 attr DEVICE stateFormat Motion: occupancy\
  Luminance: illuminance Battery: batteryPercent%
 attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
-attr DEVICE userReadings batteryVoltage:batteryVoltage.* {ReadingsNum($name,'batteryVoltage',0)/1000}
+attr DEVICE userReadings batteryVoltage:batterymV.* {ReadingsNum($name,'batterymV',0)/1000}
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model zigbee2mqtt_human_body_movement_illuminance
-setreading DEVICE attrTemplateVersion 20201202
+setreading DEVICE attrTemplateVersion 20201203
 
 name:zigbee2mqtt_Light_Intensity_Sensor
 desc: Light Intensity Sensor via zigbee2mqtt <br>Tested with: Xiaomi MiJia light intensity sensor GZCGQ01LM
@@ -649,11 +649,29 @@ set DEVICE attrTemplate speechcontrol_type_switch
 attr DEVICE model zigbee2mqtt_Light_Switch
 setreading DEVICE attrTemplateVersion 20200904
 
+#contributed by Puccini, source post: https://forum.fhem.de/index.php/topic,108538.msg1106932.html#msg1106932
+name:zigbee2mqtt_scene_controller
+desc: Wireless button via zigbee2mqtt <br>Tested with: Xiaomi Aqara WXCJKG13LM wireless switch
+filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
+order:L_12
+par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","readingList","") =~ m,[\b]?([^/:]+)[/].*:, ? $1 : undef }
+par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^/:]+)[/].+, ? $1 : undef }
+par:DEV_ID;name of the device in the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[^/]+[/]([^/:]+).*, ? $1 : undef }
+par:ICON;ICON as set, defaults to control_home;{ AttrVal("DEVICE","icon","control_home") }
+attr DEVICE icon ICON
+attr DEVICE stateFormat Action: action Batterie: battery %
+attr DEVICE devicetopic BASE_TOPIC/DEV_ID
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT) }
+deletereading -q DEVICE (?!associatedWith).*
+attr DEVICE model zigbee2mqtt_scene_controller
+setreading DEVICE attrTemplateVersion 20200904
+
+
 #source post: https://forum.fhem.de/index.php/topic,94495.msg916789.html#msg916789
 name:zigbee2mqtt_Wireless_Button
 desc: Wireless button via zigbee2mqtt <br>Tested with: Xiaomi Aqara WXKG12LM wireless switch with gyroscope
 filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
-order:L_12
+order:L_12a
 par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","readingList","") =~ m,[\b]?([^/:]+)[/].*:, ? $1 : undef }
 par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^/:]+)[/].+, ? $1 : undef }
 par:DEV_ID;name of the device in the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[^/]+[/]([^/:]+).*, ? $1 : undef }
