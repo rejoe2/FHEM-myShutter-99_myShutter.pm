@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 2020-12-08 owntrack update Beta-User $
+# $Id: mqtt2.template owntracks + omg 2020-12-08 Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -3652,7 +3652,8 @@ attr DEVICE readingList\
   BASE_ID/DEVNAME/LWT:.* LWT\
   BASE_ID/DEVNAME/version:.* version\
   BASE_ID/DEVNAME/SYStoMQTT[:/].* { json2nameValue($EVENT,'Sys_')}\
-  homeassistant/[^/]*sensor/[^/]+/config:.* { }
+  BASE_ID/home_presence/.* {}/
+  homeassistant/.+?/config:.* { }
 attr DEVICE setList\
   restart:noArg BASE_ID/DEVNAME/commands/MQTTtoSYS/config {"cmd":"restart"}
 attr DEVICE stateFormat <a href="http://Sys_ip" target="_blank">\
@@ -3661,7 +3662,7 @@ LWT\
 attr DEVICE icon ICON
 attr DEVICE devStateIcon online:10px-kreis-gruen offline.*:10px-kreis-rot
 attr DEVICE model OpenMQTTGateway_MCU
-setreading DEVICE attrTemplateVersion 20200716
+setreading DEVICE attrTemplateVersion 20201208
 { AttrTemplate_Initialize() }
 
 name:OpenMQTTGateway_BT_scanner
@@ -3682,11 +3683,11 @@ attr DEVICE setList\
   BT_blacklist:textField BASE_ID/DEVNAME/commands/MQTTtoBT/config {"black-list":[$EVTPART1]}\
   BT_whitelist:textField BASE_ID/DEVNAME/commands/MQTTtoBT/config {"white-list":[$EVTPART1]}\
   BT_minrssi:slider,-110,1,0 BASE_ID/DEVNAME/commands/MQTTtoBT/config {"minrssi":$EVTPART1}}\
-  deleteReadings:noArg {fhem "deletereading -q $NAME (?!associatedWith).*"}
+  deleteReadings:noArg {fhem "deletereading -q $NAME (?!associatedWith|attrTemplateVersion).* 86400"}
 attr DEVICE periodicCmd deleteReadings:1440
 attr DEVICE stateFormat Last: last
 attr DEVICE model OpenMQTTGateway_BT_scanner
-setreading DEVICE attrTemplateVersion 20200522 or prior
+setreading DEVICE attrTemplateVersion 20201208
 
 name:OpenMQTTGateway_BT_gtag
 prereq:{my @devices=devspec2array("model=OpenMQTTGateway_MCU");return 1 if $devices[0];return 0}
