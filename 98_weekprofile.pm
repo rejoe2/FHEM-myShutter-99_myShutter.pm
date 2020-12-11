@@ -106,7 +106,7 @@ sub myAttrVal($$$)
 	return $val;
 }
 ############################################## 
-sub weekprofile_getDeviceType($$;$)
+sub     ($$;$)
 {
   my ($me,$device,$sndrcv) = @_;
   
@@ -206,10 +206,9 @@ sub weekprofile_getDeviceType($$;$)
   }
   
   elsif ($devType =~ /MQTT2_DEVICE/){
-    my $def = AttrVal($device,'weekprofile','');
+    my $attr = AttrVal($device,'weekprofile','');
     Log3 $me, 5, "$me(getDeviceType): attr MQTT2_DEVICE $def";
-    #if (index($def, $me) != -1) {
-    if ($def ne "") {  
+    if ($attr ne "") {  
       $type = "MQTT2_DEVICE";
     }
     else {
