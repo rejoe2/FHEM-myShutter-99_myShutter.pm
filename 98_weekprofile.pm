@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 98_weekprofile.pm 21373 2020-03-07 18:15:44Z Risiko $
+# $Id: 98_weekprofile.pm Tesversion MQTT2_DEVICE 2020-12-14 Beta-User $
 #
 # Usage
 #
@@ -106,7 +106,7 @@ sub myAttrVal($$$)
 	return $val;
 }
 ############################################## 
-sub     ($$;$)
+sub weekprofile_getDeviceType($$;$)
 {
   my ($me,$device,$sndrcv) = @_;
   
@@ -193,11 +193,11 @@ sub     ($$;$)
   if ($devType =~ /weekprofile/){
     $type = "WEEKPROFILE";
   }
-  elsif ($devType =~ /WeekdayTimer/){
+  elsif ($devType eq 'WeekdayTimer'){
     my $def = $defs{$device}{DEF};
     Log3 $me, 5, "$me(getDeviceType): def WDT $def";
     #if (index($def, $me) != -1) {
-    if ($def =~ m/.*weekprofile.*/) {  
+    if ($def =~ m/weekprofile/) {  
       $type = "WDT";
     }
     else {
@@ -205,9 +205,9 @@ sub     ($$;$)
     }
   }
   
-  elsif ($devType =~ /MQTT2_DEVICE/){
+  elsif ($devType eq 'MQTT2_DEVICE'){
     my $attr = AttrVal($device,'weekprofile','');
-    Log3 $me, 5, "$me(getDeviceType): attr MQTT2_DEVICE $def";
+    Log3 $me, 5, "$me(getDeviceType): attr MQTT2_DEVICE $attr";
     if ($attr ne "") {  
       $type = "MQTT2_DEVICE";
     }
@@ -405,7 +405,7 @@ sub weekprofile_sendDevProfile(@)
   }
   
   elsif ($type eq "MQTT2_DEVICE") {
-    my $cmd = "set $device weekprofile $me:$prf->{TOPIC}:$prf->{NAME}";
+    my $cmd = "set $device weekprofile $me $prf->{TOPIC}:$prf->{NAME}";
     Log3 $me, 4, "$me(sendDevProfile): send to MQTT2_DEVICE $cmd";
     return fhem("$cmd",1);
   }
@@ -1657,11 +1657,14 @@ sub weekprofile_getEditLNK_MasterDev($$)
   <li>MAX</li>
   <li>other weekprofile modules</li>
   <li>Homatic channel _Clima or _Climate</li>
+  <li>WeekdayTimer</li>
+  <li>MQTT2_DEVICE</li>
   
   In the normal case the module is assoziated with a master device.
   So a profile 'master' will be created automatically. This profile corrensponds to the current active
   profile on the master device.
   You can also use this module without a master device. In this case a default profile will be created.
+  <br>Note: WeekdayTimer or MQTT2_DEVICE TYPE devices can not be used as 'master'.
   <br>
   An other use case is the usage of categories 'Topics'.
   To enable the feature the attribute 'useTopics' have to be set.
@@ -1846,10 +1849,13 @@ sub weekprofile_getEditLNK_MasterDev($$)
   <li>alle MAX Thermostate</li>
   <li>andere weekprofile Module</li>
   <li>Homatic (Kanal _Clima bzw. _Climate)</li>
+  <li>WeekdayTimer</li>
+  <li>MQTT2_DEVICE</li>
   
   Im Standardfall wird das Modul mit einem Geräte = 'Master-Gerät' assoziiert,
   um das Wochenprofil vom Gerät grafisch bearbeiten zu können und andere Profile auf das Gerät zu übertragen.
   Wird kein 'Master-Gerät' angegeben, wird erstmalig ein Default-Profil angelegt.
+  <br>Hinweis: Geräte des Typs WeekdayTimer und MQTT2_DEVICE können nicht als 'Master-Gerät' verwendet werden.
   <br>
   Ein weiterer Anwendungsfall ist die Verwendung von Rubriken\Kategorien 'Topics'.
   Hier sollte kein 'Master-Gerät' angegeben werden. Dieses Feature muss erst über das Attribut 'useTopics' aktiviert werden.

@@ -56,14 +56,13 @@ my %jsonmap = (
 
 sub z2t_send_weekprofile {
   my $name       = shift;
-  my $evtpart    = shift // return;
+  my $wp_name    = shift;
+  my $wp_profile = shift // return;
   my $topic      = shift // AttrVal($name,'devicetopic','') . '/set';
   
   my $hash = $defs{$name};
   $topic   .= ' ';
-  
-  my ($wp_name, $wp_profile) = split m{:}xms, $evtpart, 2;
-  
+    
   my $wp_profile_data = CommandGet(undef,"$wp_name profile_data $wp_profile");
   if ($wp_profile_data =~ m{(profile.*not.found|usage..profile_data..name)}xms ) {
     Log3( $hash, 3, "[$name] weekprofile $wp_name: no profile named \"$wp_profile\" available" );
