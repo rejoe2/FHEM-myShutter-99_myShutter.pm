@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 23323 2020-12-10 18:22:52Z Beta-User $
+# $Id: mqtt2.template 23336 2020-12-13 05:07:18Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -120,7 +120,7 @@ attr DEVICE devicetopic BASE_TOPIC
 attr DEVICE bridgeRegexp\
   BASE_TOPIC/([A-Za-z0-9._]+)[/]?.*:.* "zigbee_$1"
 attr DEVICE getList\
-  devicelist:noArg log $\DEVICETOPIC/bridge/config/devices\
+  devicelist:noArg log $\DEVICETOPIC/bridge/config/devices/get\
   networkmap_raw:noArg raw $\DEVICETOPIC/bridge/networkmap raw\
   networkmap_graphviz:noArg graphviz $\DEVICETOPIC/bridge/networkmap graphviz
 attr DEVICE readingList\
@@ -160,7 +160,7 @@ attr DEVICE comment To check for new updates of the deamon software, you might w
 #set DEVICE attrTemplate do_general_mqtt_cleanup ADD_TO_IO_IGNOREREGEXP=BASE_TOPIC/[A-Za-z0-9._]+/set
 set DEVICE attrTemplate do_general_mqtt_cleanup
 attr DEVICE model zigbee2mqtt_bridge
-setreading DEVICE attrTemplateVersion 20200701
+setreading DEVICE attrTemplateVersion 20201215
 # Based on https://forum.fhem.de/index.php/topic,94060.msg872371.html#msg872371 
 
 
@@ -497,7 +497,7 @@ attr DEVICE icon ICON
 attr DEVICE eventMap { dev=>{ON=>'on',OFF=>'off'} }
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
 attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
-attr DEVICE jsonMap state:availability state_1:state state_2:0 state_3:0 
+attr DEVICE jsonMap state:availability state_l1:state state_l2:0 state_l3:0 
 attr DEVICE setList \
   on:noArg $\DEVICETOPIC/1/set {"state":"ON"}\
   off:noArg $\DEVICETOPIC/1/set {"state":"OFF"}\
@@ -509,15 +509,15 @@ attr DEVICE_CH2 setList \
   on:noArg $\DEVICETOPIC/2/set {"state":"ON"}\
   off:noArg $\DEVICETOPIC/2/set {"state":"OFF"}\
   toggle:noArg $\DEVICETOPIC/2/set {"state":"TOGGLE"}
-attr DEVICE_CH2 jsonMap state_2:state state_1:0 state_3:0 state:0 consumption:0 linkquality:0 power:0 temperature:0
+attr DEVICE_CH2 jsonMap state_l2:state state_l1:0 state_l3:0 state:0 consumption:0 linkquality:0 power:0 temperature:0
 attr DEVICE_CH3 setList \
   on:noArg $\DEVICETOPIC/3/set {"state":"ON"}\
   off:noArg $\DEVICETOPIC/3/set {"state":"OFF"}\
   toggle:noArg $\DEVICETOPIC/3/set {"state":"TOGGLE"}
-attr DEVICE_CH2 jsonMap state_3:state state_1:0 state_2:0 state:0 consumption:0 linkquality:0 power:0 temperature:0
+attr DEVICE_CH2 jsonMap state_l3:state state_l1:0 state_l2:0 state:0 consumption:0 linkquality:0 power:0 temperature:0
 set DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplate speechcontrol_type_switch
 attr DEVICE,DEVICE_CH2,DEVICE_CH3 model zigbee2mqtt_3channel_split
-setreading DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplateVersion 20201211
+setreading DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplateVersion 20201213
 
 name:zigbee2mqtt_ContactSensor
 desc: Contact sensor via zigbee2mqtt <br>Tested with: Xiaomi models Aqara and Mijia
@@ -795,7 +795,7 @@ attr DEVICE devicetopic BASE_TOPIC/DEV_ID
 attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
 attr DEVICE setList \
   boost:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"boost": $EVTPART1 }}\
-  child_lock:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"child_protection": $EVTPART1 }}\
+  btnLock:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"child_protection": $EVTPART1 }}\
   desired-temp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"current_heating_setpoint": $EVTPART1 }\
   daytemp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"occupied_heating_setpoint": $EVTPART1 }\
   nighttemp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"unoccupied_heating_setpoint": $EVTPART1 }\
@@ -805,7 +805,7 @@ attr DEVICE setList \
 attr DEVICE stateFormat Measured: measured-temp Battery: battery %
 attr DEVICE webCmd desired-temp
 attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
-attr DEVICE jsonMap occupied_heating_setpoint:daytemp unoccupied_heating_setpoint:nighttemp child_protection:child_lock current_heating_setpoint:desired-temp local_temperature:measured-temp
+attr DEVICE jsonMap occupied_heating_setpoint:daytemp unoccupied_heating_setpoint:nighttemp child_protection:btnLock current_heating_setpoint:desired-temp local_temperature:measured-temp
 attr DEVICE setStateList on off
 attr DEVICE model zigbee2mqtt_eurotronic_spirit
 set DEVICE attrTemplate speechcontrol_type_thermostat
@@ -819,24 +819,35 @@ order:L_17a
 par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^/:]+)[/].+, ? $1 : undef }
 par:DEV_ID;name of the device in the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[^/]+[/]([^/:]+).*, ? $1 : undef }
 par:ICON;ICON as set, defaults to hm-cc-rt-dn;{ AttrVal("DEVICE","icon","hm-cc-rt-dn") }
+farewell:template has been applied successfully. <br>NOTE: code has been downloaded from svn (contrib). <br>For use with weekprofile, additional configuration is needed!
+{ Svn_GetFile("contrib/AttrTemplate/99_attrT_z2m_thermostat_Utils.pm", "FHEM/99_attrT_z2m_thermostat_Utils.pm", sub(){ CommandReload(undef, "99_attrT_z2m_thermostat_Utils.pm") }) }
+attr DEVICE comment For use with weekprofile, additional configuration is needed
 attr DEVICE icon ICON
 attr DEVICE devicetopic BASE_TOPIC/DEV_ID
+attr DEVICE userattr weekprofile
 attr DEVICE readingList $\DEVICETOPIC:.* { my %h; my $temp = $EVENT; $temp =~ s/,?("(holidays|workdays)":.([^]]+))./$h{$2}=$3/ge; $EVENT =~ s/,?("(holidays|workdays)":.([^]]+)).//g; my $h2 = json2nameValue($EVENT,'',$JSONMAP); %h = (%h,%$h2); \%h }
 attr DEVICE setList \
   desired-temp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"current_heating_setpoint": $EVTPART1 }\
-  child_lock:LOCK,UNLOCK $DEVICETOPIC/set {"child_lock": "$EVTPART1"}
-attr DEVICE getList desired-temp:noArg desired-temp $\DEVICETOPIC/get {"current_heating_setpoint": ""}
-attr DEVICE stateFormat child_lock\
+  btnLock:LOCK,UNLOCK $\DEVICETOPIC/set {"child_lock": "$EVTPART1"}\
+  boost:noArg $\DEVICETOPIC/set {"preset": "boost"}\
+  mode:schedule,manual,boost,complex,comfort,eco $\DEVICETOPIC/set {"preset": "$EVTPART1"}\
+  weekprofile { FHEM::attrT_z2m_thermostat_Utils::z2t_send_weekprofile($NAME, $EVTPART1, $EVTPART2) }\
+  x_send_set_payload:textField { my $payload = $EVENT;$payload =~ s/$EVTPART0 //; qq($\DEVICETOPIC/set $payload)}
+attr DEVICE getList desired-temp:noArg desired-temp $\DEVICETOPIC/get {"current_heating_setpoint": ""}\
+  measured-temp:noArg measured-temp $\DEVICETOPIC/get {"local_temperature": ""}\
+  mode:noArg mode $\DEVICETOPIC/get {"preset": ""}
+attr DEVICE periodicCmd measured-temp:55
+attr DEVICE stateFormat btnLock\
 Measured: measured-temp Battery: batteryPercent %
-attr DEVICE devStateIcon LOCKED:secur_lock:child_lock+UNLOCK UNLOCKED:secur_open:child_lock+LOCK
+attr DEVICE devStateIcon LOCKED:secur_lock:btnLock+UNLOCK UNLOCKED:secur_open:btnLock+LOCK
 attr DEVICE webCmd desired-temp
 attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
-attr DEVICE jsonMap current_heating_setpoint:desired-temp local_temperature:measured-temp Battery:batteryPercent
+attr DEVICE jsonMap current_heating_setpoint:desired-temp local_temperature:measured-temp Battery:batteryPercent preset:mode
 attr DEVICE setStateList on off
 attr DEVICE model zigbee2mqtt_thermostat_with_weekrofile
 set DEVICE attrTemplate speechcontrol_type_thermostat
 deletereading -q DEVICE (?!associatedWith).*
-setreading DEVICE attrTemplateVersion 20201210
+setreading DEVICE attrTemplateVersion 20201215
 
 
 ###########################################
@@ -3870,7 +3881,7 @@ setreading OMG_BT_ID attrTemplateVersion 20200913
 #source post: https://forum.fhem.de/index.php/topic,99666.msg1019884.html#msg1019884
 # modified by Otto123
 name:owntracks_device
-desc:A device tracked by OwnTracks, Basics supported for Android
+desc:A device tracked by OwnTracks, basic Device for support Android and IOS
 filter:TYPE=MQTT2_DEVICE:FILTER=CID~owntracks.*
 order:O_01
 par:TRACKER_ID;TrackerID;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,/([^/]+)/, ? $1 : undef }
@@ -3880,7 +3891,8 @@ attr DEVICE room WHICHROOM
 attr DEVICE icon location_sign
 attr DEVICE devicetopic owntracks/TRACKER_ID/DEV_ID
 attr DEVICE jsonMap\
-  acc:accuracy alt:altitude batt:batteryPercent lat:latitude lon:longitude vac:accuracyVertical vel:velocity
+  acc:accuracy alt:altitude batt:batteryPercent lat:latitude lon:longitude vac:accuracyVertical vel:velocity\
+  _type:lastUpdateType tst:timestamp tid:trackerId
 attr DEVICE readingList\
   $\DEVICETOPIC.* raw\
   $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }\
@@ -3889,19 +3901,42 @@ attr DEVICE readingList\
 attr DEVICE getList\
   location:noArg raw $\DEVICETOPIC/cmd {"_type":"cmd","action":"reportLocation"}\
   waypoints:noArg raw $\DEVICETOPIC/cmd {"_type":"cmd","action":"waypoints"}
-attr DEVICE setList\
+attr DEVICE setList  action:textField $\DEVICETOPIC/cmd {"_type":"cmd","action":$EVTPART1}\
   config:textField $\DEVICETOPIC/cmd {"_type":"cmd","action":"setConfiguration","configuration":$EVTPART1}\
   waypoints:textField $\DEVICETOPIC/cmd {"_type":"cmd","action":"setWaypoints","waypoints":{"_type":"waypoints","waypoints":[$EVTPART1]}}\
-  mode:1Quite,2Manual,3Significant,4Move {$EVTPART1=~/(\d)/;my $pl=$1-2;fhem("set $NAME config ".qq({"_type":"configuration","monitoring":$pl}));return undef}\
-  x_raw_payload:textField { my $payload = $EVENT;$payload =~ s/$EVTPART0 //; qq($\DEVICETOPIC/cmd $payload)}
+  mode:Quite,Manual,Significant,Move { my %h=(Quite=>'-1',Manual=>'0',Significant=>'1',Move=>'2');fhem("set $NAME config ".qq({"_type":"configuration","monitoring":$h{$EVTPART1}})) }\
+  x_raw_payload:textField { my $payload = $EVENT; $payload =~ s/$EVTPART0 //; qq($\DEVICETOPIC/cmd $payload) }
 attr DEVICE userReadings\
   location:lat.* {ReadingsNum($name,'latitude',0).','.ReadingsNum($name,'longitude',0)},\
-  connection:conn.* {my %h=(m=>'mobil',w=>'wifi',o=>'offline'); return $h{ReadingsVal('MQTT2_owntracks_mi6','conn','error')}},\
+  connection:conn.* {my %h=(m=>'mobil',w=>'wifi',o=>'offline',e=>'unknown'); return $h{ReadingsVal('MQTT2_owntracks_mi6','conn','e')}},\
   place:event.* {ReadingsVal($name,'event','') eq 'leave'?'away':(ReadingsVal($name,'desc','nowhere'))}
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE model owntracks_device
 attr DEVICE comment https://owntracks.org/booklet/tech/json/
-setreading DEVICE attrTemplateVersion 20201210
+setreading DEVICE attrTemplateVersion 20201212_2
+
+name:owntracks_extend_IOS
+desc:Extend the owntracks device for IOS Readings, use owntracks_device first
+filter:TYPE=MQTT2_DEVICE:FILTER=model=owntracks_.*
+order:O_02
+par:JMAP;jsonMap;{my $s=AttrVal("DEVICE","jsonMap","");$s=~s/\n/\\\n/g;return $s}
+par:READINGLIST;ReadingList;{my $s=AttrVal("DEVICE","readingList","");$s=~s/\n/\\\n/g;return $s}
+par:GETLIST;GetList;{my $s=AttrVal("DEVICE","getList","");$s=~s/\n/\\\n/g;return $s}
+attr DEVICE jsonMap JMAP\
+  config__type:lastUpdateType event__type:lastUpdateType step__type:lastUpdateType beacon__type:lastUpdateType\
+  bs:batteryState p:pressure t:trigger cog:direction\
+  event_acc:event_accuracy event_lat:event_latitude event_lon:event_longitude\
+  event_t:event_trigger event_tid:event_trackerId event_tst:event_timestamp\
+  event_wtst:event_waypointCreationTimestamp\
+  step_steps:steps_count step_from:steps_timestampBegin step_to:steps_timestampEnd step_tst:steps_timestampReq\
+  beacon_acc:beacon_accuracy beacon_prox:beacon_proximity beacon_tst:beacon_timestampReq
+attr DEVICE readingList READINGLIST\
+  $\DEVICETOPIC/step:.* { json2nameValue($EVENT,'step_',$JSONMAP) }\
+  $\DEVICETOPIC/beacon:.* { json2nameValue($EVENT,'beacon_',$JSONMAP) }\
+  $\DEVICETOPIC/dump:.* { json2nameValue($EVENT,'config_',$JSONMAP) }
+attr DEVICE getList GETLIST\
+  steps:noArg raw $\DEVICETOPIC/cmd {"_type":"cmd","action":"reportSteps"}\
+  config:noArg raw $\DEVICETOPIC/cmd {"_type":"cmd","action":"dump"}
 
 
 name:roborock
