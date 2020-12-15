@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 98_weekprofile.pm 23351 2020-12-14 18:06:58Z Risiko $
+# $Id: 98_weekprofile.pm 23351+MQTT2DEVICE 2020-12-15 Beta-User $
 #
 # Usage
 #

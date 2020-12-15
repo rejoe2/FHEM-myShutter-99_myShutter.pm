@@ -69,7 +69,7 @@ sub z2t_send_weekprofile {
     Log3( $hash, 3, "[$name] weekprofile $wp_name: no profile named \"$wp_profile\" available" );
     return;
   }
-  
+    
   my @D = ("Sat","Sun","Mon","Tue","Wed","Thu","Fri");
   my $payload;
   my @days = (0..6);
@@ -102,7 +102,7 @@ sub z2t_send_weekprofile {
       }
   }
   $payload .=']}';
-  
+  readingsSingleUpdate( $defs{$name}, 'weekprofile', "$wp_name $wp_profile",1);
   return "$topic $payload";
 }
   
