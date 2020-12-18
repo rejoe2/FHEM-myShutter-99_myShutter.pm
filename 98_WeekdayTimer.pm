@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm delayed SetAllParams 2020-11-03 Beta-User $
+# $Id: 98_WeekdayTimer.pm eventMapWDT 2020-12-18 Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -24,7 +24,7 @@
 #
 ##############################################################################
 ##############################################################################
-package main;
+package FHEM::WeekdayTimer;    ## no critic 'Package declaration'
 use strict;
 use warnings;
 
@@ -32,19 +32,75 @@ use Time::Local qw( timelocal_nocheck );
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 
+use GPUtils qw(GP_Import GP_Export);
+
+## Import der FHEM Funktionen
+#-- Run before package compilation
+BEGIN {
+
+    # Import from main context
+    GP_Import(
+        qw(
+          defs
+          modules
+          attr
+          init_done
+          DAYSECONDS
+          MINUTESECONDS
+          featurelevel
+          readingFnAttributes
+          readingsSingleUpdate
+          readingsBulkUpdate
+          readingsBeginUpdate
+          readingsEndUpdate
+          AttrVal
+          ReadingsVal
+          InternalVal
+          Value
+          IsWe
+          IsDisabled
+          Log3
+          InternalTimer
+          RemoveInternalTimer
+          CommandAttr
+          CommandDeleteAttr
+          CommandGet
+          getAllSets
+          AnalyzeCommandChain
+          AnalyzePerlCommand
+          EvalSpecials
+          perlSyntaxCheck
+          devspec2array
+          addToDevAttrList
+          SemicolonEscape
+          FmtDateTime
+          strftime
+          sunrise_abs
+          sunset_abs
+          trim
+          GetTimeSpec
+          stacktrace
+          decode_json
+          )
+    );
+}
+
+sub main::WeekdayTimer_Initialize { goto &Initialize }
+sub ::WeekdayTimer_SetParm { goto &WeekdayTimer_SetParm }
+sub ::WeekdayTimer_SetAllParms { goto &WeekdayTimer_SetAllParms }
+
 ################################################################################
-sub WeekdayTimer_Initialize {
+sub Initialize {
   my $hash = shift // return;
 
 # Consumer
-  $hash->{SetFn}   = "WeekdayTimer_Set";
-  $hash->{DefFn}   = "WeekdayTimer_Define";
-  $hash->{UndefFn} = "WeekdayTimer_Undef";
-  $hash->{GetFn}   = "WeekdayTimer_Get";
-  $hash->{AttrFn}  = "WeekdayTimer_Attr";
-  $hash->{UpdFn}   = "WeekdayTimer_Update";
-  $hash->{AttrList}= "disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 bulkCommandDelay commandTemplate ".
-     $readingFnAttributes;
+  $hash->{SetFn}   = \&WeekdayTimer_Set;
+  $hash->{DefFn}   = \&WeekdayTimer_Define;
+  $hash->{UndefFn} = \&WeekdayTimer_Undef;
+  $hash->{GetFn}   = \&WeekdayTimer_Get;
+  $hash->{AttrFn}  = \&WeekdayTimer_Attr;
+  $hash->{UpdFn}   = \&WeekdayTimer_Update;
+  $hash->{AttrList}= qq(disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap WDT_sendDelay $readingFnAttributes);
   return;
 }
 
@@ -87,7 +143,7 @@ sub WeekdayTimer_Define {
 
   addToDevAttrList($name, "weekprofile") if $def =~ m{weekprofile}xms;
   
-  return InternalTimer(time(), "WeekdayTimer_Start",$hash,0) if !$init_done;
+  return InternalTimer(time(), \&WeekdayTimer_Start,$hash,0) if !$init_done;
   return WeekdayTimer_Start($hash);
 }
 
@@ -173,7 +229,7 @@ sub WeekdayTimer_Set {
   return "Unknown argument $arr[1], choose one of enable:noArg disable:noArg WDT_Params:single,WDT_Group,all weekprofile" if($arr[1] eq "?");
 
   my $name = shift @arr;
-  my $v = join(" ", @arr);
+  my $v    = join(" ", @arr);
 
   if ($v eq "enable") {
     Log3( $hash, 3, "[$name] set $name $v" );
@@ -188,7 +244,7 @@ sub WeekdayTimer_Set {
     Log3( $hash, 3, "[$name] set $name $v" );
     return CommandAttr(undef, "$name disable 1");
   }
-if ($v =~ m{\AWDT_Params}xms) {
+  if ($v =~ m{\AWDT_Params}xms) {
     if ($v =~  m{single}xms) {
       Log3( $hash, 4, "[$name] set $name $v called" );
       return WeekdayTimer_SetParm($name);
@@ -206,10 +262,6 @@ if ($v =~ m{\AWDT_Params}xms) {
     Log3( $hash, 3, "[$name] set $name $v" );
     return if !WeekdayTimer_UpdateWeekprofileReading($hash, $1, $2, $3);
     WeekdayTimer_DeleteTimer($hash);
-    
-    my $bulkCommandDelay = AttrVal($name, "bulkCommandDelay", 0);
-    return InternalTimer(time()+ $bulkCommandDelay, "WeekdayTimer_Start",$hash,0) if $bulkCommandDelay;
-    
     return WeekdayTimer_Start($hash);
   }
   return;
@@ -480,7 +532,7 @@ sub WeekdayTimer_daylistAsArray {
   
   # Angaben der Tage verarbeiten
   # Aufzaehlung 1234 ...
-if ( $daylist =~ m{\A[0-8]{0,9}\z}xms ) {
+  if ( $daylist =~ m{\A[0-8]{0,9}\z}xms ) {
 
     #avoid 78 settings:
     if ($daylist =~ m{[7]}xms && $daylist =~ m{[8]}xms) {
@@ -609,7 +661,10 @@ E:  while (@$a > 0) {
     } elsif ($element =~ m{\Aweekprofile}xms ) {
       my @wprof = split m{:}xms, $element;
       my $wp_name = $wprof[1];
-      my ($unused,$wp_profile) = split m{:}xms, WeekdayTimer_GetWeekprofileReadingTriplett($hash, $wp_name),2;
+      my ($unused,$wp_profile) = split m{:}xms, WeekdayTimer_GetWeekprofileReadingTriplett($hash, $wp_name, $wprof[2]),2;
+      
+      ($unused,$wp_profile) = split m{:}xms, WeekdayTimer_GetWeekprofileReadingTriplett($hash, $wp_name, 'default'),2 if !$wp_profile && $wprof[2] ne 'default';
+      
       return if !$wp_profile;
       my $wp_sunaswe = $wprof[2]//0;
       my $wp_profile_data = CommandGet(undef,$wp_name . " profile_data ". $wp_profile);
@@ -618,8 +673,8 @@ E:  while (@$a > 0) {
         return;
       }
       my $wp_profile_unpacked;
-      my $json = JSON->new->allow_nonref;
-      eval { $wp_profile_unpacked = $json->decode($wp_profile_data); };
+      #my $json = JSON->new->allow_nonref;
+      $wp_profile_unpacked = decode_json($wp_profile_data);
       $hash->{weekprofiles}{$wp_name} = {'PROFILE'=>$wp_profile,'PROFILE_JSON'=>$wp_profile_data,'SunAsWE'=>$wp_sunaswe,'PROFILE_DATA'=>$wp_profile_unpacked };
       my %wp_shortDays = ("Mon"=>1,"Tue"=>2,"Wed"=>3,"Thu"=>4,"Fri"=>5,"Sat"=>6,"Sun"=>0);
       for my $wp_days (sort keys %{$hash->{weekprofiles}{$wp_name}{PROFILE_DATA}}) {
@@ -695,7 +750,7 @@ sub WeekdayTimer_SetTimerForMidnightUpdate {
   my $midnightPlus5Seconds = WeekdayTimer_zeitErmitteln  ($now, 0, 0, 5, 1);
   #Log3 $hash, 3, "midnightPlus5Seconds------------>".FmtDateTime($midnightPlus5Seconds);+#
   WeekdayTimer_RemoveInternalTimer("SetTimerOfDay", $hash);
-  my $newMyHash = WeekdayTimer_InternalTimer      ("SetTimerOfDay", $midnightPlus5Seconds, "$hash->{TYPE}_SetTimerOfDay", $hash, 0);
+  my $newMyHash = WeekdayTimer_InternalTimer      ("SetTimerOfDay", $midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $hash, 0);
   $newMyHash->{SETTIMERATMIDNIGHT} = 1;
   
   return;
@@ -792,7 +847,7 @@ sub WeekdayTimer_SetTimer {
       if($isActiveTimer) {
         Log3( $hash, 4, "[$name] setTimer - timer seems to be active today: ".join("",@$tage)."|$time|$para" );
         WeekdayTimer_RemoveInternalTimer("$idx", $hash);
-        WeekdayTimer_InternalTimer ("$idx", $timToSwitch, "$hash->{TYPE}_Update", $hash, 0);
+        WeekdayTimer_InternalTimer ("$idx", $timToSwitch + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_Update, $hash, 0);
       } else {
         Log3( $hash, 4, "[$name] setTimer - timer seems to be NOT active today: ".join("",@$tage)."|$time|$para ". $hash->{CONDITION} );
         WeekdayTimer_RemoveInternalTimer("$idx", $hash);
@@ -842,7 +897,7 @@ sub WeekdayTimer_SetTimer {
     $modules{WeekdayTimer}{timerInThePastHash} = $tipHash;
 
     WeekdayTimer_RemoveInternalTimer("delayed", $tipHash);
-    WeekdayTimer_InternalTimer      ("delayed", time()+5, "WeekdayTimer_delayedTimerInPast", $tipHash, 0);
+    WeekdayTimer_InternalTimer      ("delayed", time()+5, \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
 
   }
   return;
@@ -969,7 +1024,7 @@ sub WeekdayTimer_Update {
     $activeTimerState = WeekdayTimer_isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
     WeekdayTimer_RemoveInternalTimer("$idx",  $hash);
-    WeekdayTimer_InternalTimer ("$idx", $timToSwitch, "$hash->{TYPE}_Update", $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
+    WeekdayTimer_InternalTimer ("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
   } else {
     $activeTimer = WeekdayTimer_isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     $activeTimerState = $activeTimer;
@@ -1098,7 +1153,7 @@ sub WeekdayTimer_FensterOffen {
     }
     $hash->{VERZOEGRUNG_IDX} = $time;
     WeekdayTimer_RemoveInternalTimer("$time",  $hash);
-    WeekdayTimer_InternalTimer      ("$time",  $nextRetry, "$hash->{TYPE}_Update", $hash, 0);
+    WeekdayTimer_InternalTimer      ("$time",  $nextRetry, \&WeekdayTimer_Update, $hash, 0);
     $hash->{VERZOEGRUNG} = 1;
     return $verzoegerteAusfuehrung;
   }
@@ -1155,7 +1210,7 @@ sub WeekdayTimer_FensterOffen {
               }
               $hash->{VERZOEGRUNG_IDX} = $time;
               WeekdayTimer_RemoveInternalTimer("$time", $hash);
-              WeekdayTimer_InternalTimer      ("$time",  $nextRetry, "$hash->{TYPE}_Update", $hash, 0);
+              WeekdayTimer_InternalTimer      ("$time",  $nextRetry, \&WeekdayTimer_Update, $hash, 0);
               $hash->{VERZOEGRUNG} = 1;
               return 1
             }
@@ -1189,6 +1244,7 @@ sub WeekdayTimer_Switch_Device {
 
   $command = AttrVal($hash->{NAME}, "commandTemplate", "commandTemplate not found");
   $command = $hash->{COMMAND} if defined $hash->{COMMAND} && $hash->{COMMAND} ne "";
+  $command = $hash->{WDT_EVENTMAP}{$newParam} if defined $hash->{WDT_EVENTMAP} && defined $hash->{WDT_EVENTMAP}{$newParam};
 
   my $activeTimer = 1;
 
@@ -1297,9 +1353,24 @@ sub WeekdayTimer_Attr {
     return $err if ( $err );
     $attr{$name}{$attrName} = $attrVal;
   }
-  if ( $attrName eq "bulkCommandDelay" ) {
-    return "bulkCommandDelay can only be set to numbers" if !looks_like_number($attrVal);
+  if ( $attrName eq "WDT_eventMap" ) {
+    if($cmd eq "set") {
+      my @ret = split(/[: \r\n]/, $attrVal);
+      return "WDT_eventMap: Odd number of elements" if(int(@ret) % 2);
+      my %ret = @ret;
+      for (keys %ret) {
+        $ret{$_} =~ s{\+}{ }gxms;
+      }
+      $hash->{WDT_EVENTMAP} = \%ret;
+    } else {
+      delete $hash->{WDT_EVENTMAP};
+    }
     $attr{$name}{$attrName} = $attrVal;
+    return WeekdayTimer_SetTimerOfDay({ HASH => $hash});
+  }
+  if ( $attrName eq "WDT_sendDelay" ) {
+    $attr{$name}{$attrName} = $attrVal;
+    return WeekdayTimer_SetTimerOfDay({ HASH => $hash});
   }
   
   return;
@@ -1314,18 +1385,15 @@ sub WeekdayTimer_SetParm {
 }
 
 ################################################################################
-sub WeekdayTimer_SetAllParms {            # {WeekdayTimer_SetAllParms()}
+sub WeekdayTimer_SetAllParms {            
   my $group = shift // "all"; 
   my @wdtNames = $group eq 'all' ? devspec2array('TYPE=WeekdayTimer')
                                  : devspec2array("TYPE=WeekdayTimer:FILTER=WDT_Group=$group");
 
   for my $wdName ( @wdtNames ) {
-    my $bulkCommandDelay = AttrVal($wdName, "bulkCommandDelay", 0);
-    $bulkCommandDelay 
-      ? InternalTimer(time()+ $bulkCommandDelay, WeekdayTimer_SetParm, $wdName,0)
-      : WeekdayTimer_SetParm($wdName);
+    WeekdayTimer_SetParm($wdName);
   }
-  Log3( undef, 3, "WeekdayTimer_SetAllParms() done or prepared on: ".join(" ",@wdtNames ) );
+  Log3( undef,  3, "WeekdayTimer_SetAllParms() done on: ".join(" ",@wdtNames ) );
   return;
 }
 
@@ -1350,11 +1418,12 @@ sub WeekdayTimer_UpdateWeekprofileReading {
 
 ################################################################################
 sub WeekdayTimer_GetWeekprofileReadingTriplett {
-  my $hash = shift;
-  my $wp_name = shift // return;
-  my $name = $hash->{NAME};
+  my $hash       = shift;
+  my $wp_name    = shift // return;
+  my $wp_profile = shift //"default";
   my $wp_topic   = "default";
-  my $wp_profile = "default";
+  
+  my $name = $hash->{NAME};
   if (!defined $defs{$wp_name} || InternalVal($wp_name,"TYPE","false") ne "weekprofile")  {
     Log3( $hash, 3, "[$name] weekprofile $wp_name not accepted, device seems not to exist or not to be of TYPE weekprofile" );
     return;
@@ -1373,6 +1442,8 @@ sub WeekdayTimer_GetWeekprofileReadingTriplett {
 }
 ################################################################################
 1;
+
+__END__
 
 =pod
 =encoding utf8
@@ -1488,8 +1559,7 @@ sub WeekdayTimer_GetWeekprofileReadingTriplett {
 
         If you want to have set all WeekdayTimer their current value (e.g. after a temperature lowering phase holidays)
         you can call the function <b>WeekdayTimer_SetParm("WD-device")</b> or <b>WeekdayTimer_SetAllParms()</b>.<br>
-        To limit the affected WeekdayTimer devices to a subset of all of your WeekdayTimers, use the WDT_Group attribute and <b>WeekdayTimer_SetAllParms("<group name>")</b>.<br> This offers the same functionality than <code>set wd WDT_Params WDT_Group</code><br>
-        NOTE: A small delay will be added for each of the addressed WDT devices to avoid conflicts in RF transmission.
+        To limit the affected WeekdayTimer devices to a subset of all of your WeekdayTimers, use the WDT_Group attribute and <b>WeekdayTimer_SetAllParms("<group name>")</b>.<br> This offers the same functionality than <code>set wd WDT_Params WDT_Group</code>
         This call can be automatically coupled to a dummy by a notify:<br>
         <code>define dummyNotify notify Dummy:. * {WeekdayTimer_SetAllParms()}</code>
         <br><p>
@@ -1601,11 +1671,6 @@ sub WeekdayTimer_GetWeekprofileReadingTriplett {
     <li><a href="#event-on-update-reading">event-on-update-reading</a></li>
     <li><a href="#event-on-change-reading">event-on-change-reading</a></li>
     <li><a href="#stateFormat">stateFormat</a></li>
-  <br>
-  </ul>
-  <li>bulkCommandDelay<br>
-    Seconds to wait in case of (potential) bulk commands are issued. A bulk command may be Perl <pre>{ WeekdayTimer_SetAllParms()}</pre> or the corresponding <pre>set <device> WDT_Params [one of: WDT_Group or all]</pre>. Setting a new weekprofile will be regarded as bulk update as well.
-    </li>
   <br>
   </ul>
 </ul>
