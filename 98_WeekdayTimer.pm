@@ -49,7 +49,6 @@ BEGIN {
           init_done
           DAYSECONDS
           MINUTESECONDS
-          featurelevel
           readingFnAttributes
           readingsSingleUpdate
           readingsBulkUpdate
@@ -60,7 +59,6 @@ BEGIN {
           InternalVal
           Value
           IsWe
-          IsDisabled
           Log3
           InternalTimer
           RemoveInternalTimer
@@ -74,13 +72,10 @@ BEGIN {
           perlSyntaxCheck
           devspec2array
           addToDevAttrList
-          SemicolonEscape
           FmtDateTime
-          strftime
           sunrise_abs
           sunset_abs
           trim
-          GetTimeSpec
           stacktrace
           decode_json
           looks_like_number
@@ -1682,8 +1677,8 @@ __END__
       <code>set myWeekprofiles send_to_device holiday:livingrooms wd</code><br>
       </li><br>
       <li>Although it's possible to use more than one weekprofile device in a WeekdayTimer, this is explicitly not recommended despite you are exactly knwowing what you are doing.</li><br>
-      <li>Note: The userattr <i>weekprofile</i> will automatically be added to the list and can't be removed. The attribute itself is intended to be set to the corresponding profile name in your weekprofile device allowing easy change using the topic feature.</li><br>
-      </ul>	
+      <li>Note: The userattr <i>weekprofile</i> will automatically be added to the list and can't be removed. The attribute itself is intended to be set to the corresponding profile name (no topic name, just the second part behind the ":") in your weekprofile device allowing easy change using the topic feature.</li><br>
+      </ul>
     </ul>
   </ul>
   <a name="WeekdayTimerget"></a>
@@ -1719,6 +1714,23 @@ __END__
     <li>WDT_Group<br>
     Used to generate groups of WeekdayTimer devices to be switched together in case one of them is set to WDT_Params with the WDT_Group modifier, e.g. <code>set wd WDT_Params WDT_Group</code>.<br>This is intended to allow former Heating_Control devices to be migrated to WeekdayTimer and replaces the Heating_Control_SetAllTemps() functionality.</li><br>
 
+    <br>
+
+    <li>WDT_sendDelay<br>
+    This will add some seconds to each of the switching timers to avoid collissions in RF traffic, especially, when <i>weekprofile</i> option is used and e.g. a topic change may affect not only a single target device but many or a single profile is used for many devices. 
+    </li>
+
+    <br>
+    <li>WDT_eventMap<br>
+    This will translate parameters from the profile to a different command. Syntax is (space separated): "&ltparameter&gt:&ltnew command&gt", spaces have to be replaced by "+". <br>
+    Example:<br>
+    <code>attr wd WDT_eventMap 22.0:dtp20+01 12.0:dtp20+02 18.0:dtp20+03</code><br>
+    Notes:<br>
+    <ul>
+    <li>New command will be addressed directly to the device, especially commandTemplate content will be ignored. So e.g. if commandTemplate is set to <code>set $NAME desired-temp $EVENT</code>, parameter 22.0 will lead to <code>set $NAME dtp20 01</code>.</li>
+    <li>When using Perl command syntax for <i>command</i>, $EVENT will be replaced by the new command.</li>
+    </ul>
+    </li>
     <li>switchInThePast<br>
     defines that the depending device will be switched in the past in definition and startup phase when the device is not recognized as a heating.
     Heatings are always switched in the past.
