@@ -1171,7 +1171,7 @@ sub WeekdayTimer_FensterOffen {
   }
   my $delay = int(time()) - $epoch;
   my $nextDelay = int($delay/60.+1.5)*60;  # round to multiple of 60sec
-  $nextRetry = $epoch + $nextDelay;
+  $nextRetry = $epoch + $nextDelay + AttrVal($name,'WDT_sendDelay',0);
   Log3( $hash, 4, "[$name] time=".$hash->{profil}{$time}{TIME}."/$epoch delay=$delay, nextDelay=$nextDelay, nextRetry=$nextRetry" );
 
   map { my $key =  $_; $key =~ s{\$}{\\\$}gxms;
