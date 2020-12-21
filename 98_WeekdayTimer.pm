@@ -103,7 +103,7 @@ sub Initialize {
   $hash->{GetFn}   = \&WeekdayTimer_Get;
   $hash->{AttrFn}  = \&WeekdayTimer_Attr;
   $hash->{UpdFn}   = \&WeekdayTimer_Update;
-  $hash->{AttrList}= qq(disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap WDT_sendDelay $readingFnAttributes);
+  $hash->{AttrList}= qq(disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap:textField-long WDT_sendDelay:slider,0,1,300,1 $readingFnAttributes);
   return;
 }
 
@@ -314,7 +314,7 @@ sub resetRegisteredInternalTimer {
 sub setRegisteredInternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
 
-    my $timerName = "$hash->{NAME}_$modifier";
+    my $timerName = "$hash->{NAME}_$modifier"; ###undefinded Hash?
     my $fnHash     = {
         HASH     => $hash,
         NAME     => $timerName,
@@ -328,7 +328,7 @@ sub setRegisteredInternalTimer {
         $hash->{TIMER}{$timerName} = $fnHash;
     }
 
-    Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
+    Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) ); ###undefinded Hash?
     InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
     return $fnHash;
 }
@@ -340,7 +340,7 @@ sub deleteSingleRegisteredInternalTimer {
     my $hash = shift // return;
     my $callback = shift;
 
-    my $timerName = "$hash->{NAME}_$modifier";
+    my $timerName = "$hash->{NAME}_$modifier"; ###undefinded Hash?
     my $fnHash    = $hash->{TIMER}{$timerName};
     if ( defined($fnHash) ) {
         Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
@@ -385,7 +385,7 @@ sub WeekdayTimer_Profile {
   my $hash = shift // return;
 
   my $language =   $hash->{LANGUAGE};
-  my %longDays = %{$hash->{'.longDays'}};
+  my %longDays = %{$hash->{'.longDays'}};  ###undefinded Hash?
 
   delete $hash->{profil};
   my $now = time();
@@ -1371,10 +1371,24 @@ sub WeekdayTimer_TageAsCondition {
 ################################################################################
 sub WeekdayTimer_Attr {
   my ($cmd, $name, $attrName, $attrVal) = @_;
-  return if (!$init_done);
   $attrVal = 0 if(!defined $attrVal);
 
   my $hash = $defs{$name};
+  if ( $attrName eq "WDT_eventMap" ) {
+    if($cmd eq "set") {
+      my @ret = split(/[: \r\n]/, $attrVal);
+      return "WDT_eventMap: Odd number of elements" if(int(@ret) % 2);
+      my %ret = @ret;
+      for (keys %ret) {
+        $ret{$_} =~ s{\+}{ }gxms;
+      }
+      $hash->{WDT_EVENTMAP} = \%ret;
+    } else {
+      delete $hash->{WDT_EVENTMAP};
+    }
+    $attr{$name}{$attrName} = $attrVal;
+  }
+  return if (!$init_done);
   if( $attrName eq "disable" ) {
     readingsSingleUpdate ($hash,  "disabled",  $attrVal, 1);
     return WeekdayTimer_SetTimerOfDay({ HASH => $hash}) if !$attrVal;
@@ -1402,20 +1416,6 @@ sub WeekdayTimer_Attr {
     return $err if ( $err );
     $attr{$name}{$attrName} = $attrVal;
   }
-  if ( $attrName eq "WDT_eventMap" ) {
-    if($cmd eq "set") {
-      my @ret = split(/[: \r\n]/, $attrVal);
-      return "WDT_eventMap: Odd number of elements" if(int(@ret) % 2);
-      my %ret = @ret;
-      for (keys %ret) {
-        $ret{$_} =~ s{\+}{ }gxms;
-      }
-      $hash->{WDT_EVENTMAP} = \%ret;
-    } else {
-      delete $hash->{WDT_EVENTMAP};
-    }
-    $attr{$name}{$attrName} = $attrVal;
-  }
   if ($attrName eq "WDT_sendDelay" ) {
     if ($cmd eq "set" && $init_done ) {
       return "WDT_sendDelay is in seconds, so only numbers are allowed" if !looks_like_number($attrVal);
@@ -1427,6 +1427,7 @@ sub WeekdayTimer_Attr {
   
   return;
 }
+
 
 ################################################################################
 sub WeekdayTimer_SetParm {
