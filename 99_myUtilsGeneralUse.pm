@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtilsGeneralUse.pm 2020-10-26 Beta-User $
+# $Id: myUtilsGeneralUse.pm 2020-12-01 Beta-User $
 #
 
 package main;
@@ -29,8 +29,8 @@ sub
 myHHMMSS2sec
 {
   my ($h,$m,$s) = split(":", shift);
-  $m = 0 if(!$m);
-  $s = 0 if(!$s);
+  $m = 0 if !$m;
+  $s = 0 if !$s;
   my $seconds = HOURSECONDS*$h+MINUTESECONDS*$m+$s;
   return $seconds;
 }
@@ -135,11 +135,16 @@ sub myCalendar2Holiday {
   my $yearEndRe  = shift;
  
   my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
+  my $nextYear = $year + 1901;
+  my $today = strftime('%m-%d', localtime(gettimeofday()));
   my $getstring = $calname . ' events format:custom="4 $T1 $T2 $S $D" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
   my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
  
   my @holidays;
   my @singledays;
+  my @start;
+  my @stop;
+
   for my $holiday (@holidaysraw) {
     my @tokens = split (" ",$holiday);
     my $duration = pop @tokens;
@@ -147,30 +152,31 @@ sub myCalendar2Holiday {
     my $severalDays = $duration =~ m,[0-9]+h, ? 0 : 1;
     
     #$duration of several days preprocessing, code base: https://stackoverflow.com/a/56125332
-    if ($duration =~ m,([0-9]+)d) {
-      my @start = split('-',$tokens[1], 2);
-      my @stop  = split('-',$tokens[2], 2);
+    if ($duration =~ m,([0-9]+)d, && !defined $tokens[2]) {
+      @start = split('-',$tokens[1], 2);
       # Get the epoch seconds for midday today
       # (we use midday to eliminate potential problems
       # when entering or leaving daylight savings time)
-      my $midday = timelocal(0, 0, 12, $start[0], $start[1], $year);
+      my $midday = timelocal(0, 0, 12, $start[1], $start[0]-1, $year);
       my $midday_end = $midday + HOURSECONDS * $1;
-      $tokens[0] = strftime('%d-%m', localtime($midday_end));
+      $tokens[2] = strftime('%m-%d', localtime($midday_end));
     }
     
     $holiday = join(' ', @tokens);
+	$holiday .= " ($nextYear)" if $today gt $tokens[2];
+      
     if (!$severalDays) {
       $tokens[0] = 1;
       splice @tokens, 2, 1;
       $holiday = join(' ', @tokens);
       push (@singledays, $holiday);
-    } elsif ($stop[1] < $start[1] ) {
+    } elsif ($tokens[1] gt $tokens[2] ) {
       $holiday = "4 $tokens[1] 12-31 $tokens[3]";
       push (@holidays,$holiday);
-      $holiday = "4 01-01 $tokens[2] $tokens[3]";
+      $holiday = "4 01-01 $tokens[2] $tokens[3] ($nextYear part)";
       unshift (@holidays,$holiday);
     } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/ ) {
-      push (@holidays, $holiday);
+	  push (@holidays, $holiday);
     } else {
       $holiday = "4 $tokens[1] 12-31 $tokens[3]";
       push (@holidays,$holiday) if $month > 9;
@@ -180,8 +186,9 @@ sub myCalendar2Holiday {
   }
   push @holidays, @singledays;
   unshift (@holidays, "# get $getstring");
-  my $today = strftime "%d.%m.%y, %H:%M", localtime(time);;\
+  $today = strftime "%d.%m.%y, %H:%M", localtime(time);
   unshift (@holidays, "# Created by myCalendar2Holiday on $today");
   FileWrite("./FHEM/${targetname}.holiday",@holidays);
 }
+
 1;
