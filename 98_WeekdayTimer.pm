@@ -1160,7 +1160,6 @@ sub WeekdayTimer_FensterOffen {
   );
 
   my $verzoegerteAusfuehrungCond = AttrVal($hash->{NAME}, "delayedExecutionCond", "0");
-  #$verzoegerteAusfuehrungCond    = 'xxx(%WEEKDAYTIMER,%NAME,%HEATING_CONTROL,$WEEKDAYTIMER,$EVENT,$NAME,$HEATING_CONTROL)';
 
   my $nextRetry = time()+55+int(rand(10));
   my $epoch = $hash->{profil}{$time}{EPOCH};
@@ -1210,8 +1209,7 @@ sub WeekdayTimer_FensterOffen {
                     "MAX"             => { "READING" => "state",           "STATUS" => "(open.*)",      "MODEL" => "r" },
                     "dummy"           => { "READING" => "state",           "STATUS" => "(([Oo]pen|[Tt]ilt).*)",   "MODEL" => "r" },
                     "HMCCUDEV"        => { "READING" => "state",           "STATUS" => "(open|tilted)", "MODEL" => "r" },
-                    "WeekdayTimer"    => { "READING" => "delayedExecution","STATUS" => "^1\$",          "MODEL" => "a" },
-                    "Heating_Control" => { "READING" => "delayedExecution","STATUS" => "^1\$",          "MODEL" => "a" }
+                    "WeekdayTimer"    => { "READING" => "delayedExecution","STATUS" => "^1\$",          "MODEL" => "a" }
                   );
 
   my $fensterKontakte = $hash->{NAME} ." ". AttrVal($hash->{NAME}, "WDT_delayedExecutionDevices", "");
@@ -1688,7 +1686,7 @@ __END__
   <b>Attributes</b>
   <ul>
     <li>delayedExecutionCond <br>
-    defines a delay Function. When returning true, the switching of the device is delayed until the function returns a false value. The behavior is just like a windowsensor in Heating_Control.
+    defines a delay Function. When returning true, the switching of the device is delayed until the function returns a false value. The behavior is the same as if one of the WDT_delayedExecutionDevices returns "open".
 
     <br><br>
     <b>Example:</b>
@@ -1709,10 +1707,10 @@ __END__
     </pre>
     </li>
     <li>WDT_delayedExecutionDevices<br>
-    Defines a space separated list devices (atm only window sensors are supported). When one of its state readings is <b>open</b> the aktual switch is delayed.</li><br>
+    May contain a space separated list of devices (atm. only window sensors are supported). When one of them states to be <b>open</b> (typical reading names and values are known) the aktual switch is delayed, until either the window is closed or the next switching time is reached (this one will also be delayed). This is especially intended to prevent heating commands while windows are opened.</li><br>
     <br>
     <li>WDT_Group<br>
-    Used to generate groups of WeekdayTimer devices to be switched together in case one of them is set to WDT_Params with the WDT_Group modifier, e.g. <code>set wd WDT_Params WDT_Group</code>.<br>This is intended to allow former Heating_Control devices to be migrated to WeekdayTimer and replaces the Heating_Control_SetAllTemps() functionality.</li><br>
+    Used to generate groups of WeekdayTimer devices to be switched together in case one of them is set to WDT_Params with the WDT_Group modifier, e.g. <code>set wd WDT_Params WDT_Group</code>.<br>This originally was intended to allow Heating_Control devices to be migrated to WeekdayTimer by offering an alternative to the former Heating_Control_SetAllTemps() functionality.</li><br>
 
     <br>
 
