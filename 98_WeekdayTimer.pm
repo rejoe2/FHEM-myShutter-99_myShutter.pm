@@ -773,7 +773,8 @@ sub WeekdayTimer_GlobalDaylistSpec {
 
 ################################################################################
 sub WeekdayTimer_SetTimerForMidnightUpdate {
-  my $hash = shift;
+  my $fnHash = shift;
+  my $hash = $fnHash->{HASH} // $fnHash;
   #my $myHash = shift;
   #my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
   return if (!defined($hash));
@@ -792,8 +793,10 @@ sub WeekdayTimer_SetTimerForMidnightUpdate {
 
 ################################################################################
 sub WeekdayTimer_SetTimerOfDay {
-  my $myHash = shift // return;
-  my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
+  my $fnHash = shift // return;
+  my $hash = $fnHash->{HASH} // $fnHash;
+  #my $myHash = shift // return;
+  #my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
   return if (!defined($hash));
 
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time());
@@ -833,7 +836,8 @@ sub WeekdayTimer_SetTimerOfDay {
     }
   }
   $hash->{helper}{WEDAYS} = \%wedays;
-  $hash->{SETTIMERATMIDNIGHT} = $myHash->{SETTIMERATMIDNIGHT};
+  #$hash->{SETTIMERATMIDNIGHT} = $myHash->{SETTIMERATMIDNIGHT};
+  $hash->{SETTIMERATMIDNIGHT} = $fnHash->{SETTIMERATMIDNIGHT}; ###strange call?
   WeekdayTimer_DeleteTimer($hash);
   WeekdayTimer_Profile    ($hash);
   WeekdayTimer_SetTimer   ($hash);
@@ -940,12 +944,12 @@ sub WeekdayTimer_SetTimer {
 
 ################################################################################
 sub WeekdayTimer_delayedTimerInPast {
-  my $myHash = shift;
-  my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
+  #my $myHash = shift;
+  #my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
   
   #renew with e.g.:
-  #my $fnHash = shift // return;
-  #mmy ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+  my $fnHash = shift // return;
+  my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
   
   return if (!defined($hash));
 
@@ -1031,12 +1035,15 @@ sub WeekdayTimer_DeleteTimer {
 
 ################################################################################
 sub WeekdayTimer_Update {
-  my $myHash = shift // return;
-  my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
+  #my $myHash = shift // return;
+  #my $hash = WeekdayTimer_GetHashIndirekt($myHash, (caller(0))[3]);
+  my $fnHash = shift // return;
+  my $hash = $fnHash->{HASH} // $fnHash;
   return if (!defined($hash));
 
   my $name     = $hash->{NAME};
-  my $idx      = $myHash->{MODIFIER};
+  #my $idx      = $myHash->{MODIFIER};
+  my $idx      = $fnHash->{MODIFIER};
   my $now      = time();
 
   # Schaltparameter ermitteln
@@ -1058,8 +1065,9 @@ sub WeekdayTimer_Update {
   my $dieGanzeWoche = $hash->{helper}{WEDAYS}{0} ? [7]:[8];
 
   my ($activeTimer, $activeTimerState);
-  if (defined $myHash->{forceSwitch}) {
-     
+  #if (defined $myHash->{forceSwitch}) {
+  if (defined $fnHash->{forceSwitch}) {
+      
     $activeTimer      = WeekdayTimer_isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = WeekdayTimer_isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
@@ -1146,12 +1154,10 @@ sub WeekdayTimer_FensterOffen {
   my $name = $hash->{NAME};
 
   my %specials = (
-         '%HEATING_CONTROL'  => $hash->{NAME},
          '%WEEKDAYTIMER'     => $hash->{NAME},
          '%NAME'             => $hash->{DEVICE},
          '%EVENT'            => $event,
          '%TIME'             => $hash->{profil}{$time}{TIME},
-         '$HEATING_CONTROL'  => $hash->{NAME},
          '$WEEKDAYTIMER'     => $hash->{NAME},
          '$NAME'             => $hash->{DEVICE},
          '$EVENT'            => $event,
@@ -1406,7 +1412,6 @@ sub WeekdayTimer_Attr {
   }
   if ( $attrName eq "delayedExecutionCond" ) {
     my %specials = (
-         '$HEATING_CONTROL'  => $hash->{NAME},
          '$WEEKDAYTIMER'     => $hash->{NAME},
          '$NAME'             => $hash->{DEVICE},
          '$EVENT'            => '1',
