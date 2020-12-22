@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm eventMapWDT 2020-12-18 Beta-User $
+# $Id: 98_WeekdayTimer.pm eventMapWDT 2020-12-21 Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -837,7 +837,7 @@ sub WeekdayTimer_SetTimerOfDay {
   WeekdayTimer_Profile    ($hash);
   WeekdayTimer_SetTimer   ($hash);
   delete $hash->{SETTIMERATMIDNIGHT};
-  my $fnHash = { HASH => $hash };
+  $fnHash = { HASH => $hash };
   WeekdayTimer_SetTimerForMidnightUpdate( $fnHash );
   return;
 }
