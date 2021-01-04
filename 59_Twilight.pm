@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm 23071 2020-11-02 05:50:23Z Beta-User $
+# $Id: 59_Twilight.pm 23296+triggerAtStartup Testversion 2021-01-04 Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -53,6 +53,8 @@ BEGIN {
           defs
           attr
           init_done
+          fhem_started
+          featurelevel
           DAYSECONDS
           HOURSECONDS
           MINUTESECONDS
@@ -105,7 +107,7 @@ sub Initialize {
     $hash->{GetFn}    = \&Twilight_Get;
     $hash->{NotifyFn} = \&Twilight_Notify;
     $hash->{AttrFn}   = \&Twilight_Attr;
-    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather";
+    $hash->{AttrList} = "$readingFnAttributes " . "useExtWeather triggerAtStartup:0,1";
     $hash->{parseParams} = 1;
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
@@ -114,7 +116,8 @@ sub Initialize {
 sub Twilight_Define {
     my $hash = shift;
     my $aref = shift;
-    my $href = shift // return if !defined $aref;
+    my $href = shift;
+    return if !defined $aref && !defined $href;
     
     return $@ unless ( FHEM::Meta::SetInternals($hash) );
     
@@ -202,7 +205,8 @@ sub Twilight_Change_DEF {
     $weather = "" if $weather eq "none";
     if (looks_like_number($weather)) {
         my @wd = devspec2array("TYPE=Weather|PROPLANTA");
-        my ($err, $wreading) = Twilight_disp_ExtWeather($hash, $wd[0]) if $wd[0];
+        my ($err, $wreading);
+        ($err, $wreading) = Twilight_disp_ExtWeather($hash, $wd[0]) if $wd[0];
         $weather = $err ? "" : $wd[0] ;
     }
     $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
@@ -277,14 +281,14 @@ sub Twilight_HandleWeatherData {
         $ss_extWeather = 50 if !looks_like_number($ss_extWeather);
     }
 
-    my $last = ReadingsNum($name, "cloudCover", -1);
+    my $lastcc = ReadingsNum($name, "cloudCover", -1);
             
     #here we have to split up for extended forecast handling... 
             
-    $inNotify ? Log3( $hash, 5, "[$name] NotifyFn called, reading is $extWeather, last is $last" ) 
-              : Log3( $hash, 5, "[$name] timer based weather update called, reading is $extWeather, last is $last" );
+    $inNotify ? Log3( $hash, 5, "[$name] NotifyFn called, reading is $extWeather, last is $lastcc" ) 
+              : Log3( $hash, 5, "[$name] timer based weather update called, reading is $extWeather, last is $lastcc" );
 
-    return if $inNotify && (abs($last - $extWeather) <6 && !defined $hash->{helper}{extWeather}{dispatch} || ReadingsAge($name, "cloudCover", 4000) < 3575 && defined $hash->{helper}{extWeather}{dispatch});
+    return if $inNotify && (abs($lastcc - $extWeather) <6 && !defined $hash->{helper}{extWeather}{dispatch} || ReadingsAge($name, "cloudCover", 4000) < 3575 && defined $hash->{helper}{extWeather}{dispatch});
 
     my $weather_horizon = Twilight_getWeatherHorizon( $hash, $extWeather, 1);
             
@@ -389,7 +393,8 @@ sub Twilight_Firstrun {
     
     if ($attrVal && $attrVal ne "none") {
         Twilight_init_ExtWeather_usage( $hash, $attrVal );
-         $extWeatherVal = ReadingsNum( $name, "cloudCover", ReadingsNum( $hash->{helper}{extWeather}{Device}, $hash->{helper}{extWeather}{Reading}, 0 ) );
+        my $ewr = $hash->{helper}{extWeather}{Reading}  // $hash->{helper}{extWeather}{dispatch}{trigger} // $hash->{helper}{extWeather}{trigger}; 
+        $extWeatherVal = ReadingsNum( $name, "cloudCover", ReadingsNum( $hash->{helper}{extWeather}{Device}, $ewr, 0 ) );
         readingsSingleUpdate ( $hash, "cloudCover", $extWeatherVal, 0 ) if $extWeatherVal;
     }
     Twilight_getWeatherHorizon( $hash, $extWeatherVal );
@@ -411,7 +416,7 @@ sub Twilight_Attr {
 
     if ( $attrName eq 'useExtWeather' ) {
         if ($cmd eq "set") {
-            return "External weather device already in use, most likely assigned by define" if $hash->{helper}{extWeather}{regexp} =~ m,$attrVal,;
+            return "External weather device already in use, most likely assigned by define" if $hash->{helper}{extWeather}{regexp} =~ m{$attrVal}xms;
             return Twilight_init_ExtWeather_usage($hash, $attrVal); 
         } elsif ($cmd eq "del") {
             notifyRegexpChanged( $hash, "" );
@@ -440,13 +445,13 @@ sub Twilight_init_ExtWeather_usage {
                 '$W_DEV'     => $extWeather,
                 '$W_READING' => $extWReading
             );
-            my $err = perlSyntaxCheck( $parts[1] );
+            $err = perlSyntaxCheck( $parts[1] );
             return $err if ( $err );
         }
     } else {
         #conversion code, try to guess the ext. weather device to replace yahoo
         my @devices=devspec2array("TYPE=Weather"); 
-        return "No Weather-Type device found if !$devices[0]";
+        return "No Weather-Type device found" if !$devices[0];
         $extWeather = $devices[0];
     }
     
@@ -459,7 +464,7 @@ sub Twilight_init_ExtWeather_usage {
     $hash->{helper}{extWeather}{Reading} = $extWReading if !$parts[1] && !exists  $hash->{helper}{extWeather}{dispatch};
     if ($parts[1]) {
         $hash->{helper}{extWeather}{trigger} = $extWReading ;
-        $parts[1] = qq ({ $parts[1] }) if $parts[1] !~ m/^{.*}$/s;
+        $parts[1] = qq ({ $parts[1] }) if $parts[1] !~ m/^[{].*}$/xms;
         $hash->{helper}{extWeather}{dispatch}{userfunction} = $parts[1];
     }
     return InternalTimer( time(), \&Twilight_Firstrun,$hash,0) if $init_done && $useTimer;
@@ -519,8 +524,7 @@ sub Twilight_Get {
 sub resetRegisteredInternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
     deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
-    setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
-    return; 
+    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
 }
 
 ################################################################################
@@ -586,8 +590,8 @@ sub Twilight_calc {
     my $hash = shift;
     my $deg  = shift;
     my $idx  = shift // return;
-
-    my $now = time();
+    my $now  = shift // time();
+    
     my $midnight = $now - secondsSinceMidnight( $now );
     my $lat      = $hash->{helper}{'.LATITUDE'};
     my $long     = $hash->{helper}{'.LONGITUDE'};
@@ -637,9 +641,9 @@ sub Twilight_TwilightTimes {
         $idx++;
         next if ( $whitchTimes eq "weather" && !( $horizon =~ m/weather/ ) );
 
-        my ( $name, $deg ) = split( ":", $horizon );
-        my $sr = "sr$name";
-        my $ss = "ss$name";
+        my ( $sxname, $deg ) = split( ":", $horizon );
+        my $sr = "sr$sxname";
+        my $ss = "ss$sxname";
         $hash->{TW}{$sr}{NAME}  = $sr;
         $hash->{TW}{$ss}{NAME}  = $ss;
         $hash->{TW}{$sr}{DEG}   = $deg;
@@ -723,7 +727,9 @@ sub Twilight_fireEvent {
     my $light = $myHash->{LIGHT};
     my $state = $myHash->{STATE};
     my $swip  = $myHash->{SWIP};
-
+    
+    $swip = 0 if time() - $fhem_started < 60 && !AttrVal($name,'triggerAtStartup', $featurelevel < 6.1 ? 1:0);
+    
     my $eventTime = $myHash->{TIME};
     my $nextEvent = $myHash->{NAMENEXT};
 
@@ -735,7 +741,7 @@ sub Twilight_fireEvent {
       ? FmtTime( $hash->{TW}{$nextEvent}{TIME} )
       : "undefined";
 
-    my $doTrigger = !( defined( $hash->{LOCAL} ) )
+    my $doTrigger = !defined( $hash->{LOCAL} )
       && ( abs($delta) < 6 || $swip && $state gt $oldState );
       #&& ( abs($delta) < 6 || $state gt $oldState );
 
@@ -1002,9 +1008,19 @@ sub Twilight_CompassPoint {
 }
 
 sub twilight {
-    my ( $twilight, $reading, $min, $max ) = @_;
+    my ( $twilight, $reading, $min, $max, $cloudCover ) = @_;
+    my $hash = $defs{$twilight};
+    return "unknown device $twilight" if !defined $hash;
+    
+    my $t;
+    
+    $t = hms2h( ReadingsVal( $twilight, $reading, 0 ) ) if $reading ne "sr_tomorrow" and $reading ne "ss_tomorrow";
 
-    my $t = hms2h( ReadingsVal( $twilight, $reading, 0 ) );
+    if ($reading eq "sr_tomorrow" or $reading eq "ss_tomorrow") {
+        my $wh = Twilight_getWeatherHorizon( $hash, $cloudCover // 50, 0);
+        my ($sr, $ss) = Twilight_calc( $hash, $wh, "7", time() + DAYSECONDS );
+        $t = hms2h( FmtTime( $reading eq "sr_tomorrow" ? $sr : $ss ) );
+    }
 
     $t = hms2h($min) if ( defined($min) && ( hms2h($min) > $t ) );
     $t = hms2h($max) if ( defined($max) && ( hms2h($max) < $t ) );
@@ -1018,9 +1034,9 @@ sub twilight {
 sub getTwilightHours {
     my $hash    = shift // return;
     my $hour    = ( localtime )[2];
-    my $sr_hour = ( localtime( $hash->{TW}{sr_weather}{TIME}))[2];
-    my $ss_hour = ( localtime( $hash->{TW}{ss_weather}{TIME}))[2]; 
-    return $hour, $sr_hour, $ss_hour;
+    my $sr_hour = defined $hash->{TW}{sr_weather}{TIME} ? ( localtime( $hash->{TW}{sr_weather}{TIME} ))[2] : 7;
+    my $ss_hour = defined $hash->{TW}{ss_weather}{TIME} ? ( localtime( $hash->{TW}{ss_weather}{TIME} ))[2] : 18; 
+    return $hour,$sr_hour,$ss_hour;
 }
 
 sub getwTYPE_Weather {
@@ -1057,7 +1073,6 @@ sub getwTYPE_Weather {
 sub getwTYPE_PROPLANTA {
     my $hash   = shift // return;
     
-    
     my $extDev = $hash->{helper}{extWeather}{Device};
     my @hour  = getTwilightHours($hash); 
     
@@ -1066,14 +1081,17 @@ sub getwTYPE_PROPLANTA {
     
     my @ret;
     for (my $i = 0; $i < 3 ; $i++) {
-        $hour[$i] <=  4 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud03",0) : 
-        $hour[$i] <=  7 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud06",0) :
-        $hour[$i] <= 10 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud09",0) :
-        $hour[$i] <= 19 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud18",0) :
-        $hour[$i] <= 22 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud21",0) :
-    $ret[$i] = ReadingsNum($extDev,"fc${fc_day1}_cloud03",0);
+        $hour[$i] <  4 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud03",0) : (
+        $hour[$i] <  7 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud06",0) : (
+        $hour[$i] < 10 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud09",0) : (
+        $hour[$i] < 13 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud12",0) : (
+        $hour[$i] < 16 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud15",0) : (
+        $hour[$i] < 19 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud18",0) : (
+        $hour[$i] < 22 ? $ret[$i] = ReadingsNum($extDev,"fc${fc_day0}_cloud21",0) :
+        $ret[$i] = ReadingsNum($extDev,"fc${fc_day1}_cloud00",0)))))));
     }
-    return @ret;;
+    #Log3( $hash, 4, "[$hash->{NAME}] Proplanta data: hours $hour[0]-$hour[1]-$hour[2], fc_day0 $fc_day0, data $ret[0]-$ret[1]-$ret[2]");
+    return @ret;
 }
 1;
 
@@ -1138,6 +1156,8 @@ __END__
     <code>5 - weather twilight, sun is between indoor_horizon and a virtual weather horizon (the weather horizon depends on weather conditions (optional)</code><br>
     <code>6 - maximum daylight</code><br>
     <br>
+    <b>state</b> will reflect the current virtual "day phase" (0 = after midnight, 1 = sr_astro has passed, ...12 = ss_astro has passed)<br>
+    
  <b>Azimut, Elevation, Twilight</b>
  <br>
    The module calculates additionally the <b>azimuth</b> and the <b>elevation</b> of the sun. The values can be used to control a roller shutter.
@@ -1214,7 +1234,7 @@ __END__
     The reading used shoud be in the range of 0 to 100 like the reading <b>c_clouds</b>    in an <b><a href="#openweathermap">openweathermap</a></b> device, where 0 is clear sky and 100 are overcast clouds.<br/>
     Note: Atm. additional weather effects like heavy rain or thunderstorms are neglegted for the calculation of the <b>twilight_weather</b> reading.<br/>
     
-    By adding <b>usercode</b>, you may get more realistic results for sr_weather and ss_weather calculation. Just return - besides the actual cloudCover reading value additional predicted values for corresponding indoor times, seperated by ":"<br>
+    By adding <b>usercode</b>, (Note: experimental feature! May work or not or lead to crashes etc....) you may get more realistic results for sr_weather and ss_weather calculation. Just return - besides the actual cloudCover reading value additional predicted values for corresponding indoor times, seperated by ":"<br>
     <pre>
       Value_A:Value_B:Value_C
     </pre>
@@ -1280,8 +1300,7 @@ Example:
     <br><br>
   <b>indoor_horizon</b>
   <br>
-    Der Parameter <b>indoor_horizon</b> bestimmt einen virtuellen Horizont, der f&uuml;r die Berechnung der D&auml;mmerung innerhalb von R&auml;men genutzt werden kann. Minimalwert ist -6 (ergibt gleichen Wert wie Zivile D&auml;mmerung). Bei 0 fallen
-       indoor- und realer D&aumlmmerungswert zusammen. Werte gr&oumlsser 0 ergeben fr&uumlhere Werte für den Abend bzw. sp&aumltere f&uumlr den Morgen.
+     Der Parameter <b>indoor_horizon</b> bestimmt einen virtuellen Horizont, der für die Berechnung der Dämmerung innerhalb von Räumen genutzt werden kann. Minimalwert ist -6 (ergibt gleichen Wert wie Zivile Dämmerung). Bei 0 fallen indoor- und realer Dämmerungswert zusammen. Werte größer 0 ergeben frühere Werte für den Abend bzw. spätere für den Morgen.
     <br><br>
   <b>weatherDevice:Reading</b>
   <br>
@@ -1296,7 +1315,7 @@ Example:
     <br>
     Ein Twilight-Device berechnet periodisch die D&auml;mmerungszeiten und -phasen w&auml;hrend des Tages.
     Es berechnet ein virtuelles "Licht"-Element das einen Indikator f&uuml;r die momentane Tageslichtmenge ist.
-    Neben der Position auf der Erde wird es vom sog. "indoor horizon" (Beispielsweise hohe Geb&auml;de oder Berge)
+    Neben der Position auf der Erde wird es vom sog. "indoor horizon" (Beispielsweise hohe Gebäude oder Berge)
     und dem Wetter beeinflusst. Schlechtes Wetter f&uuml;hrt zu einer Reduzierung des Tageslichts f&uuml;r den ganzen Tag.
     Das berechnete Licht liegt zwischen 0 und 6 wobei die Werte folgendes bedeuten:<br><br>
   <b>light</b>
@@ -1309,6 +1328,8 @@ Example:
     <code>5 - Wetterbedingte D&auml;mmerung, die Sonne ist zwischen indoor_horizon und einem virtuellen Wetter-Horizonz (der Wetter-Horizont ist Wetterabh&auml;ngig (optional)</code><br>
     <code>6 - Maximales Tageslicht</code><br>
     <br>
+    <b>state</b> entspricht der aktuellen virtuellen "Tages-Phase" (0 = nach Mitternacht, 1 = nach sr_astro, ...12 = nach ss_astro)<br>
+    
  <b>Azimut, Elevation, Twilight (Seitenwinkel, Höhenwinkel, D&auml;mmerung)</b>
  <br>
    Das Modul berechnet zus&auml;tzlich Azimuth und Elevation der Sonne. Diese Werte k&ouml;nnen zur Rolladensteuerung verwendet werden.<br><br>
@@ -1376,9 +1397,9 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
     <li><b>useExtWeather &lt;device&gt;:&lt;reading&gt; [&lt;usercode&gt;]</b></li>
     Nutzt Daten von einem anderen Device um <b>twilight_weather</b> zu berechnen.<br/>
-    Das Reading sollte sich im Intervall zwischen 0 und 100 bewegen, z.B. das Reading <b>c_clouds</b> in einem<b><a href="#openweathermap">openweathermap</a></b> device, bei dem 0 heiteren und 100 bedeckten Himmel bedeuten.
+    Das Reading sollte sich im Intervall zwischen 0 und 100 bewegen, z.B. das Reading <b>c_clouds</b> in einem<b> <a href="#openweathermap">openweathermap</a></b> device, bei dem 0 heiteren und 100 bedeckten Himmel bedeuten.
     Wettereffekte wie Starkregen oder Gewitter k&umlnnen derzeit f&uumlr die Berechnung von <b>twilight_weather</b> nicht mehr herangezogen werden.<br>
-    Durch Angabe von <b>usercode</b> kann die Berechnung der sr_weather und ss_weather-Zeiten verbessert werden, indem die zum jeweils zugehörigen indoor-Zeitpunkt gehörenden Vorhersage-Werte zurückgegeben werden. Das Rückgabe-Format der Funktion muss sein:<br>
+    Durch Angabe von <b>usercode</b> (Achtung: experimentelles feature! Kann auch schiefgehen...) kann die Berechnung der sr_weather und ss_weather-Zeiten verbessert werden, indem die zum jeweils zugehörigen indoor-Zeitpunkt gehörenden Vorhersage-Werte zurückgegeben werden. Das Rückgabe-Format der Funktion muss sein:<br>
     <pre>
       Wert_A:Wert_B:Wert_C
     </pre>
@@ -1409,6 +1430,9 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
      <tr><td><b>$min</b></td><td>Parameter min time - optional</td></tr>
      <tr><td><b>$max</b></td><td>Parameter max time - optional</td></tr>
      </table>
+     <br><br>
+     Optional ist es möglich, auch die morgigen sr_weather bzw. ss_weather abzufragen, dafür werden die "fiktiven" Reading-Namen "sr_tomorrow" bzw. "ss_tomorrow" verwendet. Als Bedeckungsgrad wird dabei ein fiktiver Wert von "50" angenommen, dieser kann mit (optionalem) 5. Parameter auch abweichend (Bereich: 0-100) angegeben werden. Beispiel:<br>
+     <code>{ twilight('tw_test1','sr_tomorrow','08:00','09:10',100) }</code>
   </ul>
   <br>
 Anwendungsbeispiel:
