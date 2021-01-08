@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myAdvanced_Utils.pm 2019-07-24 Beta-User $
+# $Id: myAdvanced_Utils.pm 2019-05-15 Beta-User $
 #
 
 package main;
@@ -8,17 +8,27 @@ use strict;
 use warnings;
 
 sub
-myAdvanced_Utils_Initialize($$)
+myAdvanced_Utils_Initialize
 {
-  my ($hash) = @_;
+  my $hash = shift;
 }
 
 # Enter you functions below _this_ line.
 
-######## sendemail für den Emailversand verwenden ############ 
+sub
+myHHMMSS2sec
+{
+  my ($h,$m,$s) = split(":", shift);
+  $m = 0 if(!$m);
+  $s = 0 if(!$s);
+  my $seconds = 3600*$h+60*$m+$s;
+  return $seconds;
+}
+
+######## sendEmail für den Emailversand verwenden ############ 
 #adopted version from https://wiki.fhem.de/wiki/E-Mail_senden#Raspberry_Pi
 sub 
-mySendEmail ($$$;$) { 
+mySendEmail { 
  my ($rcpt, $subject, $text, $attach) = @_; 
  my $sender = getKeyValue("myEmailAddress"); # use {setKeyValue("myEmailAddress",'absender@account.de')} once in commandline to store the parameter 
  my $konto = getKeyValue("myEmailAccount"); # like before: {setKeyValue("myEmailAccount",'absender@account.de')} 
@@ -33,20 +43,19 @@ mySendEmail ($$$;$) {
    $ret .= qx(sendemail -f $sender -t $rcpt -u $subject -m $text -s $provider -xu $konto -xp $passwrd -o tls=auto -o message-charset=utf-8);
  }
  $ret =~ s,[\r\n]*,,g;    # remove CR from return-string 
- Log 1, "mySendEmail returned: $ret"; 
+ Log3( "mySendEmail", 3, "mySendEmail returned: $ret"); 
 }
 
 
 #found: https://forum.fhem.de/index.php/topic,85958.msg791048.html#msg791048
-sub listInternalTimer(;$) {
-    my ($p) = @_;
+sub listInternalTimer {
+    my $p = shift;
     my %cop;
 
-    foreach my $e (@intAtA)
+    for my $e (@intAtA)
     {
         my $name = "";
-        if (ref($e->{ARG}) eq "HASH")
-        {
+        if (ref($e->{ARG}) eq "HASH") {
             if (exists($e->{ARG}{NAME}))
             {
                 $name = $e->{ARG}{NAME};
@@ -56,7 +65,7 @@ sub listInternalTimer(;$) {
                 $name = $e->{ARG}{arg};
             }           
         }
-        elsif ((ref($e->{ARG}) eq "REF") && exists(${$e->{ARG}}->{hash}))
+        elsif (ref($e->{ARG}) eq "REF" && exists(${$e->{ARG}}->{hash}))
         {
             $name = ${$e->{ARG}}->{hash}{NAME};
         }
@@ -68,18 +77,18 @@ sub listInternalTimer(;$) {
         my $function = sprintf("%-25s %-25s", $name, $e->{FN});
         my $line = "<td>".$e->{atNr}."</td><td>".$time."</td><td>".$function."</td>";
 
-        if ($p && $ p eq 'f')
+        if ('f' eq $p)
         {
-            $cop{$function} = $line;
-	}
-        elsif ($p && $ p eq 't')
+            $cop{$function." ".$e->{atNr}} = $line;
+	    }
+        elsif ('t' eq $p)
         {
-            $cop{$time} = $line;
-	}
+            $cop{$time." ".$e->{atNr}} = $line;
+	    }
         else
         {
             $cop{$name." ".$e->{atNr}} = $line;
-	}
+	    }
     }
 
     my $ret = '<html><table width=50%>';
@@ -90,7 +99,7 @@ sub listInternalTimer(;$) {
     $ret .= "<td><b>Function</b></td>";
     $ret .= '</tr>';
    
-    foreach my $k (sort keys %cop) {
+    for my $k (sort keys %cop) {
         $ret .= "$cop{$k}";
         $ret .= '</tr>';
     }
@@ -99,51 +108,19 @@ sub listInternalTimer(;$) {
     return $ret;
 }
 
-sub mySendLast20LogEntries($$){
-  my ($bot,$receiver) = @_;
-  my $seconds = time();
-  my $stop_processing = 0;
-  my @t = localtime($seconds);
-  my $today_log_filename = ResolveDateWildcards($attr{global}{logfile}, @t);
-  my @tyesterday = localtime($seconds-DAYSECONDS);
-  my ($err, @logdata) = FileRead({FileName => $today_log_filename,ForceType => "file"});
-  my $message = "Error reading logfile: $err";
-  unless ($err) {
-    my @datatosend;
-    if (@logdata > 19) {
-      @datatosend = @logdata[-20..-1];
-    } else {
-      @datatosend = @logdata;
-	  my $yesterday_log_filename = ResolveDateWildcards($attr{global}{logfile}, @tyesterday);
-      unless ($yesterday_log_filename eq $today_log_filename) {
-        my ($err2, @logdata2) = FileRead({FileName => $yesterday_log_filename,ForceType => "file"});
-        my $remainingLines = (@datatosend) - 20;
-		unshift (@datatosend, @logdata2[${remainingLines}..-1]) unless $err2;
-      }
-    }
-    my $str_today = ResolveDateWildcards("%Y.%m.%d",@t);
-    my $str_yesterday = ResolveDateWildcards("%Y.%m.%d",@tyesterday);
-    @datatosend = grep {
-      $_ =~ s/($str_today|$str_yesterday).//g #get only values from today and yesterday, cut of date and one character
-    } @datatosend;
-	for (@datatosend)  { s/[;&<>]//g };#remove unwanted characters
-    $message = join("\n", @datatosend); 
-  }
-  CommandSet(undef,"$bot _msg \@$receiver ```${message}```");
-  return;
-}
-
-sub identifyMyBestGW($;$) {
-  my ($name, $maxReadingsAge) = @_;
-  my $hash = $defs{$name};
-  $maxReadingsAge = $maxReadingsAge // AttrVal($name,"maxReadingsAge",600);
-  my @rssis = grep { $_ =~ /.*_rssi/ } sort keys %{ $hash->{READINGS} }; 
+sub identifyMyBestGW {
+  my $name = shift;
+  my $maxReadingsAge = shift // AttrVal($name,"maxReadingsAge",600);
+  my $hash = $defs{NAME};
+  
+  my @rssis = grep { $_ =~ /.*_RSSI/ } sort keys %{ $hash->{READINGS} }; 
+  my $mintstamp = time() - $maxReadingsAge;
   my $bestGW = "unknown";
   my $bestGWold = ReadingsVal($name,"bestRecentGW","unknownGW");
   my $bestRSSI = -1000;
   my $currentRSSI = 0;
-  foreach (@rssis) {
-    if (ReadingsAge($name,$_,100) < $maxReadingsAge) {
+  for (@rssis) {
+    if (ReadingsTimeStamp($name,$_,100) > $mintstamp) {
       $currentRSSI = ReadingsVal($name,$_,-1100);
       if ($currentRSSI > $bestRSSI) {
         $bestRSSI = $currentRSSI ;
@@ -153,10 +130,54 @@ sub identifyMyBestGW($;$) {
     }
   }
   $bestGW =~ s/_.*//g;
-  return $bestGW ne $bestGWold ? $bestGW : undef;
+  return "$bestGW" ne "$bestGWold" ? {bestRecentGW=>$bestGW} : undef;
 }
 
+sub myCalendar2Holiday {
+  my $calname    = shift // return;
+  my $regexp     = shift // return;
+  my $targetname = shift // $calname;
+  my $field      = shift // "summary";
+  my $limit      = shift // 10;
+  my $yearEndRe  = shift;
+ 
+  my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
+  my $getstring = $calname . ' events format:custom="4 $T1 $T2 $S $D" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
+  my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
+ 
+  my @holidays;
+  my @singledays;
+  for my $holiday (@holidaysraw) {
+    my @tokens = split (" ",$holiday);
+    #my @elements = split( " ", $holiday ); 
+    my $duration = pop @tokens;
+    
+    my $severalDays = $duration =~ m,[0-9]+h, ? 0 : 1;
+    
+    $holiday = join(' ', @tokens);
+    if (!$severalDays) {
+      $tokens[0] = 1;
+      splice @tokens, 2, 1;
+      $holiday = join(' ', @tokens);
+      push (@singledays, $holiday);
+    } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
+      push (@holidays, $holiday);
+    } else { 
+      $holiday = "4 $tokens[1] 12-31 $tokens[3]";
+      push (@holidays,$holiday) if $month > 9;
+      $holiday = "4 01-01 $tokens[2] $tokens[3]";
+      unshift (@holidays,$holiday);
+    }
+  }
+  push @holidays, @singledays;
+  unshift (@holidays, "# get $getstring");
+  my $today = strftime "%d.%m.%y, %H:%M", localtime(time);;\
+  unshift (@holidays, "# Created by myCalendar2Holiday on $today");
+  FileWrite("./FHEM/${targetname}.holiday",@holidays);
+}
 1;
+
+__END__
 
 =pod
 =begin html
