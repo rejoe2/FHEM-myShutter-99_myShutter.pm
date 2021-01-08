@@ -98,7 +98,7 @@ sub Initialize {
   $hash->{GetFn}   = \&WeekdayTimer_Get;
   $hash->{AttrFn}  = \&WeekdayTimer_Attr;
   $hash->{UpdFn}   = \&WeekdayTimer_Update;
-  $hash->{AttrList}= qq(disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap:textField-long WDT_sendDelay:slider,0,1,300,1 $readingFnAttributes);
+  $hash->{AttrList}= "disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap:textField-long WDT_sendDelay:slider,0,1,300,1" . $readingFnAttributes;
   return;
 }
 
