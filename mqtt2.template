@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 23387 2020-12-20 07:43:53Z Beta-User $
+# $Id: mqtt2.template 23463 2021-01-03 15:14:13Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -2736,6 +2736,14 @@ order:A_16c
 par:DEVNAME;name of this shelly;{ AttrVal("DEVICE","readingList","") =~ m,shellies/([^/]+)/, ? $1 : undef }
 #par:ICON;ICON as set, defaults to fts_window_1w_open;{ AttrVal("DEVICE","icon","fts_window_1w_open") }
 #attr DEVICE icon ICON
+attr DEVICE readingList shellies/DEVNAME/online:.* online\
+  shellies/DEVNAME/announce:.* { json2nameValue($EVENT) }\
+  shellies/DEVNAME/input/0:.* input_0\
+  shellies/DEVNAME/input/1:.* input_1\
+  shellies/DEVNAME/input/2:.* input_2\
+  shellies/DEVNAME/input_event/0:.* { json2nameValue($EVENT, '0_', $JSONMAP) }\
+  shellies/DEVNAME/input_event/1:.* { json2nameValue($EVENT, '1_', $JSONMAP) }\
+  shellies/DEVNAME/input_event/2:.* { json2nameValue($EVENT, '2_', $JSONMAP) }
 attr DEVICE stateFormat In 1:\
 input_0\
 <br>In 2:\
@@ -2744,7 +2752,7 @@ input_1\
 input_2
 attr DEVICE devStateIcon 0:off 1:on
 attr DEVICE model shelly_ix3
-setreading DEVICE attrTemplateVersion 20201110
+setreading DEVICE attrTemplateVersion 20210108
 
 #shelly2rgbw
 # contributed by dkreutz http://forum.fhem.de/index.php/topic,94060.msg944338.html#msg944338
@@ -2799,16 +2807,16 @@ attr DEVICE readingList shellies/DEVNAME/white/0/status:.* {json2nameValue($EVEN
   shellies/announce:.* { $EVENT =~ m,..id...DEVNAME...mac.*, ? json2nameValue($EVENT) : return }
 attr DEVICE setList off:noArg shellies/DEVNAME/white/0/command off\
   on:noArg shellies/DEVNAME/white/0/command on\
-  brightness:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/0/set {"mode":"white","brightness":"$EVTPART1"}\
-  brightness_on:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/0/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}\
+  pct:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/0/set {"mode":"white","brightness":"$EVTPART1"}\
+  pct_on:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/0/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}\
   x_update:noArg shellies/DEVNAME/command update_fw\
   x_mqttcom shellies/DEVNAME/command $EVTPART1
 deletereading -q DEVICE (?!associatedWith).*
-setreading DEVICE attrTemplateVersion 20201215
+setreading DEVICE attrTemplateVersion 20210103
 attr DEVICE model shelly2rgbw_4w_split
 attr DEVICE setStateList on off
-set DEVICE attrTemplate set_associatedWith \CHANNELS=4 \MAKECOPIES=1
 attr DEVICE webCmd on:off:pct
+set DEVICE attrTemplate set_associatedWith \CHANNELS=4 \MAKECOPIES=1
 set DEVICE x_mqttcom announce
 attr DEVICE autocreate 0
 attr DEVICE_CH2 readingList shellies/DEVNAME/white/1/status:.* {json2nameValue($EVENT,'',$JSONMAP)}\
@@ -2817,25 +2825,25 @@ attr DEVICE_CH2 readingList shellies/DEVNAME/white/1/status:.* {json2nameValue($
   shellies/DEVNAME/online:.* online
 attr DEVICE_CH2 setList off:noArg shellies/DEVNAME/white/1/command off\
   on:noArg shellies/DEVNAME/white/1/command on\
-  brightness:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/1/set {"mode":"white","brightness":"$EVTPART1"}\
-  brightness_on:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/1/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}
+  pct:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/1/set {"mode":"white","brightness":"$EVTPART1"}\
+  pct_on:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/1/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}
 attr DEVICE_CH3 readingList shellies/DEVNAME/white/2/status:.* {json2nameValue($EVENT,'',$JSONMAP)}\
   shellies/DEVNAME/white/2:.* state\
   shellies/DEVNAME/white/2/set:.* { json2nameValue($EVENT) }\
   shellies/DEVNAME/online:.* online
 attr DEVICE_CH3 setList off:noArg shellies/DEVNAME/white/2/command off\
   on:noArg shellies/DEVNAME/white/2/command on\
-  brightness:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/2/set {"mode":"white","brightness":"$EVTPART1"}\
-  brightness_on:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/2/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}
+  pct:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/2/set {"mode":"white","brightness":"$EVTPART1"}\
+  pct_on:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/2/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}
 attr DEVICE_CH4 readingList shellies/DEVNAME/white/3/status:.* {json2nameValue($EVENT,'',$JSONMAP)}\
   shellies/DEVNAME/white/3:.* state\
   shellies/DEVNAME/white/3/set:.* { json2nameValue($EVENT) }\
   shellies/DEVNAME/online:.* online
 attr DEVICE_CH4 setList off:noArg shellies/DEVNAME/white/3/command off\
   on:noArg shellies/DEVNAME/white/3/command on\
-  brightness:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/3/set {"mode":"white","brightness":"$EVTPART1"}\
-  brightness_on:colorpicker,BRI,0,1,255 shellies/DEVNAME/white/3/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}
-set DEVICE,DEVICE_CH2,DEVICE_CH3,DEVICE_CH4 attrTemplate speechcontrol_type_light_255
+  pct:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/3/set {"mode":"white","brightness":"$EVTPART1"}\
+  pct_on:colorpicker,BRI,0,1,100 shellies/DEVNAME/white/3/set {"ison":"true","mode":"white","brightness":"$EVTPART1"}
+set DEVICE,DEVICE_CH2,DEVICE_CH3,DEVICE_CH4 attrTemplate speechcontrol_type_light
   
 #shellydimmer
 # contributed by zeppelin, https://forum.fhem.de/index.php/topic,94495.msg994764.html#msg994764
