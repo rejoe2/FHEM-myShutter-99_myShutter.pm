@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myAdvanced_Utils.pm 2019-05-15 Beta-User $
+# $Id: myAdvanced_Utils.pm 2021-01-09 Beta-User $
 #
 
 package main;
@@ -15,17 +15,7 @@ myAdvanced_Utils_Initialize
 
 # Enter you functions below _this_ line.
 
-sub
-myHHMMSS2sec
-{
-  my ($h,$m,$s) = split(":", shift);
-  $m = 0 if(!$m);
-  $s = 0 if(!$s);
-  my $seconds = 3600*$h+60*$m+$s;
-  return $seconds;
-}
-
-######## sendEmail für den Emailversand verwenden ############ 
+######## sendemail für den Emailversand verwenden ############ 
 #adopted version from https://wiki.fhem.de/wiki/E-Mail_senden#Raspberry_Pi
 sub 
 mySendEmail { 
@@ -43,11 +33,12 @@ mySendEmail {
    $ret .= qx(sendemail -f $sender -t $rcpt -u $subject -m $text -s $provider -xu $konto -xp $passwrd -o tls=auto -o message-charset=utf-8);
  }
  $ret =~ s,[\r\n]*,,g;    # remove CR from return-string 
- Log3( "mySendEmail", 3, "mySendEmail returned: $ret"); 
+ Log3("mySendEmail", 3, "mySendEmail returned: $ret"); 
+ return
 }
 
 
-#found: https://forum.fhem.de/index.php/topic,85958.msg791048.html#msg791048
+#originally found: https://forum.fhem.de/index.php/topic,85958.msg791048.html#msg791048
 sub listInternalTimer {
     my $p = shift;
     my %cop;
@@ -80,15 +71,15 @@ sub listInternalTimer {
         if ('f' eq $p)
         {
             $cop{$function." ".$e->{atNr}} = $line;
-	    }
+        }
         elsif ('t' eq $p)
         {
             $cop{$time." ".$e->{atNr}} = $line;
-	    }
+        }
         else
         {
             $cop{$name." ".$e->{atNr}} = $line;
-	    }
+        }
     }
 
     my $ret = '<html><table width=50%>';
@@ -108,19 +99,54 @@ sub listInternalTimer {
     return $ret;
 }
 
+
+sub mySendLast20LogEntries {
+  my $bot = shift;
+  my $receiver = shift // return;
+  my $seconds = time();
+  my $stop_processing = 0;
+  my @t = localtime($seconds);
+  my $today_log_filename = ResolveDateWildcards($attr{global}{logfile}, @t);
+  my @tyesterday = localtime($seconds-DAYSECONDS);
+  my ($err, @logdata) = FileRead({FileName => $today_log_filename,ForceType => "file"});
+  my $message = "Error reading logfile: $err";
+  unless ($err) {
+    my @datatosend;
+    if (@logdata > 19) {
+      @datatosend = @logdata[-20..-1];
+    } else {
+      @datatosend = @logdata;
+	  my $yesterday_log_filename = ResolveDateWildcards($attr{global}{logfile}, @tyesterday);
+      unless ($yesterday_log_filename eq $today_log_filename) {
+        my ($err2, @logdata2) = FileRead({FileName => $yesterday_log_filename,ForceType => "file"});
+        my $remainingLines = (@datatosend) - 20;
+		unshift (@datatosend, @logdata2[${remainingLines}..-1]) unless $err2;
+      }
+    }
+    my $str_today = ResolveDateWildcards("%Y.%m.%d",@t);
+    my $str_yesterday = ResolveDateWildcards("%Y.%m.%d",@tyesterday);
+    @datatosend = grep {
+      $_ =~ s/($str_today|$str_yesterday).//g #get only values from today and yesterday, cut of date and one character
+    } @datatosend;
+	for (@datatosend)  { s/[;&<>]//g };#remove unwanted characters
+    $message = join("\n", @datatosend); 
+  }
+  CommandSet(undef,"$bot _msg \@$receiver ```${message}```");
+  return;
+}
+
 sub identifyMyBestGW {
   my $name = shift;
   my $maxReadingsAge = shift // AttrVal($name,"maxReadingsAge",600);
-  my $hash = $defs{NAME};
   
-  my @rssis = grep { $_ =~ /.*_RSSI/ } sort keys %{ $hash->{READINGS} }; 
-  my $mintstamp = time() - $maxReadingsAge;
+  my $hash = $defs{$name};
+  my @rssis = grep { $_ =~ /.*_rssi/ } sort keys %{ $hash->{READINGS} }; 
   my $bestGW = "unknown";
   my $bestGWold = ReadingsVal($name,"bestRecentGW","unknownGW");
   my $bestRSSI = -1000;
   my $currentRSSI = 0;
   for (@rssis) {
-    if (ReadingsTimeStamp($name,$_,100) > $mintstamp) {
+    if (ReadingsAge($name,$_,100) < $maxReadingsAge) {
       $currentRSSI = ReadingsVal($name,$_,-1100);
       if ($currentRSSI > $bestRSSI) {
         $bestRSSI = $currentRSSI ;
@@ -130,55 +156,11 @@ sub identifyMyBestGW {
     }
   }
   $bestGW =~ s/_.*//g;
-  return "$bestGW" ne "$bestGWold" ? {bestRecentGW=>$bestGW} : undef;
+  return $bestGW ne $bestGWold ? $bestGW : undef;
 }
 
-sub myCalendar2Holiday {
-  my $calname    = shift // return;
-  my $regexp     = shift // return;
-  my $targetname = shift // $calname;
-  my $field      = shift // "summary";
-  my $limit      = shift // 10;
-  my $yearEndRe  = shift;
- 
-  my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
-  my $getstring = $calname . ' events format:custom="4 $T1 $T2 $S $D" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
-  my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
- 
-  my @holidays;
-  my @singledays;
-  for my $holiday (@holidaysraw) {
-    my @tokens = split (" ",$holiday);
-    #my @elements = split( " ", $holiday ); 
-    my $duration = pop @tokens;
-    
-    my $severalDays = $duration =~ m,[0-9]+h, ? 0 : 1;
-    
-    $holiday = join(' ', @tokens);
-    if (!$severalDays) {
-      $tokens[0] = 1;
-      splice @tokens, 2, 1;
-      $holiday = join(' ', @tokens);
-      push (@singledays, $holiday);
-    } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
-      push (@holidays, $holiday);
-    } else { 
-      $holiday = "4 $tokens[1] 12-31 $tokens[3]";
-      push (@holidays,$holiday) if $month > 9;
-      $holiday = "4 01-01 $tokens[2] $tokens[3]";
-      unshift (@holidays,$holiday);
-    }
-  }
-  push @holidays, @singledays;
-  unshift (@holidays, "# get $getstring");
-  my $today = strftime "%d.%m.%y, %H:%M", localtime(time);;\
-  unshift (@holidays, "# Created by myCalendar2Holiday on $today");
-  FileWrite("./FHEM/${targetname}.holiday",@holidays);
-}
 1;
-
 __END__
-
 =pod
 =begin html
 
@@ -189,7 +171,7 @@ __END__
   <ul>
     <code>{ listInternalTimer("t") }</code>  -> shows InternalTimers sorted by time, earlier will be on top.
     <code>{ listInternalTimer("f") }</code>  -> sorts by function name.
-    Without or all other arguments will show an unsorted list.
+    Without or all other arguments an unsorted list will be returned.
   </ul>
   <ul>
    
