@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm eventMapWDT 2020-12-21 Beta-User $
+# $Id: 98_WeekdayTimer.pm 23493 2021-01-09 05:51:21Z Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -763,7 +763,7 @@ sub WeekdayTimer_SetTimerForMidnightUpdate {
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now);
 
   my $midnightPlus5Seconds = getSwitchtimeEpoch  ($now, 0, 0, 5, 1);
-  resetRegisteredInternalTimer("SetTimerOfDay", $midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $hash, 0);
+  resetRegisteredInternalTimer("SetTimerOfDay", $midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $fnHash, 0);
   $hash->{SETTIMERATMIDNIGHT} = 1;
   
   return;
@@ -774,7 +774,7 @@ sub WeekdayTimer_SetTimerOfDay {
   my $fnHash = shift // return;
   my $hash = $fnHash->{HASH} // $fnHash;
   return if (!defined($hash));
-
+  
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time());
   my $secSinceMidnight = 3600*$hour + 60*$min + $sec;
 
@@ -816,7 +816,7 @@ sub WeekdayTimer_SetTimerOfDay {
   WeekdayTimer_Profile    ($hash);
   WeekdayTimer_SetTimer   ($hash);
   delete $hash->{SETTIMERATMIDNIGHT};
-  $fnHash = { HASH => $hash };
+  #$fnHash = { HASH => $hash };
   WeekdayTimer_SetTimerForMidnightUpdate( $fnHash );
   return;
 }
@@ -932,7 +932,6 @@ sub WeekdayTimer_delayedTimerInPast {
       Log3( $hash, 4, "[$hash->{NAME}] $device ".FmtDateTime($time)." ".($tim-$time)."s " );
 
       for my $para ( @{$tipIpHash->{$device}{$time}} ) {
-        #WeekdayTimer_RemoveInternalTimer(@$para[0], @$para[3]);
         my $mHash = resetRegisteredInternalTimer(@$para[0],@$para[1],@$para[2],@$para[3],@$para[4]);
         $mHash->{forceSwitch} = 1;
       }
@@ -1039,7 +1038,6 @@ sub WeekdayTimer_Update {
     $activeTimer      = isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
-    #WeekdayTimer_RemoveInternalTimer("$idx",  $hash);
     resetRegisteredInternalTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
   } else {
     $activeTimer = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
@@ -1169,7 +1167,6 @@ sub checkDelayedExecution {
       deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash);
     }
     $hash->{VERZOEGRUNG_IDX} = $time;
-    #WeekdayTimer_RemoveInternalTimer("$time",  $hash);
     resetRegisteredInternalTimer("$time",  $nextRetry, \&WeekdayTimer_Update, $hash, 0);
     $hash->{VERZOEGRUNG} = 1;
     return $verzoegerteAusfuehrung;
@@ -1225,7 +1222,6 @@ sub checkDelayedExecution {
                 deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash);
               }
               $hash->{VERZOEGRUNG_IDX} = $time;
-              #WeekdayTimer_RemoveInternalTimer("$time", $hash);
               resetRegisteredInternalTimer("$time",  $nextRetry, \&WeekdayTimer_Update, $hash, 0);
               $hash->{VERZOEGRUNG} = 1;
               return 1
@@ -1361,6 +1357,8 @@ sub WeekdayTimer_Attr {
   }
   return if (!$init_done);
   if( $attrName eq "disable" ) {
+    WeekdayTimer_DeleteTimer($hash);
+    ###RemoveInternalTimer($fnHash);
     readingsSingleUpdate ($hash,  "disabled",  $attrVal, 1);
     return WeekdayTimer_SetTimerOfDay({ HASH => $hash}) if !$attrVal;
   } 
@@ -1687,7 +1685,8 @@ __END__
     <br>
 
     <li>WDT_sendDelay<br>
-    This will add some seconds to each of the switching timers to avoid collissions in RF traffic, especially, when <i>weekprofile</i> option is used and e.g. a topic change may affect not only a single target device but many or a single profile is used for many devices. 
+    This will add some seconds to each of the switching timers to avoid collissions in RF traffic, especially, when <i>weekprofile</i> option is used and e.g. a topic change may affect not only a single target device but many or a single profile is used for many devices. <br>
+    Make sure, the effective switch time for day's last switch is still taking place before midnight, otherwise it may not be executed at all!
     </li>
 
     <br>
