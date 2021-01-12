@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 23493 2021-01-09 05:51:21Z Beta-User $
+# $Id: 98_WeekdayTimer.pm optimize timers 2021-01-12 Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -141,8 +141,12 @@ sub WeekdayTimer_Define {
 
   addToDevAttrList($name, "weekprofile") if $def =~ m{weekprofile}xms;
   
-  return InternalTimer(time(), \&WeekdayTimer_Start,$hash,0) if !$init_done;
-  return WeekdayTimer_Start($hash);
+  if (!$init_done) { 
+    InternalTimer(time(), \&WeekdayTimer_Start,$hash,0) ;
+    return;
+  }
+  WeekdayTimer_Start($hash);
+  return; 
 }
 
 ################################################################################
@@ -757,13 +761,14 @@ sub WeekdayTimer_GlobalDaylistSpec {
 sub WeekdayTimer_SetTimerForMidnightUpdate {
   my $fnHash = shift;
   my $hash = $fnHash->{HASH} // $fnHash;
-  return if (!defined($hash));
+  return if !defined($hash);
 
   my $now = time();
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now);
 
   my $midnightPlus5Seconds = getSwitchtimeEpoch  ($now, 0, 0, 5, 1);
-  resetRegisteredInternalTimer("SetTimerOfDay", $midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $fnHash, 0);
+  RemoveInternalTimer($hash,\&WeekdayTimer_SetTimerOfDay);
+  InternalTimer($midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $hash, 0) if !AttrVal($hash->{NAME},"disable",0);
   $hash->{SETTIMERATMIDNIGHT} = 1;
   
   return;
@@ -812,12 +817,12 @@ sub WeekdayTimer_SetTimerOfDay {
     }
   }
   $hash->{helper}{WEDAYS} = \%wedays;
-  $hash->{SETTIMERATMIDNIGHT} = $fnHash->{SETTIMERATMIDNIGHT}; WeekdayTimer_DeleteTimer($hash);
+  $hash->{SETTIMERATMIDNIGHT} = $fnHash->{SETTIMERATMIDNIGHT}; 
+  WeekdayTimer_DeleteTimer($hash);
   WeekdayTimer_Profile    ($hash);
-  WeekdayTimer_SetTimer   ($hash);
+  WeekdayTimer_SetTimer   ($hash) if !AttrVal($hash->{NAME},"disable",0);
   delete $hash->{SETTIMERATMIDNIGHT};
-  #$fnHash = { HASH => $hash };
-  WeekdayTimer_SetTimerForMidnightUpdate( $fnHash );
+  WeekdayTimer_SetTimerForMidnightUpdate( $hash );
   return;
 }
 
@@ -1354,24 +1359,26 @@ sub WeekdayTimer_Attr {
       delete $hash->{WDT_EVENTMAP};
     }
     $attr{$name}{$attrName} = $attrVal;
+    return if (!$init_done);
+    return WeekdayTimer_Start($hash);
   }
   return if (!$init_done);
   if( $attrName eq "disable" ) {
     WeekdayTimer_DeleteTimer($hash);
     ###RemoveInternalTimer($fnHash);
     readingsSingleUpdate ($hash,  "disabled",  $attrVal, 1);
-    return WeekdayTimer_SetTimerOfDay({ HASH => $hash}) if !$attrVal;
-  } 
-  if ( $attrName eq "enable" ) {
-    return WeekdayTimer_SetTimerOfDay({ HASH => $hash});
+    $attr{$name}{$attrName} = $attrVal;
+    return RemoveInternalTimer($hash,\&WeekdayTimer_SetTimerOfDay) if $attrVal;
+    return WeekdayTimer_Start($hash);
+    #return WeekdayTimer_SetTimerOfDay( { HASH => $hash} ) if !$attrVal;
   }
   if ( $attrName eq "weekprofile" ) {
     $attr{$name}{$attrName} = $attrVal;
-    return WeekdayTimer_Start($hash);
+    #return WeekdayTimer_Start($hash);
   } 
   if ( $attrName eq "switchInThePast" ) {
     $attr{$name}{$attrName} = $attrVal;
-    return WeekdayTimer_SetTimerOfDay({ HASH => $hash});
+    return WeekdayTimer_Start($hash);
   }
   if ( $attrName eq "delayedExecutionCond" ) {
     my %specials = (
@@ -1390,7 +1397,7 @@ sub WeekdayTimer_Attr {
       return "WDT_sendDelay is limited to 300 seconds" if $attrVal > 300;
     }
     $attr{$name}{$attrName} = $attrVal;
-    return WeekdayTimer_SetTimerOfDay({ HASH => $hash});
+    return WeekdayTimer_Start($hash);
   }
   
   return;
