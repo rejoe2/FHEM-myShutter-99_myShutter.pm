@@ -2800,11 +2800,13 @@ sub onmessage($$$) {
   #CheckInitialization($hash);
   #Log3($hash->{NAME},1,"MQTT_GENERIC_BRIDGE:DEBUG:> [$hash->{NAME}] onmessage: $topic => $message");
 
-  $hash->{+HELPER}->{+HS_PROP_NAME_INCOMING_CNT}++; 
-  readingsSingleUpdate($hash,"incoming-count",$hash->{+HELPER}->{+HS_PROP_NAME_INCOMING_CNT},1);
-
   my $fMap = searchDeviceForTopic($hash, $topic);
   #Log3($hash->{NAME},1,"MQTT_GENERIC_BRIDGE:DEBUG:> [$hash->{NAME}] onmessage: $fMap : ".Dumper($fMap));
+  if (@$fMap) {
+    $hash->{+HELPER}->{+HS_PROP_NAME_INCOMING_CNT}++; 
+    readingsSingleUpdate($hash,"incoming-count",$hash->{+HELPER}->{+HS_PROP_NAME_INCOMING_CNT},1);
+  }
+
   my $updated = 0;
   my @updatedList;
   foreach my $deviceKey (keys %{$fMap}) {
