@@ -22,7 +22,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 10_MQTT_GENERIC_BRIDGE.pm full patches 2021-01-12 Beat-User$
+# $Id: 10_MQTT_GENERIC_BRIDGE.pm full patches 2021-01-12 Beta-User$
 #
 ###############################################################################
 
