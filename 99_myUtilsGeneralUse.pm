@@ -1,5 +1,5 @@
 ##############################################
-# $Id: myUtilsGeneralUse.pm 2020-10-12 Beta-User $
+# $Id: myUtilsGeneralUse.pm 2021-01-26 Beta-User $
 #
 
 package main;
@@ -29,8 +29,8 @@ sub
 myHHMMSS2sec
 {
   my ($h,$m,$s) = split(":", shift);
-  $m = 0 if(!$m);
-  $s = 0 if(!$s);
+  $m = 0 if !$m;
+  $s = 0 if !$s;
   my $seconds = HOURSECONDS*$h+MINUTESECONDS*$m+$s;
   return $seconds;
 }
@@ -59,7 +59,7 @@ sub myTBotpresence {
       if ($msg =~ m/Komme/) {
         if (ReadingsVal("Heizperiode","state","off") eq "on")  {
           CommandCancel(undef,"$checktimer quiet");
-          foreach my $setdevice (split (/,/,$hk_devices)) {
+          for my $setdevice (split (/,/,$hk_devices)) {
             CommandSet(undef,"$setdevice:FILTER=controlMode!=auto controlMode auto");
           }\
           AnalyzeCommandChain(undef,"sleep 03:00 $checktimer; set $hk_devices controlManu 18");
@@ -88,7 +88,7 @@ sub my_stairway_motion {
     #EG-Lichter
     CommandSet(undef, "$setdevice on") if ReadingsVal($setdevice,"status","OFF") ne "ON";
     CommandSet(undef, "$setdevice brightness 163");
-      readingsSingleUpdate($defs{$setdevice},"myLastPIR","$dev", 0);
+    readingsSingleUpdate($defs{$setdevice},"myLastPIR","$dev", 0);
     InternalTimer($checktime,"myTimeout_stairway_motion","$setdevice $dev");	
       
     #OG-Licht
@@ -125,6 +125,7 @@ sub myTimeout_stairway_motion {
     CommandDeleteReading(undef, "$name myLastPIR");
   }
 }
+
 
 sub myCalendar2Holiday {
   my $calname    = shift // return;
@@ -172,6 +173,28 @@ sub myCalendar2Holiday {
   my $today = strftime "%d.%m.%y, %H:%M", localtime(time);;\
   unshift (@holidays, "# Created by myCalendar2Holiday on $today");
   FileWrite("./FHEM/${targetname}.holiday",@holidays);
+}
+
+#own code, see https://forum.fhem.de/index.php/topic,115722.msg1100046.html#msg1100046
+sub myDimUp_PctToMax {
+  my $name   = shift // return;
+  my $maxval = shift // 100;
+  my $remote = shift;
+  my $remotestop = shift // '1003';
+ 
+  my $pct = ReadingsNum($name, 'pct', 0) +3;
+  if ($pct < 103 && ReadingsVal($remote, "state", "") ne $remotestop) {
+    CommandSet(undef,"$name pct $pct");
+    InternalTimer(gettimeofday()+0.25, sub(){myDimUp_PctToMax($name, $maxval, $remote, $remotestop)},'');
+  }
+  return;
+}
+
+# SVG_log10($)
+sub my_log10 {
+  my $n = shift;
+  return 0 if( $n <= 0 );
+  return log(1+$n)/log(10);
 }
 
 1;
