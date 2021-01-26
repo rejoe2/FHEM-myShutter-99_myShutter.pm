@@ -136,8 +136,7 @@ sub myCalendar2Holiday {
   
   my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
   my $getstring = $calname . ' events format:custom="4 $T1 $t2 $S ($D)" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
-  #my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
-  my @holidaysraw = FileRead("./FHEM/test.txt");
+  my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
   
   my @holidays;
   my @singledays;
@@ -148,11 +147,11 @@ sub myCalendar2Holiday {
     my $endsecond = $tokens[2]-1;
     my @end_arr = localtime($endsecond);
     
-    my $overYE = $end_arr[4] > $year || $yearEndRe && $tokens[3] =~ m/$yearEndRe/ ? 1 : 0; 
+    my $overYE = $end_arr[5] > $year || $yearEndRe && $tokens[3] =~ m/$yearEndRe/ ? 1 : 0; 
     
     $tokens[2] = strftime "%m-%d", localtime($endsecond);
 
-    my $severalDays = $tokens[2] eq $tokens[0] ? 0 : 1;
+    my $severalDays = $tokens[2] eq $tokens[1] ? 0 : 1;
     $holiday = join(' ', @tokens);
     if (!$severalDays) {
       $tokens[0] = 1;
