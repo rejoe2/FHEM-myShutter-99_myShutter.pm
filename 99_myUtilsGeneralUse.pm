@@ -135,42 +135,36 @@ sub myCalendar2Holiday {
   my $yearEndRe  = shift;
   
   my ($sec,$min,$hour,$mday,$month,$year,$wday,$yday,$isdst) =  localtime(gettimeofday());
-  my $getstring = $calname . ' events format:custom="$T1 $T2 $S" timeFormat:"%m-%d %H:%M" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
-  my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
- 
+  my $getstring = $calname . ' events format:custom="4 $T1 $t2 $S ($D)" timeFormat:"%m-%d" limit:count=' . $limit." filter:field($field)=~\"$regexp\"";
+  #my @holidaysraw = split( /\n/, CommandGet( undef, "$getstring" ));
+  my @holidaysraw = FileRead("./FHEM/test.txt");
+  
   my @holidays;
   my @singledays;
  
   for my $holiday (@holidaysraw) {
     my @tokens = split (" ",$holiday);
 
-    my $endYear  = $year;
-	my $overYE = $tokens[0] gt $tokens[2] || $yearEndRe && $tokens[4] =~ m/$yearEndRe/ ? 1 : 0; 
-	$overYE = 0 if $tokens[2] eq "01-01" && $tokens[3] eq "00:00";
-	
-    if ($tokens[3] eq "00:00") {
-	  my @enddate = split "-", $tokens[2];	  
-	  my @now_arr = localtime(gettimeofday());
-     #Stunden               Minuten               Sekunden
-      $now_arr[1]  = 0; $now_arr[2] = 0; $now_arr[3] = $enddate[1]; $now_arr[4] = $enddate[1]; $now_arr[5] += $overYE;
-      my @enddatefull = localtime(timelocal_nocheck(@now_arr)-1);
-	  $tokens[2] = qq($enddatefull[4]-$enddatefull[3]);
-	}
+    my $endsecond = $tokens[2]-1;
+    my @end_arr = localtime($endsecond);
+    
+    my $overYE = $end_arr[4] > $year || $yearEndRe && $tokens[3] =~ m/$yearEndRe/ ? 1 : 0; 
+    
+    $tokens[2] = strftime "%m-%d", localtime($endsecond);
 
     my $severalDays = $tokens[2] eq $tokens[0] ? 0 : 1;
-    unshift @tokens, "4 ";
     $holiday = join(' ', @tokens);
     if (!$severalDays) {
       $tokens[0] = 1;
       splice @tokens, 2, 1;
       $holiday = join(' ', @tokens);
       push (@singledays, $holiday);
-    } elsif ( !$yearEndRe || $holiday !~ m/$yearEndRe/) {
+    } elsif ( !$overYE ) {
       push (@holidays, $holiday);
     } else { 
-      $holiday = "4 $tokens[1] 12-31 $tokens[3]";
+      $holiday = "4 $tokens[1] 12-31 $tokens[3] $tokens[4] (part 1)";
       push (@holidays,$holiday) if $month > 9;
-      $holiday = "4 01-01 $tokens[2] $tokens[3]";
+      $holiday = "4 01-01 $tokens[2] $tokens[3] $tokens[4] (part 2)";
       unshift (@holidays,$holiday);
     }
   }
@@ -182,3 +176,4 @@ sub myCalendar2Holiday {
 }
 
 1;
+__END__
