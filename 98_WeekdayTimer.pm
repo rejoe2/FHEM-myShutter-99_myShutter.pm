@@ -618,7 +618,7 @@ sub getSwitchtimeEpoch {
 ################################################################################
 sub gatherSwitchingTimes {
   my $hash = shift;
-  my $arr    = shift // return;
+  my $arr  = shift // return;
 
   my $name = $hash->{NAME};
   my @switchingtimes = ();
@@ -679,47 +679,65 @@ E:  while (@{ $arr } > 0) {
 
       push @switchingtimes, $element;
     } elsif ($element =~ m{\Aweekprofile}xms ) {
-      my @wprof = split m{:}xms, $element;
-      my $wp_name = $wprof[1];
-      my ($unused,$wp_profile) = split m{:}xms, getWeekprofileReadingTriplett($hash, $wp_name, $wprof[2]),2;
-      
-      ($unused,$wp_profile) = split m{:}xms, getWeekprofileReadingTriplett($hash, $wp_name, 'default'),2 if !$wp_profile && $wprof[2] ne 'default';
-      
-      return if !$wp_profile;
-      my $wp_sunaswe = $wprof[2] // 0;
-      my $wp_profile_data = CommandGet(undef,"$wp_name profile_data $wp_profile 0");
-      return Log3( $hash, 3, "[$name] weekprofile $wp_name: no profile named \"$wp_profile\" available" ) 
-        if ($wp_profile_data =~ m{(profile.*not.found|usage..profile_data..name)}xms );
- 
-      my $wp_profile_unpacked = decode_json($wp_profile_data);
-      $hash->{weekprofiles}{$wp_name} = {'PROFILE'=>$wp_profile,'PROFILE_JSON'=>$wp_profile_data,'SunAsWE'=>$wp_sunaswe,'PROFILE_DATA'=>$wp_profile_unpacked };
-      my %wp_shortDays = ("Mon"=>1,"Tue"=>2,"Wed"=>3,"Thu"=>4,"Fri"=>5,"Sat"=>6,"Sun"=>0);
-      for my $wp_days (sort keys %{$hash->{weekprofiles}{$wp_name}{PROFILE_DATA}}) {
-        my $wp_times = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{time};
-        my $wp_temps = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{temp};
-        my $wp_shortDay = $wp_shortDays{$wp_days};
-        for ( 0..@{ $wp_temps }-1 ) {
-          my $itime = "00:10";
-          #$itime = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{time}[$_-1] if $_;
-          $itime = @{ $wp_times }[$_-1] if $_;
-          #my $itemp = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{temp}[$_];
-        my $itemp = @{ $wp_temps }[$_];
-          my $wp_dayprofile = "${wp_shortDay}|${itime}|$itemp";
-          $wp_dayprofile .= "|w" if $wp_sunaswe eq "true";
-          push @switchingtimes, $wp_dayprofile;
-          if ($wp_sunaswe eq "true" and $wp_shortDay == 0) {
-            $wp_dayprofile = "7|${itime}|$itemp";
-            push @switchingtimes, $wp_dayprofile;
-          }
-        }
-      }
+      my @wpelements = gatherSwitchingTimesWeekprofile( $hash, $element );
+      return if !@wpelements;
+      push @switchingtimes, @wpelements;
     } else {
       Log3( $hash, 4, "[$name] $element - NOT accepted, must be command or condition" );
       unshift @{ $arr }, @restoreElements;
       last;
     }
   }
-  return (@switchingtimes);
+  return @switchingtimes;
+}
+
+sub gatherSwitchingTimesWeekprofile {
+  my $hash    = shift;
+  my $element = shift // return;
+  
+  my @wprof = split m{:}xms, $element;
+  my $wp_name = $wprof[1];
+  my ($unused,$wp_profile) = split m{:}xms, getWeekprofileReadingTriplett($hash, $wp_name, $wprof[2]),2;
+      
+  ($unused,$wp_profile) = split m{:}xms, getWeekprofileReadingTriplett($hash, $wp_name, 'default'),2 if !$wp_profile && $wprof[2] ne 'default';
+      
+  if (!$wp_profile) {
+    Log3( $hash, 3, "No weekprofile data returned!");
+    return;
+  }
+      
+  my $wp_sunaswe = $wprof[2] // 0;
+  my $wp_profile_data = CommandGet(undef,"$wp_name profile_data $wp_profile 0");
+
+  if ($wp_profile_data =~ m{(profile.*not.found|usage..profile_data..name)}xms ) {
+    Log3( $hash, 3, "[$hash->{NAME}] weekprofile $wp_name: no profile named \"$wp_profile\" available" );
+    return;
+  }
+
+  my $wp_profile_unpacked = decode_json($wp_profile_data);
+  $hash->{weekprofiles}{$wp_name} = {'PROFILE'=>$wp_profile,'PROFILE_JSON'=>$wp_profile_data,'SunAsWE'=>$wp_sunaswe,'PROFILE_DATA'=>$wp_profile_unpacked };
+  my %wp_shortDays = ("Mon"=>1,"Tue"=>2,"Wed"=>3,"Thu"=>4,"Fri"=>5,"Sat"=>6,"Sun"=>0);
+  my @switchingtimes;
+  for my $wp_days (sort keys %{$hash->{weekprofiles}{$wp_name}{PROFILE_DATA}}) {
+    my $wp_times = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{time};
+    my $wp_temps = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{temp};
+    my $wp_shortDay = $wp_shortDays{$wp_days};
+    for ( 0..@{ $wp_temps }-1 ) {
+      my $itime = "00:10";
+      #$itime = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{time}[$_-1] if $_;
+      $itime = @{ $wp_times }[$_-1] if $_;
+      #my $itemp = $hash->{weekprofiles}{$wp_name}{PROFILE_DATA}{$wp_days}{temp}[$_];
+      my $itemp = @{ $wp_temps }[$_];
+      my $wp_dayprofile = "${wp_shortDay}|${itime}|$itemp";
+      $wp_dayprofile .= "|w" if $wp_sunaswe eq "true";
+      push @switchingtimes, $wp_dayprofile;
+      if ($wp_sunaswe eq "true" and $wp_shortDay == 0) {
+        $wp_dayprofile = "7|${itime}|$itemp";
+        push @switchingtimes, $wp_dayprofile;
+      }
+    }
+  }
+  return @switchingtimes;
 }
 
 ################################################################################
