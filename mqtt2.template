@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 23602 2021-01-24 07:58:06Z Beta-User $
+# $Id: mqtt2.template 23793 2021-02-21 07:06:12Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -531,6 +531,32 @@ set DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplate speechcontrol_type_switch
 attr DEVICE,DEVICE_CH2,DEVICE_CH3 model zigbee2mqtt_3channel_split
 setreading DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplateVersion 20201213
 
+# A blind drive motor TS0601_cover connected via zigbee2mqtt
+#contributed by barneybaer, https://forum.fhem.de/index.php/topic,94495.msg1134215.html#msg1134215
+name:zigbee2mqtt_blind_drive
+desc: A blind drive motor connected via zigbee2mqtt <br>Tested with: Tuya AM43 TS0601_cover
+filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
+order:L_05f
+par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^/:]+)[/].+, ? $1 : undef }
+par:DEV_ID;name of the device in the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[^/]+[/]([^/:]+).*, ? $1 : undef }
+par:ICON;ICON as set, defaults to fts_shutter_100;{ AttrVal("DEVICE","icon","fts_shutter_100") }
+attr DEVICE icon ICON
+attr DEVICE devStateIcon 0:fts_shutter_100 100:fts_shutter_10 9\d.*:fts_shutter_10 8\d.*:fts_shutter_20 7\d.*:fts_shutter_30 6\d.*:fts_shutter_40 5\d.*:fts_shutter_50 4\d.*:fts_shutter_60 3\d.*:fts_shutter_70 2\d.*:fts_shutter_80 1\d.*:fts_shutter_90 0\d.*:fts_shutter_100
+attr DEVICE webCmd open:close:pct:speed
+attr DEVICE devicetopic BASE_TOPIC/DEV_ID
+attr DEVICE jsonMap position:pct motor_speed:speed
+attr DEVICE readingList $\DEVICETOPIC:.* { json2nameValue($EVENT,'',$JSONMAP) }
+attr DEVICE setList \
+  open:noArg $\DEVICETOPIC/set {"state":"OPEN"}\
+  close:noArg $\DEVICETOPIC/set {"state":"CLOSE"}\
+  pct:slider,0,1,100 $\DEVICETOPIC/set {"position":"$EVTPART1"}\
+  speed:colorpicker,BRI,0,1,255 $\DEVICETOPIC/set {"options": {"motor_speed":"$EVTPART1"}}
+attr DEVICE stateFormat pct
+set DEVICE attrTemplate speechcontrol_type_blind
+attr DEVICE model zigbee2mqtt_blind_drive
+setreading DEVICE attrTemplateVersion 20210222
+
+
 name:zigbee2mqtt_ContactSensor
 desc: Contact sensor via zigbee2mqtt <br>Tested with: Xiaomi models Aqara and Mijia
 filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
@@ -814,18 +840,18 @@ attr DEVICE setList \
   window_open:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"window_open": $EVTPART1 }}\
   boost:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"boost": $EVTPART1 }}\
   x_mirror_display:true,false $\DEVICETOPIC/set {"eurotronic_host_flags": {"mirror_display": $EVTPART1 }}
-attr DEVICE stateFormat Measured: measured-temp Battery: battery %
+attr DEVICE stateFormat Measured: temperature Battery: battery %
 attr DEVICE webCmd desired-temp
 attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
-attr DEVICE jsonMap occupied_heating_setpoint:daytemp unoccupied_heating_setpoint:nighttemp child_protection:btnLock current_heating_setpoint:desired-temp local_temperature:measured-temp
+attr DEVICE jsonMap occupied_heating_setpoint:daytemp unoccupied_heating_setpoint:nighttemp child_protection:btnLock current_heating_setpoint:desired-temp local_temperature:temperature
 attr DEVICE setStateList on off
 attr DEVICE model zigbee2mqtt_eurotronic_spirit
 set DEVICE attrTemplate speechcontrol_type_thermostat
 deletereading -q DEVICE (?!associatedWith).*
-setreading DEVICE attrTemplateVersion 20201218
+setreading DEVICE attrTemplateVersion 20210211
 
 name:zigbee2mqtt_thermostat_with_weekrofile
-desc: stub of a version for <a href="https://zigbee.blakadder.com/Moes_HY368-ZB.html">Model HY368-ZB manufactured by Moes</a> via zigbee2mqtt <br>Not yet tested... <br>To contribute, participate in <a href="https://forum.fhem.de/index.php/topic,116535.0.html">Forum Thread</a>
+desc: Developed for <a href="https://zigbee.blakadder.com/Moes_HY368-ZB.html">Model HY368-ZB manufactured by Moes</a> via zigbee2mqtt <br>Might not completely work for all firmware versions and also some commands seem not yet to be fully integrated on the zigbee2mqtt side... <br>To contribute, participate in <a href="https://forum.fhem.de/index.php/topic,116535.0.html">Forum Thread</a>
 filter:TYPE=MQTT2_DEVICE:FILTER=CID~zigbee.*
 order:L_17a
 par:BASE_TOPIC;base topic set in configuration.yaml of the zigbee2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^/:]+)[/].+, ? $1 : undef }
@@ -843,28 +869,29 @@ attr DEVICE readingList $\DEVICETOPIC:.* { my %h; my $temp = $EVENT; $temp =~ s/
 attr DEVICE setList \
   desired-temp:slider,5.0,0.5,30.0,1 $\DEVICETOPIC/set {"current_heating_setpoint": $EVTPART1 }\
   btnLock:LOCK,UNLOCK $\DEVICETOPIC/set {"child_lock": "$EVTPART1"}\
-  boost:noArg $\DEVICETOPIC/set {"preset": "boost"}\
-  mode:schedule,manual,boost,complex,comfort,eco $\DEVICETOPIC/set {"preset": "$EVTPART1"}\
+  preset:schedule,manual,boost,complex,comfort,eco $\DEVICETOPIC/set {"preset": "$EVTPART1"}\
+  mode:heat,auto,off $DEVICETOPIC/set {"system_mode": "$EVTPART1"}\
   holidays $\DEVICETOPIC/set/schedule { "holidays":[$EVTPART1] }\
   workdays $\DEVICETOPIC/set/schedule { "workdays":[$EVTPART1] }\
   week:5+2,6+1,7 $\DEVICETOPIC/set $EVTPART1\
   weekprofile { FHEM::attrT_z2m_thermostat_Utils::z2t_send_weekprofile($NAME, $EVTPART1, $EVTPART2) }\
   x_send_set_payload:textField { my $payload = $EVENT;$payload =~ s/$EVTPART0 //; qq($\DEVICETOPIC/set $payload)}
 attr DEVICE getList desired-temp:noArg desired-temp $\DEVICETOPIC/get {"current_heating_setpoint": ""}\
-  measured-temp:noArg measured-temp $\DEVICETOPIC/get {"local_temperature": ""}\
-  mode:noArg mode $\DEVICETOPIC/get {"preset": ""}
-attr DEVICE periodicCmd measured-temp:55
+  temperature:noArg temperature $\DEVICETOPIC/get {"local_temperature": ""}\
+  preset:noArg preset $\DEVICETOPIC/get {"preset": ""}
+attr DEVICE periodicCmd temperature:55
 attr DEVICE stateFormat btnLock\
-Measured: measured-temp Battery: batteryPercent %
+Measured: temperature Battery: batteryPercent %
 attr DEVICE devStateIcon LOCKED:secur_lock:btnLock+UNLOCK UNLOCKED:secur_open:btnLock+LOCK
 attr DEVICE webCmd desired-temp
 attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
-attr DEVICE jsonMap current_heating_setpoint:desired-temp local_temperature:measured-temp Battery:batteryPercent preset:mode
+attr DEVICE jsonMap current_heating_setpoint:desired-temp local_temperature:temperature Battery:batteryPercent system_mode:mode
 attr DEVICE setStateList on off
+attr DEVICE userReadings batteryState:battery_low.* {ReadingsVal($name,'battery_low','false') eq 'false'?'ok':'low'}
 attr DEVICE model zigbee2mqtt_thermostat_with_weekrofile
 set DEVICE attrTemplate speechcontrol_type_thermostat
 deletereading -q DEVICE (?!associatedWith).*
-setreading DEVICE attrTemplateVersion 20201218
+setreading DEVICE attrTemplateVersion 20210211
 
 
 ###########################################
@@ -2155,15 +2182,15 @@ attr DEVICE jsonMap Device:0 Battery:0 BatteryPercentage:batteryPercent BatteryV
 deletereading -q DEVICE (?!associatedWith).*
 attr DEVICE setList desired-temp:slider,5.0,0.5,30.0,1 CMNDTOPIC/ZbSend {"device":"0xDEV_ID","Write":{"OccupiedHeatingSetpoint": $EVTPART1}}\
   temp-offset:slider,-10.0,0.5,10.0,1 CMNDTOPIC/ZbSend  {"device":"0xDEV_ID","Write":{"LocalTemperatureCalibration":$EVTPART1}}
-attr DEVICE stateFormat Measured: measured-temp Battery: batteryPercent %
+attr DEVICE stateFormat Measured: temperature Battery: batteryPercent %
 attr DEVICE webCmd desired-temp
 attr DEVICE widgetOverride desired-temp:knob,min:5,max:30,angleArc:180,width:40,height:40,fgColor:#FF9900,bgColor:#CCCCCC,step:0.5,lineCap:round,angleOffset:225
 attr DEVICE setStateList on off
-attr DEVICE jsonMap Battery:0 Device:0 BatteryPercentage:batteryPercent LocalTemperature:measured-temp OccupiedHeatingSetpoint:dayTemp UnoccupiedHeatingSetpoint:nightTemp CurrentTemperatureSetPoint:desired-temp PIHeatingDemand:valve
+attr DEVICE jsonMap Battery:0 Device:0 BatteryPercentage:batteryPercent LocalTemperature:temperature OccupiedHeatingSetpoint:dayTemp UnoccupiedHeatingSetpoint:nightTemp CurrentTemperatureSetPoint:desired-temp PIHeatingDemand:valve
 option:{ CALLSPEECHRECOGN }
 set DEVICE attrTemplate speechcontrol_type_thermostat
 option:global
-setreading DEVICE attrTemplateVersion 20201202
+setreading DEVICE attrTemplateVersion 20210211
 
 ###########################################
 # SHELLY
@@ -4331,7 +4358,8 @@ par:ALIAS;friendly name as set in sonos gadget itself;{ ReadingsVal("DEVICE","na
 par:DEVNAME;friendly name, used for topic in lowercase;{ lc(ReadingsVal("DEVICE","name","unknown")) }
 par:ICON;ICON as set, defaults to audio_volume_low;{ AttrVal("DEVICE","icon","audio_volume_low") }
 attr DEVICE icon ICON
-attr DEVICE jsonMap volume_Master:volume mute_Master:mute transportState:state
+attr DEVICE jsonMap volume_Master:volume mute_Master:mute
+attr DEVICE stateFormat transportState
 attr DEVICE readingList\
   BASE_TOPIC/DEV_ID:.* { json2nameValue($EVENT,'',$JSONMAP) }
 attr DEVICE setList\
@@ -4355,7 +4383,18 @@ attr DEVICE setList\
 attr DEVICE devStateIcon (STOPPED|PAUSED_PLAYBACK):rc_PLAY:toggle PLAYING:rc_PAUSE:pause .*:refresh:play
 attr DEVICE alias ALIAS
 attr DEVICE model sonos2mqtt_speaker
-setreading DEVICE attrTemplateVersion 20200729
+attr DEVICE userReadings Master:groupName.* {(split(' +',ReadingsVal($name,'groupName','')))[0]},\
+isMaster:coordinatorUuid.* {ReadingsVal($name,'coordinatorUuid','') eq ReadingsVal($name,'uuid','')?1:0},\
+inGroup:groupName.* {ReadingsVal($name,'groupName','') =~ / \+ /?1:0},\
+inCouple:coordinatorUuid.* {(ReadingsVal($name,'coordinatorUuid','') ne ReadingsVal($name,'uuid','') and (index(ReadingsVal($name,'groupName',''), ReadingsVal($name,'name','')) != -1))?1:0},\
+Input:currentTrack_TrackUri.* {my $currentTrack_TrackUri = ReadingsVal($name,'currentTrack_TrackUri','');\
+   $currentTrack_TrackUri =~ 'x-rincon-stream'\
+      ? 'LineIn': $currentTrack_TrackUri =~ 'spdif'\
+      ? 'TV'    : ReadingsVal($name,'enqueuedMetadata_UpnpClass','') eq 'object.item.audioItem.audioBroadcast'\
+      ? 'Radio' : 'Playlist'}
+# to initiate setting the userReadings
+set DEVICE volume {(ReadingsVal($DEV,'volume',''))}
+setreading DEVICE attrTemplateVersion 20210220
 
 
 ###########################################
