@@ -869,6 +869,7 @@ sub RHASSPY_Parse {
         }
     }
     unshift(@ret, '[NEXT]') if !(@ret) || $forceNext;
+    Log3($iodev, 4, "Parse collected these devices: ". join q{ },@ret);
     return @ret;
 }
 
@@ -1762,14 +1763,14 @@ sub RHASSPY_handleIntentSetTimer($$) {
         
         $time = strftime('%T', gmtime($time));
 
-        $cmd = "defmod timer_$room at +$time set $name speak siteId=\"$room\" text=\"taimer abgelaufen\";;setreading $name timer_".lc($room)." 0"; #Beta-User: taimer, really...?
+        $cmd = "defmod timer_$room at +$time set $name speak siteId=\"$room\" text=\"taimer abgelaufen\";;setreading $name timer_".lc($room)." 0"; 
         
         RHASSPY_runCmd($hash,"",$cmd);
         readingsSingleUpdate($hash, "timer_" . lc($room), 1, 0);
         
         Log3($hash->{NAME}, 5, "Created timer: $cmd");
         
-        $response = "Taimer in $room gesetzt auf $value $unit"; #Beta-User "Taimer" oder Timer?
+        $response = "Taimer in $room gesetzt auf $value $unit";
     }
 
     RHASSPY_respond ($hash, $data->{'requestType'}, $data->{sessionId}, $data->{siteId}, $response);
