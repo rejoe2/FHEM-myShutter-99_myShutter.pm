@@ -256,32 +256,43 @@ sub RHASSPY_execute {
     return AnalyzePerlCommand( $hash, $cmd );
 }
 
+#from https://stackoverflow.com/a/43873983, modified...
+sub get_unique {
+    my @arr = shift;
+    my %seen;
+    return grep {!$seen{$_}++} @arr;
+}
+
+
 # Alle Gerätenamen sammeln
 sub RHASSPY_allRhasspyNames {
-    my @devices;#, my @sorted;
-    my %devicesHash;
+    #my @devices; my @sorted;
+    #my %devicesHash;
     my $devspec = 'room=Rhasspy';
     my @devs = devspec2array($devspec);
 
+    my @devices;
     # Alle RhasspyNames sammeln
     for (@devs) {
         push @devices, split(',', AttrVal($_,'rhasspyName',undef));
     }
 
     # Doubletten rausfiltern
-    %devicesHash = map { if (defined($_)) { $_, 1 } else { () } } @devices;
-    @devices = keys %devicesHash;
+    #%devicesHash = map { if (defined($_)) { $_, 1 } else { () } } @devices;
+    #@devices = keys %devicesHash;
+    
+    #from https://stackoverflow.com/a/43873983
+    my @unique = get_unique(@devices);
 
     # Längere Werte zuerst, damit bei Ersetzungen z.B. nicht 'lampe' gefunden wird bevor der eigentliche Treffer 'deckenlampe' versucht wurde
-    #@sorted = sort { length($b) <=> length($a) } @devices;
+    my @sorted = sort { length($b) <=> length($a) } @unique;
 
-    #return @sorted
-    return sort { length($b) <=> length($a) } @devices;
+    return @sorted
 }
 
 # Alle Raumbezeichnungen sammeln
 sub RHASSPY_allRhasspyRooms {
-    my @rooms;#, my @sorted;
+    my @rooms; my @sorted;
     my %roomsHash;
     my $devspec = "room=Rhasspy";
     my @devs = devspec2array($devspec);
@@ -296,10 +307,9 @@ sub RHASSPY_allRhasspyRooms {
     @rooms = keys %roomsHash;
 
     # Längere Werte zuerst, damit bei Ersetzungen z.B. nicht 'küche' gefunden wird bevor der eigentliche Treffer 'waschküche' versucht wurde
-    #@sorted = sort { length($b) <=> length($a) } @rooms;
+    @sorted = sort { length($b) <=> length($a) } @rooms;
 
-    #return @sorted
-    return sort { length($b) <=> length($a) } @rooms;
+    return @sorted
 }
 
 
@@ -858,7 +868,6 @@ sub RHASSPY_Parse {
         Log3($hash,5,"RHASSPY: [$hash->{NAME}] Parse (IO: ${ioname}): Msg: $topic => $value");
 
         my $fret = RHASSPY_onmessage($hash, $topic, $value);
-        Log3($hash,5,"RHASSPY: [$hash->{NAME}] Parse returned $fret");
 
         next if !defined $fret;
         if( ref($fret) eq 'ARRAY' ) {
@@ -869,7 +878,7 @@ sub RHASSPY_Parse {
         }
     }
     unshift(@ret, '[NEXT]') if !(@ret) || $forceNext;
-    Log3($iodev, 4, "Parse collected these devices: ". join q{ },@ret);
+    #Log3($iodev, 4, "Parse collected these devices: ". join q{ },@ret);
     return @ret;
 }
 
@@ -921,10 +930,10 @@ sub RHASSPY_onmessage {
         my $room = RHASSPY_roomName($hash, $data);
 
         return if !defined($room);
-        #my %umlauts = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss" );
-        my %mutated_vowels = \$languagevars->{$language}{mutated_vowels};
+        my %mutated_vowels = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss" );
+        #my %mutated_vowels = \$languagevars->{$language}{mutated_vowels};
         my $keys = join q{|}, keys %mutated_vowels;
-        Log3($hash->{NAME}, 5, "mutated_vowels regex is $keys");
+        #Log3($hash->{NAME}, 5, "mutated_vowels regex is $keys");
 
 
         $room =~ s/($keys)/$mutated_vowels{$1}/g;
@@ -949,8 +958,8 @@ sub RHASSPY_onmessage {
     }
 
     # Shortcut empfangen -> Code direkt ausführen
-   elsif ($topic =~ qr/^hermes\/intent\/.*[:_]/ && defined($input) && grep( {/^$input$/i} RHASSPY_allRhasspyShortcuts($hash)) && $mute != 1) {
-      my $error;
+   elsif ($topic =~ qr/^hermes\/intent\/.*[:_]/ && defined($input) && grep( {/^$input$/i} RHASSPY_allRhasspyShortcuts($hash)) && !$mute) { # != 1) {
+      #my $error;
       my $response = RHASSPY_getResponse($hash, "DefaultError");
       my $cmd = RHASSPY_getCmd($hash, $hash->{NAME}, "shortcuts", $input);
 
@@ -969,16 +978,16 @@ sub RHASSPY_onmessage {
       RHASSPY_respond($hash, $type, $sessionId, $siteId, $response);
     }
 
-    elsif ($topic =~ qr/^hermes\/intent\/.*[:_]/ && $mute != 1 && $topic !~ qr/^hermes\/intent\/${language}.fhem[:_]SetMute/) {
-        my $info, my $sendData;
-        my $device, my $room, my $channel, my $color;
-        my $json, my $infoJson;
+    elsif ($topic =~ qr/^hermes\/intent\/.*[:_]/ && !$mute && $topic !~ qr/^hermes\/intent\/${language}.fhem[:_]SetMute/) {
+        #my $info, my $sendData;
+        #my $device, my $room, my $channel, my $color;
+        #my $json, my $infoJson;
         my $command = $data->{'input'};
-        my $intent;
+        #my $intent;
 #        my $type = ($message =~ m/fhem.textCommand/) ? "text" : "voice";
         $type = ($message =~ m/fhem.textCommand/) ? "text" : "voice";
         $data->{'requestType'} = $type;
-        $intent = $data->{'intent'};
+        my $intent = $data->{'intent'};
 
         # update Readings
         RHASSPY_updateLastIntentReadings($hash, $topic,$data);
@@ -986,7 +995,6 @@ sub RHASSPY_onmessage {
         # Passenden Intent-Handler aufrufen
         if ($intent eq 'SetOnOff') { #Beta-User: hier sollte eigentlich eher eine Hash-Dispatch-Funktion stehen, siehe 00_MYSENSORS.pm ca. ab Zeile 606
             $device = RHASSPY_handleIntentSetOnOff($hash, $data);
-            #Log3($hash->{NAME}, 5, "handleIntentSetOnOff on $device executed" );
         } elsif ($intent eq 'GetOnOff') {
             $device = RHASSPY_handleIntentGetOnOff($hash, $data);
         } elsif ($intent eq 'SetNumeric') {
@@ -1015,8 +1023,6 @@ sub RHASSPY_onmessage {
     
     #Beta-User: return value should be reviewed. If there's an option to return the name of the devices triggered by Rhasspy, then this could be a better option than just RHASSPY's own name.
     
-    #push @updatedList, $hash->{NAME};
-    $device = $device // $hash->{NAME};
     push @updatedList, $device;
     return \@updatedList;
 }
@@ -1332,7 +1338,7 @@ sub RHASSPY_handleIntentSetOnOff($$) {
     }
     # Antwort senden
     RHASSPY_respond ($hash, $data->{'requestType'}, $data->{sessionId}, $data->{siteId}, $response);
-    $device ? return $device : return;
+    return $device;
 }
 
 
