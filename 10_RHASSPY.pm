@@ -323,7 +323,9 @@ sub RHASSPY_EvalSpecialsDefaults {
     my $hash2 = shift;
     my $self = $hash2->{'$SELF'} // $hash->{NAME};
     my $name = $hash2->{'$NAME'} // $hash->{NAME};
-    
+    my $parent = ( caller(1) )[3];
+    Log3($hash->{NAME}, 5, "RHASSPY_EvalSp... from $parent starting with: $cmd");
+
     my %specials = (
         '$SELF' => $self,
         '$NAME' => $name
@@ -336,7 +338,7 @@ sub RHASSPY_EvalSpecialsDefaults {
         $key =~ s{\$}{\\\$}gxms;
         $cmd =~ s{$key}{$val}gxms
     }
-    
+    Log3($hash->{NAME}, 5, "RHASSPY_EvalSp... from $parent returns: $cmd");
     return $cmd;
 }
 
@@ -1073,7 +1075,15 @@ sub RHASSPY_onmessage {
     #Beta-User: return value should be reviewed. If there's an option to return the name of the devices triggered by Rhasspy, then this could be a better option than just RHASSPY's own name.
     
     $device = $device // $hash->{NAME};
-    push @updatedList, $device;
+    #several devices?
+    if ($device =~ m{,}x) {
+        my @candidates = split m{,}x, $device;
+        for (@candidates) {
+            push @updatedList if $defs{$_}; 
+        }    
+    } else { 
+        push @updatedList, $device if $defs{$device};
+    }
     return \@updatedList;
 }
     
@@ -1387,10 +1397,10 @@ sub RHASSPY_handleIntentShortcuts {
     
     my $response = $shortcut->{response} // RHASSPY_getResponse($hash, 'DefaultError');
     my $ret;
-    my $device;
-    my $cmd = $shortcut->{perl};
-    my $name = $shortcut->{NAME};
-    my $self = $hash->{NAME};
+    my $device = $shortcut->{NAME};;
+    my $cmd    = $shortcut->{perl};
+    my $self   = $hash->{NAME};
+    my $name   = $shortcut->{NAME} // $self;
     my %specials = (
          '$DEVICE' => $name,
          '$SELF'   => $self,
@@ -1398,28 +1408,17 @@ sub RHASSPY_handleIntentShortcuts {
         );
 
     if (defined($cmd)) {
-        Log3($hash->{NAME}, 4, "Perl shortcut identified: $cmd, shortc name is $shortcut->{NAME}");
-        #partly replace variables:
-        #$cmd = EvalSpecials($cmd, %specials);
-        for my $key (keys %specials) {
-            my $val = $specials{$key};
-            $key =~ s{\$}{\\\$}gxms;
-            $cmd =~ s{$key}{$val}gxms
-        }
-        #$cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \$specials);
+        Log3($hash->{NAME}, 5, "Perl shortcut identified: $cmd, shortc name is $shortcut->{NAME}");
+        $cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \%specials);
         #execute Perl command
-        Log3($hash->{NAME}, 4, "Perl shortcut modified: $cmd");
-        $ret = RHASSPY_runCmd($hash, undef, $cmd, undef, $data->{'siteId'});
-        $device = $ret;
-        #$response = $ret // EvalSpecials($response, %specials);
+        $ret = RHASSPY_runCmd($hash, undef, $cmd, undef, $data->{siteId});
+        $device = $ret if $ret !~ m{Please.define.*first}x;
         $response = $ret // RHASSPY_EvalSpecialsDefaults($hash, $response, \%specials);
     } else {
         $cmd = $shortcut->{fhem} // return;
-        #$cmd = EvalSpecials($cmd, $specials);
-        #$cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, %specials);
-        $device = split m{,}x, $shortcut->{NAME};
-        #$response = EvalSpecials($response, %specials);
-        #$response = RHASSPY_EvalSpecialsDefaults($hash, $response, %specials);
+        Log3($hash->{NAME}, 5, "FHEM shortcut identified: $cmd, shortc name is $shortcut->{NAME}");
+        $cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \%specials);
+        $response = RHASSPY_EvalSpecialsDefaults($hash, $response, \%specials);
         AnalyzeCommand($hash, $cmd);
     }
     
@@ -1911,7 +1910,7 @@ sub RHASSPY_handleIntentSetTimer {
     }
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
-    return [$name];
+    return $name;
 }
 
 sub RHASSPY_playWav($$) {
