@@ -63,6 +63,7 @@ BEGIN {
 
   GP_Import(qw(
     addToAttrList
+    delFromDevAttrList
     readingsSingleUpdate
     readingsBeginUpdate
     readingsBulkUpdate
@@ -107,22 +108,18 @@ my @topics = qw(
 );
 
 my $language = 'en';
+my $prefix   = q{rhasspy};
 
 sub RHASSPY_Initialize {
     my $hash = shift // return;
 
-    # Attribute rhasspyName und rhasspyRoom für andere Devices zur Verfügung abbestellen
-    addToAttrList('rhasspyName');
-    addToAttrList('rhasspyRoom');
-    addToAttrList('rhasspyMapping:textField-long');
-    
     # Consumer
     $hash->{DefFn}       = \&RHASSPY_Define;
     $hash->{UndefFn}     = \&RHASSPY_Undefine;
+    $hash->{DeleteFn}    = \&RHASSPY_Delete;
     $hash->{SetFn}       = \&RHASSPY_Set;
     $hash->{AttrFn}      = \&RHASSPY_Attr;
     $hash->{AttrList}    = "IODev defaultRoom rhasspyIntents:textField-long shortcuts:textField-long rhasspyMaster response:textField-long language:multiple,en,de forceNEXT:0,1 disable:0,1 disabledForIntervals " . $readingFnAttributes;
-    #$hash->{OnMessageFn} = \&RHASSPY_onmessage;
     $hash->{Match}       = ".*";
     $hash->{ParseFn}     = \&RHASSPY_Parse;
 
@@ -164,6 +161,11 @@ sub firstInit {
     
     $language = AttrVal($hash->{NAME},'language',lc(AttrVal('global','language',$language)));
     $hash->{LANGUAGE} = $language;
+    
+    # Attribute rhasspyName und rhasspyRoom für andere Devices zur Verfügung abbestellen
+    addToAttrList("${prefix}Name");  #rhasspyName
+    addToAttrList("${prefix}Room");  #rhasspyRoom
+    addToAttrList("${prefix}Mapping:textField-long"); #rhasspyMapping
 
     return;
 }
@@ -171,10 +173,36 @@ sub firstInit {
 # Device löschen
 sub RHASSPY_Undefine {
     my $hash = shift // return;
-    #Beta-User: $name not needed; was ist mit den globalen Attributen? Bleiben die...?
+    
+    #Beta-User: globale Attribute löschen
+    for (devspec2array("${prefix}Mapping=.+")) {
+        delFromDevAttrList($_,"${prefix}Mapping:textField-long");
+    }
+    for (devspec2array("${prefix}Name=.+")) {
+        delFromDevAttrList($_,"${prefix}Name");
+    }
+    for (devspec2array("${prefix}Room=.+")) {
+        delFromDevAttrList($_,"${prefix}Room");
+    }
 
     RemoveInternalTimer($hash);
   
+    return;
+}
+
+sub RHASSPY_Delete {
+    my $hash = shift // return;
+    
+    #Beta-User: globale Attribute löschen
+    for (devspec2array("${prefix}Mapping=.+")) {
+        delFromDevAttrList($_,"${prefix}NameMapping:textField-long");
+    }
+    for (devspec2array("${prefix}Name=.+")) {
+        delFromDevAttrList($_,"${prefix}Name");
+    }
+    for (devspec2array("${prefix}Room=.+")) {
+        delFromDevAttrList($_,"${prefix}Room");
+    }
     return;
 }
 
@@ -344,20 +372,16 @@ sub RHASSPY_EvalSpecialsDefaults {
 
 # Alle Gerätenamen sammeln
 sub RHASSPY_allRhasspyNames {
-    #my @devices;#, my @sorted;
-    #my %devicesHash;
     my $devspec = 'room=Rhasspy';
     my @devs = devspec2array($devspec);
     my @devices;
 
     # Alle RhasspyNames sammeln
     for (@devs) {
-        push @devices, split(',', AttrVal($_,'rhasspyName',undef));
+        push @devices, split(',', AttrVal($_,"${prefix}Name",undef));
     }
 
     # Doubletten rausfiltern
-    #%devicesHash = map { if (defined($_)) { $_, 1 } else { () } } @devices;
-    #@devices = keys %devicesHash;
     #from https://stackoverflow.com/a/43873983
     #my @unique = get_unique(@devices, 1 );
     # Längere Werte zuerst, damit bei Ersetzungen z.B. nicht 'lampe' gefunden wird bevor der eigentliche Treffer 'deckenlampe' versucht wurde
@@ -372,12 +396,12 @@ sub RHASSPY_allRhasspyNames {
 sub RHASSPY_allRhasspyRooms {
     my @rooms, my @sorted;
     my %roomsHash;
-    my $devspec = "room=Rhasspy";
+    my $devspec = q{room=Rhasspy};
     my @devs = devspec2array($devspec);
 
     # Alle RhasspyNames sammeln
     foreach (@devs) {
-        push @rooms, split(',', AttrVal($_,"rhasspyRoom",undef));
+        push @rooms, split(',', AttrVal($_,"${prefix}Room",undef));
     }
 
     # Doubletten rausfiltern
@@ -396,13 +420,12 @@ sub RHASSPY_allRhasspyRooms {
 sub RHASSPY_allRhasspyChannels {
     my @channels, my @sorted;
     my %channelsHash;
-    my $devspec = "room=Rhasspy";
-    my @devs = devspec2array($devspec);
+    my $devspec = q{room=Rhasspy};
 
     # Alle RhasspyNames sammeln
-    foreach (@devs) {
-        my @rows = split(/\n/, AttrVal($_,"rhasspyChannels",undef));
-        foreach (@rows) {
+    for (devspec2array($devspec)) {
+        my @rows = split(/\n/, AttrVal($_,"${prefix}Channels",undef));
+        for (@rows) {
             my @tokens = split('=', $_);
             my $channel = shift(@tokens);
             push @channels, $channel;
@@ -424,19 +447,19 @@ sub RHASSPY_allRhasspyChannels {
 sub RHASSPY_allRhasspyTypes {
     my @types, my @sorted;
     my %typesHash;
-    my $devspec = "room=Rhasspy";
+    my $devspec = q{room=Rhasspy};
     my @devs = devspec2array($devspec);
 
     # Alle RhasspyNames sammeln
     for (@devs) {
-        my @mappings = split(/\n/, AttrVal($_,"rhasspyMapping",undef));
+        my @mappings = split(/\n/, AttrVal($_,"${prefix}Mapping",undef));
         for (@mappings) {
             # Nur GetNumeric und SetNumeric verwenden
             next if $_ !~ m/^(SetNumeric|GetNumeric)/;
             $_ =~ s/(SetNumeric|GetNumeric)://;
             my %mapping = RHASSPY_splitMappingString($_);
 
-            push @types, $mapping{'type'} if (defined($mapping{'type'}));
+            push @types, $mapping{type} if (defined($mapping{type}));
         }
     }
 
@@ -462,7 +485,7 @@ sub RHASSPY_allRhasspyColors() {
     for(@devs) {
         #my @rows = split(/\n/, AttrVal($_,"rhasspyColors",undef));
         #foreach (@rows) {
-        for (split(/\n/, AttrVal($_,"rhasspyColors",undef))) {
+        for (split(/\n/, AttrVal($_,"${prefix}Colors",undef))) {
             my @tokens = split('=', $_);
             my $color = shift(@tokens);
             push @colors, $color;
@@ -534,8 +557,8 @@ sub RHASSPY_getDeviceByName($$$) {
 
     for (@devices) {
         # 2 Arrays bilden mit Namen und Räumen des Devices
-        my @names = split(',', AttrVal($_,'rhasspyName',q{}));
-        my @rooms = split(',', AttrVal($_,'rhasspyRoom',q{}));
+        my @names = split(',', AttrVal($_,"${prefix}Name",q{}));
+        my @rooms = split(',', AttrVal($_,"${prefix}Room",q{}));
 
         # Case Insensitive schauen ob der gesuchte Name (oder besser Name und Raum) in den Arrays vorhanden ist
 #        if (grep( /^$name$/i, @names)) {
@@ -564,7 +587,7 @@ sub RHASSPY_getDevicesByIntentAndType($$$$) {
 
     for(@devices) {
         # Array bilden mit Räumen des Devices
-        my @rooms = split(',', AttrVal($_,"rhasspyRoom",undef));
+        my @rooms = split(',', AttrVal($_,"${prefix}Room",undef));
         # Mapping mit passendem Intent vorhanden?
         my $mapping = RHASSPY_getMapping($hash, $_, $intent, $type, 1) // next;
         #next unless defined($mapping);
@@ -619,14 +642,15 @@ sub RHASSPY_getActiveDeviceForIntentAndType($$$$) {
 
     # Anonyme Funktion zum finden des aktiven Geräts
     my $activeDevice = sub ($$) {
-        my ($hash, $devices) = @_;
+        my $subhash = shift;
+        my $devices = shift // return;
         my $match;
 
         for (@{$devices}) {
-            my $mapping = RHASSPY_getMapping($hash, $_, 'GetOnOff', undef, 1);
+            my $mapping = RHASSPY_getMapping($subhash, $_, 'GetOnOff', undef, 1);
             if (defined($mapping)) {
                 # Gerät ein- oder ausgeschaltet?
-                my $value = RHASSPY_getOnOffState($hash, $_, $mapping);
+                my $value = RHASSPY_getOnOffState($subhash, $_, $mapping);
                 if ($value == 1) {
                     $match = $_;
                     last;
@@ -658,12 +682,12 @@ sub RHASSPY_getDeviceByMediaChannel($$$) {
 
     for (@devices) {
         # Array bilden mit Räumen des Devices
-        my @rooms = AttrVal($_,"rhasspyRoom",undef);
+        my @rooms = AttrVal($_,"${prefix}Room",undef);
         if (index(@rooms, ",") != -1) {
-            my @rooms = split(',', AttrVal($_,"rhasspyRoom",undef));
+            my @rooms = split(',', AttrVal($_,"${prefix}Room",undef));
         }
         # Cmd mit passendem Intent vorhanden?
-        my $cmd = RHASSPY_getCmd($hash, $_, "rhasspyChannels", $channel, 1) // next;
+        my $cmd = RHASSPY_getCmd($hash, $_, "${prefix}Channels", $channel, 1) // next;
         #next if !defined($cmd);
 
         # Erster Treffer wälen, überschreiben falls besserer Treffer (Raum matched auch) kommt
@@ -720,7 +744,7 @@ sub RHASSPY_splitMappingString {
 sub RHASSPY_getMapping($$$$;$) {
     my ($hash, $device, $intent, $type, $disableLog) = @_;
     my @mappings, my $matchedMapping;
-    my $mappingsString = AttrVal($device, "rhasspyMapping", undef);
+    my $mappingsString = AttrVal($device, "${prefix}Mapping", undef);
 
     if (defined($mappingsString)) {
         # String in einzelne Mappings teilen
@@ -736,7 +760,7 @@ sub RHASSPY_getMapping($$$$;$) {
             if (!defined($matchedMapping) || (defined($type) && lc($matchedMapping->{'type'}) ne lc($type) && lc($currentMapping{'type'}) eq lc($type))) {
                 $matchedMapping = \%currentMapping;
 
-                Log3($hash->{NAME}, 5, "rhasspyMapping selected: $_") if (!defined($disableLog) || (defined($disableLog) && $disableLog != 1));
+                Log3($hash->{NAME}, 5, "${prefix}Mapping selected: $_") if (!defined($disableLog) || (defined($disableLog) && $disableLog != 1));
             }
         }
     }
@@ -1294,8 +1318,8 @@ sub RHASSPY_ParseHttpResponse {
         readingsBulkUpdate($hash, 'updateSlots', $data);
     }
     elsif (grep({/api\/profile/i} $url)) {
-        my $ref = JSON->new->decode($data);
-        my $siteIds = encode('cp-1252',$ref->{'dialogue'}{'satellite_site_ids'});
+        my $ref = decode_json($data);
+        my $siteIds = encode('cp-1252',$ref->{dialogue}{satellite_site_ids});
         readingsBulkUpdate($hash, 'siteIds', $siteIds);
     }
     else {
