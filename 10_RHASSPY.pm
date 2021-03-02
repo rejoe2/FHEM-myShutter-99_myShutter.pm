@@ -5,7 +5,7 @@
 # Originally written 2018 by Tobias Wiedenmann (Thyraz)
 # as FHEM Snips.ai module (thanks to Matthias Kleine)
 #
-# Adapted for RHASSPY 2020 by drhirn
+# Adapted for RHASSPY 2020 by Beta-User and drhirn
 #
 # Thanks to Beta-User, rudolfkoenig, JensS, cb2sela and all the others
 # who did a great job getting this to work!
@@ -1467,7 +1467,7 @@ sub RHASSPY_handleIntentShortcuts {
         );
 
     if (defined($cmd)) {
-        Log3($hash->{NAME}, 5, "Perl shortcut identified: $cmd, device name is $shortcut->{NAME}");
+        Log3($hash->{NAME}, 5, "Perl shortcut identified: $cmd, device name is $name");
 
         $cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \%specials);
         #execute Perl command
@@ -1478,7 +1478,7 @@ sub RHASSPY_handleIntentShortcuts {
         $response = $ret // RHASSPY_EvalSpecialsDefaults($hash, $response, \%specials);
     } else {
         $cmd = $shortcut->{fhem} // return;
-        Log3($hash->{NAME}, 5, "FHEM shortcut identified: $cmd, device name is $shortcut->{NAME}");
+        Log3($hash->{NAME}, 5, "FHEM shortcut identified: $cmd, device name is $name");
         $cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \%specials);
                                                  
                                                         
