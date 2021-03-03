@@ -49,10 +49,12 @@ my %sets = (
     updateSlots  => q{},
     textCommand  => q{},
     trainRhasspy => q{},
-    fetchSiteIds => q{}
+    fetchSiteIds => q{},
+    reinit       => [qw(language)]
 #    "volume" => ""
 );
 
+=pod
 my $languagevars = {
     'de' => {
         'commaconversion' => '1',
@@ -66,7 +68,6 @@ my $languagevars = {
                             }
     },
     'en' => {
-        'mutated_vowels' => {},
         'responses'      => { 'DefaultError' => "Sorry but something seems not to work as expected.",
                               'NoActiveMediaDevice' => "Sorry no active playback device.",
                               'DefaultConfirmation' => "OK",
@@ -74,6 +75,17 @@ my $languagevars = {
                               'timerEnd'   => "Timer expired",
                               'duration_not_understood'   => "Sorry I could not understand the desired duration."
                             }
+    }
+};
+=cut
+
+my $languagevars = {
+        'responses'      => { 'DefaultError' => "Sorry but something seems not to work as expected.",
+                              'NoActiveMediaDevice' => "Sorry no active playback device.",
+                              'DefaultConfirmation' => "OK",
+                              'timerSet'   => 'Timer in $room has been set to $value $unit',
+                              'timerEnd'   => "Timer expired",
+                              'duration_not_understood'   => "Sorry I could not understand the desired duration."
     }
 };
 
@@ -203,9 +215,23 @@ sub firstInit {
 
 sub initialize_Language {
     my $hash = shift // return;
-    my $lang =  shift // return;
+    my $lang = shift // return;
+    my $cfg  = shift // AttrVal($hash->{NAME},'configFile',undef);
+    
+    my $lngvars = $languagevars;
+    
+    #default to en first
+    $hash->{helper}{lng} = $lngvars;
 
-    $hash->{helper}{lng} = $languagevars->{$lang};
+    my ($ret, $content) = RHASSPY_readLanguageFromFile($hash, $cfg);
+    return $ret if $ret;
+    my $decoded = eval { decode_json(encode_utf8($content)) };
+    if ($@) {
+          Log3($hash->{NAME}, 1, "JSON decoding error: " . $@);
+          return "languagefile $cfg seems not to contain valid JSON!";
+    }
+
+    $hash->{helper}{lng} = $decoded;
     return;
 }
 
@@ -292,6 +318,12 @@ sub RHASSPY_Set {
     $params = $h if defined $h->{text};
     return $dispatch->{$command}->($hash, $params) if (ref $dispatch->{$command} eq 'CODE');
     
+    if ($command eq 'reinit') {
+        if ($values[0] eq 'language') {
+            return initialize_Language($hash, $hash->{LANGUAGE});
+        }
+    }
+    
     return;
 }
 
@@ -324,6 +356,14 @@ sub RHASSPY_Attr {
         if ($command eq 'set') {
             return RHASSPY_init_custom_intents($hash, $value); 
         } 
+    }
+    
+    if ( $attribute eq 'configFile' ) {
+        if ($command ne 'set') {
+            delete $hash->{CONFIGFILE};
+            delete $attr{$name}{configFile} ; 
+        }
+        return initialize_Language($hash, $hash->{LANGUAGE}, $value); 
     }
     
     return;
@@ -369,13 +409,26 @@ sub RHASSPY_init_custom_intents {
     
     for my $line (split m{\n}x, $attrVal) {
         next if !length $line;
-        next if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)(\))\s*)}x;
-        #($intend, $perlcommand) = split q{=}, $line, 2;
-        return "no intent found in $line!" if !$+{intent} && $init_done;
-        my $err = perlSyntaxCheck( $+{perlcommand} );
+        #return "invalid line $line" if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)(\))\s*)}x;
+        return "invalid line $line" if $line !~ m{ 
+            (?<intent>[^=]+)\s*     #string up to  =, w/o ending whitespace 
+            =\s*                    #separator = and potential whitespace
+            (?<perlcommand>         #identifier
+                (?<function>([^(]+))#string up to opening bracket
+                \(                  #opening bracket
+                (?<arg>.*)(\))\s*)  #everything up to the closing bracket, w/o ending whitespace
+                }xms; 
+        my $intent = trim($+{intent});
+        return "no intent found in $line!" if (!$intent || $intent eq q{}) && $init_done;
+        my $function = trim($+{function});
+        return "invalid function in line $line" if $function =~ m{\s+}x;
+        my $perlcommand = trim($+{perlcommand});
+        my $err = perlSyntaxCheck( $perlcommand );
         return "$err in $line" if $err && $init_done;
-        $hash->{helper}{custom}{$+{intent}}{perl} = $+{perlcommand}; #Beta-User: delete after testing!
-        $hash->{helper}{custom}{$+{intent}}{function} = $+{function};
+        
+        $hash->{helper}{custom}{$+{intent}}{perl} = $perlcommand; #Beta-User: delete after testing!
+        $hash->{helper}{custom}{$intent}{function} = $function;
+
         my $args = trim($+{arg});
         my @params;
         for my $ar (split m{,}x, $args) {
@@ -430,7 +483,7 @@ sub get_unique {
     return @unique if !$sorted;
 
     my @sorted = sort { length($b) <=> length($a) } @unique;
-    Log3(undef, 3, "get_unique sorted to ".join q{ }, @sorted);
+    #Log3(undef, 5, "get_unique sorted to ".join q{ }, @sorted);
     return @sorted;
 }
 
@@ -469,7 +522,8 @@ sub RHASSPY_allRhasspyNames {
 
     # Alle RhasspyNames sammeln
     for (@devs) {
-        push @devices, split(',', AttrVal($_,"${prefix}Name",undef));
+        my $attrv = AttrVal($_,"${prefix}Name",undef) // next;
+        push @devices, split m{,}x, $attrv;
     }
     return get_unique(\@devices, 1 );
 }
@@ -482,7 +536,8 @@ sub RHASSPY_allRhasspyRooms {
     my $prefix = $hash->{prefix};
     # Alle RhasspyNames sammeln
     for (devspec2array(q{room=Rhasspy})) {
-        push @rooms, split(',', AttrVal($_,"${prefix}Room",undef));
+        my $attrv = AttrVal($_,"${prefix}Room",undef) // next;
+        push @rooms, split m{,}x, $attrv;
     }
     return get_unique(\@rooms, 1 );
 }
@@ -493,11 +548,11 @@ sub RHASSPY_allRhasspyChannels {
     my $hash = shift // return;
     my @channels; #, my @sorted;
 
-
     my $prefix = $hash->{prefix};
     # Alle RhasspyNames sammeln
     for (devspec2array(q{room=Rhasspy})) { # $devspec)) {
-        my @rows = split(/\n/, AttrVal($_,"${prefix}Channels",undef));
+        my $attrv = AttrVal($_,"${prefix}Channels",undef) // next;
+        my @rows = split m{\n}x, $attrv;
         for (@rows) {
             my @tokens = split('=', $_);
             #my $channel = shift(@tokens);
@@ -519,7 +574,8 @@ sub RHASSPY_allRhasspyTypes {
     my $prefix = $hash->{prefix};
     # Alle RhasspyNames sammeln
     for (@devs) {
-        my @mappings = split(/\n/, AttrVal($_,"${prefix}Mapping",undef));
+        my $attrv = AttrVal($_,"${prefix}Mapping",undef) // next;
+        my @mappings = split m{\n}x, $attrv;
         for (@mappings) {
             # Nur GetNumeric und SetNumeric verwenden
             next if $_ !~ m/^(SetNumeric|GetNumeric)/;
@@ -536,19 +592,17 @@ sub RHASSPY_allRhasspyTypes {
 # Alle Farben sammeln
 sub RHASSPY_allRhasspyColors {
     my $hash = shift // return;
-    my @colors, my @sorted;
-    my %colorHash;
+    my @colors;
     my $devspec = q{room=Rhasspy};
     my @devs = devspec2array($devspec);
 
     my $prefix = $hash->{prefix};
     # Alle RhasspyNames sammeln
     for(@devs) {
-        #my @rows = split(/\n/, AttrVal($_,"rhasspyColors",undef));
-        #foreach (@rows) {
-        for (split(/\n/, AttrVal($_,"${prefix}Colors",undef))) {
-            my @tokens = split('=', $_);
-            my $color = shift(@tokens);
+        my $attrv = AttrVal($_,"${prefix}Colors",undef) // next;
+        for (split m{\n}x, $attrv) {
+            my @tokens = split m{=}x, $_;
+            my $color = shift @tokens;
             push @colors, $color;
         }
     }
@@ -586,12 +640,12 @@ sub RHASSPY_getDeviceByName {
 
     for (@devices) {
         # 2 Arrays bilden mit Namen und Räumen des Devices
-        my @names = split(',', AttrVal($_,"${prefix}Name",q{}));
-        my @rooms = split(',', AttrVal($_,"${prefix}Room",q{}));
+        my @names = split m{,}x, AttrVal($_,"${prefix}Name",q{});
+        my @rooms = split m{,}x, AttrVal($_,"${prefix}Room",q{});
 
         # Case Insensitive schauen ob der gesuchte Name (oder besser Name und Raum) in den Arrays vorhanden ist
 #        if (grep( /^$name$/i, @names)) {
-        if (grep( { /^$name$/i } @names)) {
+        if (grep { /^$name$/i } @names ) {
             if (!defined($device) || grep( { /^$room$/i} @rooms)) {
                 $device = $_;
             }
@@ -621,12 +675,11 @@ sub RHASSPY_getDevicesByIntentAndType {
     my $prefix = $hash->{prefix};
     for(@devices) {
         # Array bilden mit Räumen des Devices
-        my @rooms = split(',', AttrVal($_,"${prefix}Room",undef));
+        my @rooms = split m{,}x, AttrVal($_,"${prefix}Room",undef);
         # Mapping mit passendem Intent vorhanden?
         my $mapping = RHASSPY_getMapping($hash, $_, $intent, $type, 1) // next;
-        #next unless defined($mapping);
 
-        my $mappingType = $mapping->{type}; # if (defined($mapping->{'type'})); #Beta-User: no conditional variable declarations!
+        my $mappingType = $mapping->{type};
 
         # Geräte sammeln
         if (!defined($type)) {
@@ -634,17 +687,11 @@ sub RHASSPY_getDevicesByIntentAndType {
                 ? push @matchesInRoom, $_ 
                 : push @matchesOutsideRoom, $_;
         }
-#        elsif (!defined($type) && grep(/^$room$/i, @rooms)) {
-#            push @matchesInRoom, $_;
-#        }
         elsif (defined($type) && $mappingType && $type =~ m/^$mappingType$/i) {
             grep( {/^$room$/i} @rooms)
             ? push @matchesInRoom, $_
             : push @matchesOutsideRoom, $_;
         }
-#        elsif (defined($type) && $mappingType && $type =~ m/^$mappingType$/i && grep(/^$room$/i, @rooms)) {
-#            push @matchesInRoom, $_;
-#        }
     }
 
     return (\@matchesInRoom, \@matchesOutsideRoom);
@@ -664,7 +711,7 @@ sub RHASSPY_getDeviceByIntentAndType {
     my ($matchesInRoom, $matchesOutsideRoom) = RHASSPY_getDevicesByIntentAndType($hash, $room, $intent, $type);
 
     # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
-    $device = (@{$matchesInRoom} > 0) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
+    $device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
 
     Log3($hash->{NAME}, 5, "Device selected: $device");
 
@@ -693,7 +740,7 @@ sub RHASSPY_getActiveDeviceForIntentAndType {
             if (defined($mapping)) {
                 # Gerät ein- oder ausgeschaltet?
                 my $value = RHASSPY_getOnOffState($subhash, $_, $mapping);
-                if ($value == 1) {
+                if ($value) {
                     $match = $_;
                     last;
                 }
@@ -704,7 +751,7 @@ sub RHASSPY_getActiveDeviceForIntentAndType {
 
     # Gerät finden, erst im aktuellen Raum, sonst in den restlichen
     $device = $activeDevice->($hash, $matchesInRoom);
-    $device = $activeDevice->($hash, $matchesOutsideRoom) if (!defined($device));
+    $device = $activeDevice->($hash, $matchesOutsideRoom) if !defined($device);
 
     Log3($hash->{NAME}, 5, "Device selected: $device");
 
@@ -727,16 +774,10 @@ sub RHASSPY_getDeviceByMediaChannel {
     
     my $prefix = $hash->{prefix};
     for (@devices) {
-        # Array bilden mit Räumen des Devices
-        my @rooms = AttrVal($_,"${prefix}Room",undef);
-        if (index(@rooms, ",") != -1) {
-            ##Beta-User: eigentlich sollte man gleich splitten können
-            @rooms = split(',', AttrVal($_,"${prefix}Room",undef));
-        }
-        # Cmd mit passendem Intent vorhanden?
+        my $attrv = AttrVal($_,"${prefix}Room",undef) // next;
+        my @rooms = split m{,}x, $attrv;
         my $cmd = RHASSPY_getCmd($hash, $_, "${prefix}Channels", $channel, 1) // next;
-        #next if !defined($cmd);
-
+        
         # Erster Treffer wälen, überschreiben falls besserer Treffer (Raum matched auch) kommt
         if (!defined($device) || grep( {/^$room$/i} @rooms)) {
             $device = $_;
@@ -781,7 +822,7 @@ sub RHASSPY_splitMappingString {
     push(@tokens, $token) if (length($token) > 0);
 
     # Tokens in Keys/Values trennen
-    %parsedMapping = map {split /=/, $_, 2} @tokens;
+    %parsedMapping = map {split m{=}x, $_, 2} @tokens;
 
     return %parsedMapping;
 }
@@ -803,7 +844,7 @@ sub RHASSPY_getMapping { #($$$$;$)
 
     if (defined($mappingsString)) {
         # String in einzelne Mappings teilen
-        @mappings = split(/\n/, $mappingsString);
+        @mappings = split m{\n}x, $mappingsString;
 
         for (@mappings) {
             # Nur Mappings vom gesuchten Typ verwenden
@@ -827,16 +868,16 @@ sub RHASSPY_getMapping { #($$$$;$)
 sub RHASSPY_getCmd { #($$$$;$)
     my $hash       = shift // return;
     my $device     = shift;
-    my $reading     = shift;
+    my $reading    = shift;
     my $key        = shift; #Beta-User: any necessary parameters...?
     my $disableLog = shift // 0;
     #my ($hash, $device, $reading, $key, $disableLog) = @_;
 
-    my @rows, my $cmd;
+    my $cmd;
     #my $attrString = AttrVal($device, $reading, undef);
 
     # String in einzelne Mappings teilen
-    @rows = split(/\n/, AttrVal($device, $reading, q{}));
+    my @rows = split(/\n/, AttrVal($device, $reading, q{}));
 
     for (@rows) {
         # Nur Zeilen mit gesuchten Identifier verwenden
@@ -872,15 +913,16 @@ sub RHASSPY_runCmd {
     }
 
     # String in Anführungszeichen (mit ReplaceSetMagic)
-    if ($cmd =~ m/^\s*".*"\s*$/) {
+    if ($cmd =~ m{\A\s*"(?<inner>.*)"\s*\z}x) {
         my $DEVICE = $device;
-        my $ROOM = $siteId;
-        my $VALUE = $val;
+        my $ROOM   = $siteId;
+        my $VALUE  = $val;
 
         Log3($hash->{NAME}, 5, "$cmd has quotes...");
         # Anführungszeichen entfernen
-        $cmd =~ s{\A\s*"}{}x;
-        $cmd =~ s{"\s*\z}{}x;
+        #$cmd =~ s{\A\s*"}{}x;
+        #$cmd =~ s{"\s*\z}{}x;
+        $cmd = $+{inner};
 
         # Variablen ersetzen?
         eval { $cmd =~ s/(\$\w+)/$1/eeg; };
@@ -893,10 +935,8 @@ sub RHASSPY_runCmd {
     }
     # FHEM Command oder CommandChain
     elsif (defined($cmds{ (split " ", $cmd)[0] })) {
-#        my @test = split q{ }, $cmd;
         Log3($hash->{NAME}, 5, "$cmd is a FHEM command");
         $error = AnalyzeCommandChain($hash, $cmd);
-#        $returnVal = @test[1];
     }
     # Soll Command auf anderes Device umgelenkt werden?
     elsif ($cmd =~ m/:/) {
@@ -988,7 +1028,6 @@ sub RHASSPY_parseJSON {
     }
 
     # Standard-Keys auslesen
-    #$data->{intent} = $decoded->{intent}{intentName} =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName}; #Beta-User: unless not... => doppelte Negation?
     ($data->{intent} = $decoded->{intent}{intentName}) =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName}; 
     $data->{probability} = $decoded->{intent}{confidenceScore}         if exists $decoded->{intent}{confidenceScore}; #Beta-User: macht diese Abfrage überhaupt Sinn? Ist halt so
     $data->{sessionId} = $decoded->{sessionId}                         if exists $decoded->{sessionId};
@@ -1000,7 +1039,7 @@ sub RHASSPY_parseJSON {
     # Überprüfen ob Slot Array existiert
     if (exists $decoded->{slots}) {
         # Key -> Value Paare aus dem Slot Array ziehen
-        for my $slot (@{$decoded->{slots}}) { #Beta-User: foreach=for, "Einmalvariablen" machen keinen großen Sinn...
+        for my $slot (@{$decoded->{slots}}) { 
             my $slotName = $slot->{slotName};
             my $slotValue;
 
@@ -1100,12 +1139,13 @@ sub RHASSPY_onmessage {
         my $room = RHASSPY_roomName($hash, $data);
 
         return if !defined $room;
-        #my %mutated_vowels = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss" );
         my $mutated_vowels = $hash->{helper}{lng}->{mutated_vowels};
-        my $keys = join q{|}, keys %{$mutated_vowels};
-        #Log3($hash->{NAME}, 5, "mutated_vowels regex is $keys");
+        if (defined $mutated_vowels) {
+            my $keys = join q{|}, keys %{$mutated_vowels};
+            #Log3($hash->{NAME}, 5, "mutated_vowels regex is $keys");
 
-        $room =~ s/($keys)/$mutated_vowels->{$1}/g;
+            $room =~ s/($keys)/$mutated_vowels->{$1}/g;
+        }
 
         if ($topic =~ m/sessionStarted/) {
             readingsSingleUpdate($hash, "listening_" . makeReadingName($room), 1, 1);
@@ -1325,7 +1365,7 @@ sub RHASSPY_updateSlots {
 # Use the HTTP-API to instruct Rhasspy to re-train it's data
 sub RHASSPY_trainRhasspy {
     my $hash = shift // return;
-    my $url         = q{/api/train}; #Beta-User: warum eigentlich nicht direkt nur den Befehl absetzen...?
+    my $url         = q{/api/train};
     my $method      = q{POST};
     my $contenttype = q{application/json};
     
@@ -1422,31 +1462,15 @@ sub RHASSPY_handleCustomIntent {
       $data->{Device} = RHASSPY_getDeviceByName($hash, $room, $data->{Device}); #Beta-User: really...?
     }
 
-    # Custom Intent Definition Parsen
-    #return if $intent !~ m{.+\(.*\)}x;
-    #my @tokens = split m{\(|\)}x, $custom;
     my $subName = $custom->{function};
-    #if (@tokens) { $subName = $tokens[0]} ;
-    my @paramNames = $custom->{args}; #split m{,}x, $tokens[1];
+    my @paramNames = $custom->{args};
 
     if (defined $subName) { #might not be necessary...
         my @params = map { $data->{$_} } @paramNames;
-
-        # Sub aus dem Custom Intent aufrufen
-        #Beta-User: ggf. auch auf EvalSpecials/AnalyzePerlCommand umstellen?
-        #$subName = "::$subName";
-        #eval {
         my $params = join q{,}, @params;
         my $cmd = qq{ $subName( $params , $hash) };
         Log3($hash->{NAME}, 5, "Calling sub: $cmd");
         my $error = AnalyzePerlCommand($hash, $cmd);
-#            no strict 'refs';
-#            $response = $subName->(@params, $hash);
-#        };
-
-#        if ($@) {
-#            Log3($hash->{NAME}, 5, $@);
-#        }
         $response = $error if $error !~ m{Please.define.*first}x;
       
     }
@@ -1512,9 +1536,7 @@ sub RHASSPY_handleIntentShortcuts {
     } else {
         $cmd = $shortcut->{fhem} // return;
         Log3($hash->{NAME}, 5, "FHEM shortcut identified: $cmd, device name is $name");
-        $cmd  = _replace($hash, $cmd, \%specials);
-                                                 
-                                                        
+        $cmd      = _replace($hash, $cmd, \%specials);
         $response = _replace($hash, $response, \%specials);
         AnalyzeCommand($hash, $cmd);
     }
@@ -1994,12 +2016,12 @@ sub RHASSPY_handleIntentSetTimer {
         my $time = $value;
         my $roomReading = makeReadingName($room);
         
-        if    ( grep $_ eq $unit, @unitMinutes ) {$time = $value*60}
-        elsif ( grep $_ eq $unit, @unitHours ) {$time = $value*3600};
+        if    ( grep { $_ eq $unit } @unitMinutes ) {$time = $value*60}
+        elsif ( grep { $_ eq $unit } @unitHours )   {$time = $value*3600};
         
-        $time = strftime('%T', gmtime($time));
-
-        #my $cmd = "defmod timer_$room at +$time set $name speak siteId=\"$siteId\" text=\"taimer abgelaufen\";;setreading $name timer_".$room." 0";
+        #$time = strftime('%T', gmtime $time); # Beta-User: %T seems to fail in non-POSIX-Environments...
+        $time = strftime('%H:%M:%S', gmtime $time);
+        
         $response = $hash->{helper}{lng}->{responses}->{timerEnd};
         my $cmd = qq(defmod timer_$room at +$time set $name speak siteId=\"$room\" text=\"$response\";;setreading $name timer_$roomReading 0);
         
@@ -2010,9 +2032,13 @@ sub RHASSPY_handleIntentSetTimer {
         Log3($name, 5, "Created timer: $cmd");
         
         #$response = "Taimer in $room gesetzt auf $value $unit";
-        $response = _replace( $hash, 
-                    $hash->{helper}{lng}->{responses}->{timerSet},
-                    {'$unit' => $unit, '$time' => $time, '$room' => $room, '$value' => $value });
+        # Variablen ersetzen? (Testcode aus RHASSPY_runCmd())
+        $response = $hash->{helper}{lng}->{responses}->{timerSet};
+        eval { $response =~ s{(\$\w+)}{$1}eeg; };
+        
+        #$response = _replace( $hash, 
+        #            $hash->{helper}{lng}->{responses}->{timerSet},
+        #            {'$unit' => $unit, '$time' => $time, '$room' => $room, '$value' => $value });
     }
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
@@ -2058,11 +2084,18 @@ sub RHASSPY_playWav {
 # Abgespeckte Kopie von ReplaceSetMagic aus fhem.pl
 sub RHASSPY_ReplaceReadingsVal {
     my $hash = shift;
-    my @arr  = shift // return;
-    my $to_analyze = join q{ }, @arr;
+    my $arr  = shift // return;
+    my $to_analyze = join q{ }, @{$arr};
+
+    #my @arr  = shift // return;
+    #my $to_analyze = join q{ }, @arr;
 
     my $readingsVal = sub ($$$$$) {
-        my ($all, $t, $d, $n, $s) = @_;
+        my $all = shift;
+        my $t = shift;
+        my $d = shift;
+        my $n = shift;
+        my $s = shift;
         my $val;
         my $hash = $defs{$d}; #Beta-User: vermutlich nicht benötigt, bitte mal testweise auskommentieren...
         return $all if(!$hash);
@@ -2094,26 +2127,33 @@ sub RHASSPY_ReplaceReadingsVal {
 }
 
 sub RHASSPY_getDataFile {
-    my $hash = shift // return;
+    my $hash     = shift // return;
+    my $filename = shift;
+    
     my $name = $hash->{NAME};
     my $lang = $hash->{LANGUAGE};
-    my $filename = "%L/RHASSPY-$name-$lang.cfg";
+    $filename = $filename // AttrVal($name,'configFile',undef);
     my @t = localtime gettimeofday();
-    $filename = ResolveDateWildcards(AttrVal($name,'configFile',$filename),@t);
+    $filename = ResolveDateWildcards($filename, @t);
     $hash->{CONFIGFILE} = $filename; # for configDB migration
     return $filename;
 }
 
 sub RHASSPY_readLanguageFromFile {
     my $hash = shift // return;
+    my $cfg  = shift;
+    
     my $name = $hash->{NAME};
-    my $filename = RHASSPY_getDataFile($hash);
+    my $filename = RHASSPY_getDataFile($hash, $cfg);
     Log3($name, 5, "trying to read language from $filename");
     my ($ret, @content) = FileRead($filename);
-    return Log3($name, 1, "$name failed to read configFile $filename!") if $ret;
+    if ($ret) {
+        Log3($name, 1, "$name failed to read configFile $filename!") ;
+        return $ret, undef;
+    }
 
     #my $string = join q{ }, @content;
-    return join q{ }, @content;
+    return undef, join q{ }, @content;
 }
 
 1;
