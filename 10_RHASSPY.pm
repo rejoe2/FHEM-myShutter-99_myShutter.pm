@@ -118,6 +118,7 @@ BEGIN {
     makeReadingName
     ReadingsNum
     FileRead
+    trim
   ))
 
 };
@@ -316,6 +317,15 @@ sub RHASSPY_Attr {
         } 
     }
     
+    if ( $attribute eq 'rhasspyIntents' ) {
+        for ( keys %{ $hash->{helper}{custom} } ) {
+            delete $hash->{helper}{custom}{$_};
+        }
+        if ($command eq 'set') {
+            return RHASSPY_init_custom_intents($hash, $value); 
+        } 
+    }
+    
     return;
 }
 
@@ -349,6 +359,34 @@ sub RHASSPY_init_shortcuts {
         }
         $hash->{helper}{shortcuts}{$intend}{NAME} = $named->{n} if defined($named->{n});
         $hash->{helper}{shortcuts}{$intend}{response} = $named->{r} if defined($named->{r});
+    }
+    return;
+}
+
+sub RHASSPY_init_custom_intents {
+    my $hash    = shift // return;
+    my $attrVal = shift // return;
+    
+    for my $line (split m{\n}x, $attrVal) {
+        next if !length $line;
+        next if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)(\))\s*)}x;
+        #($intend, $perlcommand) = split q{=}, $line, 2;
+        return "no intent found in $line!" if !$+{intent} && $init_done;
+        my $err = perlSyntaxCheck( $+{perlcommand} );
+        return "$err in $line" if $err && $init_done;
+        $hash->{helper}{custom}{$+{intent}}{perl} = $+{perlcommand}; #Beta-User: delete after testing!
+        $hash->{helper}{custom}{$+{intent}}{function} = $+{function};
+        my $args = trim($+{arg});
+        my @params;
+        for my $ar (split m{,}x, $args) {
+           $ar =trim($ar);
+           next if $ar eq q{};
+           push @params, $ar; 
+        }
+        #push @params, \$hash;
+        $hash->{helper}{custom}{$+{intent}}{args} = @params;
+        $hash->{helper}{custom}{$+{intent}}{argslong} = join q{,}, @params; #Beta-User: delete after testing!
+        
     }
     return;
 }
@@ -396,7 +434,7 @@ sub get_unique {
     return @sorted;
 }
 
-sub RHASSPY_EvalSpecialsDefaults {
+sub _replace {
     my $hash  = shift // return;
     my $cmd   = shift // return;
     my $hash2 = shift;
@@ -1369,58 +1407,53 @@ sub RHASSPY_handleCustomIntent {
     my $hash       = shift // return;
     my $intentName = shift;
     my $data       = shift;
-    #my @intents, 
-    my $intent;
-    my $intentsString = AttrVal($hash->{NAME},'rhasspyIntents',undef);
-    my $response;
-
-    Log3($hash->{NAME}, 5, "handleCustomIntent called");
-
-    # Suchen ob ein passender Custom Intent existiert
-    my @intents = split(/\n/, $intentsString);
-    for (@intents) {
-        next if $_ !~ qr/^$intentName/;
-
-        $intent = $_;
-        Log3($hash->{NAME}, 5, "rhasspyIntent selected: $_");
+    
+    if (!defined $hash->{helper}{custom} || !defined $hash->{helper}{custom}{$intentName}) {
+        Log3($hash->{NAME}, 2, "handleIntentShortcuts called with invalid $intentName key");
+        return;
     }
+    my $custom = $hash->{helper}{custom}{$intentName};
+    Log3($hash->{NAME}, 5, "handleIntentShortcuts called with $intentName key");
+    
+    my ($intent, $response, $room);
 
-    # Gerät setzen falls Slot Device vorhanden
-    if (exists($data->{'Device'})) {
-      my $room = RHASSPY_roomName($hash, $data);
-      my $device = RHASSPY_getDeviceByName($hash, $room, $data->{'Device'});
-      $data->{'Device'} = $device;
+    if (exists $data->{Device} ) {
+      $room = RHASSPY_roomName($hash, $data);
+      $data->{Device} = RHASSPY_getDeviceByName($hash, $room, $data->{Device}); #Beta-User: really...?
     }
 
     # Custom Intent Definition Parsen
-    return if $intent !~ qr/^$intentName=.*\(.*\)/;
-    #if ($intent =~ qr/^$intentName=.*\(.*\)/) {
-    my @tokens = split(/=|\(|\)/, $intent);
-    my $subName; my @paramNames;
-    if (@tokens > 0){$subName = $tokens[1]} ;
-    if (@tokens > 1){@paramNames = split(/,/, $tokens[2])};
+    #return if $intent !~ m{.+\(.*\)}x;
+    #my @tokens = split m{\(|\)}x, $custom;
+    my $subName = $custom->{function};
+    #if (@tokens) { $subName = $tokens[0]} ;
+    my @paramNames = $custom->{args}; #split m{,}x, $tokens[1];
 
-    if (defined($subName)) {
+    if (defined $subName) { #might not be necessary...
         my @params = map { $data->{$_} } @paramNames;
 
         # Sub aus dem Custom Intent aufrufen
         #Beta-User: ggf. auch auf EvalSpecials/AnalyzePerlCommand umstellen?
-        $subName = "::$subName";
-        eval {
-            Log3($hash->{NAME}, 5, "Calling sub: $subName");
+        #$subName = "::$subName";
+        #eval {
+        my $params = join q{,}, @params;
+        my $cmd = qq{ $subName( $params , $hash) };
+        Log3($hash->{NAME}, 5, "Calling sub: $cmd");
+        my $error = AnalyzePerlCommand($hash, $cmd);
+#            no strict 'refs';
+#            $response = $subName->(@params, $hash);
+#        };
 
-            no strict 'refs';
-            $response = $subName->(@params, $hash);
-        };
-
-        if ($@) {
-            Log3($hash->{NAME}, 5, $@);
-        }
+#        if ($@) {
+#            Log3($hash->{NAME}, 5, $@);
+#        }
+        $response = $error if $error !~ m{Please.define.*first}x;
+      
     }
     $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
 
     # Antwort senden
-    return RHASSPY_respond ($hash, $data->{'requestType'}, $data->{sessionId}, $data->{siteId}, $response);
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 }
 
 # Handle incoming "SetMute" intents
@@ -1469,20 +1502,20 @@ sub RHASSPY_handleIntentShortcuts {
     if (defined($cmd)) {
         Log3($hash->{NAME}, 5, "Perl shortcut identified: $cmd, device name is $name");
 
-        $cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \%specials);
+        $cmd  = _replace($hash, $cmd, \%specials);
         #execute Perl command
                                                                
         $ret = RHASSPY_runCmd($hash, undef, $cmd, undef, $data->{siteId});
         $device = $ret if $ret !~ m{Please.define.*first}x;
                                                                 
-        $response = $ret // RHASSPY_EvalSpecialsDefaults($hash, $response, \%specials);
+        $response = $ret // _replace($hash, $response, \%specials);
     } else {
         $cmd = $shortcut->{fhem} // return;
         Log3($hash->{NAME}, 5, "FHEM shortcut identified: $cmd, device name is $name");
-        $cmd  = RHASSPY_EvalSpecialsDefaults($hash, $cmd, \%specials);
+        $cmd  = _replace($hash, $cmd, \%specials);
                                                  
                                                         
-        $response = RHASSPY_EvalSpecialsDefaults($hash, $response, \%specials);
+        $response = _replace($hash, $response, \%specials);
         AnalyzeCommand($hash, $cmd);
     }
     
@@ -1977,7 +2010,7 @@ sub RHASSPY_handleIntentSetTimer {
         Log3($name, 5, "Created timer: $cmd");
         
         #$response = "Taimer in $room gesetzt auf $value $unit";
-        $response = RHASSPY_EvalSpecialsDefaults( $hash, 
+        $response = _replace( $hash, 
                     $hash->{helper}{lng}->{responses}->{timerSet},
                     {'$unit' => $unit, '$time' => $time, '$room' => $room, '$value' => $value });
     }
@@ -2118,26 +2151,26 @@ attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionSt
   <li>
     <b>speak</b><br>
     Voice output over TTS.<br>
-	Both arguments (siteId and text) are required!<br>
+    Both arguments (siteId and text) are required!<br>
     Example: <code>set &lt;rhasspyDevice&gt speak siteId="default" text="This is a test"</code>
   </li>
   <li>
     <b>textCommand</b><br>
     Send a text command to Rhasspy.<br>
-	Example: <code>set &lt;rhasspyDevice&gt textCommand turn the light on</code>
+    Example: <code>set &lt;rhasspyDevice&gt textCommand turn the light on</code>
   </li>
   <li>
     <b>trainRhasspy</b><br>
-	Sends a train-command to the HTTP-API of the Rhasspy master.<br>
-	The attribute <i>rhasspyMaster</i> has to be defined to work.<br>
-	Example: <code>set &lt;rhasspyDevice&gt; trainRhasspy</code>
+    Sends a train-command to the HTTP-API of the Rhasspy master.<br>
+    The attribute <i>rhasspyMaster</i> has to be defined to work.<br>
+    Example: <code>set &lt;rhasspyDevice&gt; trainRhasspy</code>
   </li>
   <li>
     <b>updateSlots</b><br>
     Sends a command to the HTTP-API of the Rhasspy master to update all slots on Rhasspy with actual FHEM-devices, rooms, etc.<br>
-	The attribute <i>rhasspyMaster</i> has to be defined to work.<br>
-	Example: <code>set &lt;rhasspyDevice&gt; updateSlots</code><br>
-	Do not forget to train Rhasspy afterwards!
+    The attribute <i>rhasspyMaster</i> has to be defined to work.<br>
+    Example: <code>set &lt;rhasspyDevice&gt; updateSlots</code><br>
+    Do not forget to train Rhasspy afterwards!
   </li>
 </ul>
 <a name="RHASSPYattr"></a>
@@ -2149,21 +2182,21 @@ attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionSt
   </li>
   <li>
     <b>response</b><br>
-	Optionally define alternative default answers. Available keywords are <code>DefaultError</code>, <code>NoActiveMediaDevice</code> and <code>DefaultConfirmation</code>.<br>
-	Example:
-	<pre><code>DefaultError=
+    Optionally define alternative default answers. Available keywords are <code>DefaultError</code>, <code>NoActiveMediaDevice</code> and <code>DefaultConfirmation</code>.<br>
+    Example:
+    <pre><code>DefaultError=
 DefaultConfirmation=Klaro, mach ich</code></pre>
   </li>
   <li>
     <b>rhasspyIntents</b><br>
-	<!--Defines custom intents. See <a href="https://github.com/Thyraz/Snips-Fhem#f%C3%BCr-fortgeschrittene-eigene-custom-intents-erstellen-und-in-fhem-darauf-reagieren" hreflang="de">Custom Intent erstellen</a>.<br>-->
-	Not implemented yet
+    <!--Defines custom intents. See <a href="https://github.com/Thyraz/Snips-Fhem#f%C3%BCr-fortgeschrittene-eigene-custom-intents-erstellen-und-in-fhem-darauf-reagieren" hreflang="de">Custom Intent erstellen</a>.<br>-->
+    Not implemented yet
   </li>
   <li>
     <b>shortcuts</b><br>
-	Define custom sentences without editing Rhasspy sentences.ini<br>
-	The shortcuts are uploaded to Rhasspy when using the updateSlots set-command.<br>
-	Example:<pre><code>mute on=set receiver mute on
+    Define custom sentences without editing Rhasspy sentences.ini<br>
+    The shortcuts are uploaded to Rhasspy when using the updateSlots set-command.<br>
+    Example:<pre><code>mute on=set receiver mute on
 mute off=set receiver mute off</code></pre>
   </li>
   <li>
