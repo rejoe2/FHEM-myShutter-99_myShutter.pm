@@ -502,7 +502,7 @@ sub _replace {
     my $self = $hash2->{'$SELF'} // $hash->{NAME};
     my $name = $hash2->{'$NAME'} // $hash->{NAME};
     my $parent = ( caller(1) )[3];
-    Log3($hash->{NAME}, 5, "RHASSPY_EvalSp... from $parent starting with: $cmd");
+    Log3($hash->{NAME}, 5, "_replace from $parent starting with: $cmd");
 
     my %specials = (
         '$SELF' => $self,
@@ -516,7 +516,7 @@ sub _replace {
         #$cmd =~ s{$key}{$val}gxms
         $cmd =~ s{\Q$key\E}{$val}gxms;
     }
-    Log3($hash->{NAME}, 5, "RHASSPY_EvalSp... from $parent returns: $cmd");
+    Log3($hash->{NAME}, 5, "_replace from $parent returns: $cmd");
     return $cmd;
 }
 
@@ -759,7 +759,7 @@ sub RHASSPY_getActiveDeviceForIntentAndType {
 
     # Gerät finden, erst im aktuellen Raum, sonst in den restlichen
     $device = $activeDevice->($hash, $matchesInRoom);
-    $device = $activeDevice->($hash, $matchesOutsideRoom) if !defined($device);
+    $device = $activeDevice->($hash, $matchesOutsideRoom) if !defined $device;
 
     Log3($hash->{NAME}, 5, "Device selected: $device");
 
@@ -787,7 +787,7 @@ sub RHASSPY_getDeviceByMediaChannel {
         my $cmd = RHASSPY_getCmd($hash, $_, "${prefix}Channels", $channel, 1) // next;
         
         # Erster Treffer wälen, überschreiben falls besserer Treffer (Raum matched auch) kommt
-        if (!defined($device) || grep( {/^$room$/i} @rooms)) {
+        if (!defined $device || grep {/^$room$/i} @rooms) {
             $device = $_;
         }
     }
@@ -801,9 +801,9 @@ sub RHASSPY_getDeviceByMediaChannel {
 # Mappings in Key/Value Paare aufteilen
 sub RHASSPY_splitMappingString {
     my $mapping = shift // return;
-    my @tokens, my $token = '';
+    my @tokens, my $token = q{};
     #my $char, 
-    my $lastChar = '';
+    my $lastChar = q{};
     my $bracketLevel = 0;
     my %parsedMapping;
 
@@ -817,9 +817,9 @@ sub RHASSPY_splitMappingString {
             $bracketLevel -= 1;
             $token .= $char;
         }
-        elsif ($char eq ',' && $lastChar ne '\\' && $bracketLevel == 0) {
+        elsif ($char eq ',' && $lastChar ne '\\' && !$bracketLevel) {
             push(@tokens, $token);
-            $token = '';
+            $token = q{};
         }
         else {
             $token .= $char;
@@ -827,7 +827,7 @@ sub RHASSPY_splitMappingString {
 
         $lastChar = $char;
     }
-    push(@tokens, $token) if (length($token) > 0);
+    push @tokens, $token if length $token;
 
     # Tokens in Keys/Values trennen
     %parsedMapping = map {split m{=}x, $_, 2} @tokens;
@@ -861,10 +861,10 @@ sub RHASSPY_getMapping { #($$$$;$)
             my %currentMapping = RHASSPY_splitMappingString($_);
 
             # Erstes Mapping vom passenden Intent wählen (unabhängig vom Type), dann ggf. weitersuchen ob noch ein besserer Treffer mit passendem Type kommt
-            if (!defined($matchedMapping) || (defined($type) && lc($matchedMapping->{type}) ne lc($type) && lc($currentMapping{type}) eq lc($type))) {
+            if (!defined $matchedMapping || defined $type && lc($matchedMapping->{type}) ne lc($type) && lc($currentMapping{type}) eq lc($type)) {
                 $matchedMapping = \%currentMapping;
 
-                Log3($hash->{NAME}, 5, "${prefix}Mapping selected: $_") if (!defined($disableLog) || $disableLog != 1);
+                Log3($hash->{NAME}, 5, "${prefix}Mapping selected: $_") if !$disableLog;
             }
         }
     }
@@ -893,7 +893,7 @@ sub RHASSPY_getCmd { #($$$$;$)
         $_ =~ s{$key=}{}ix;
         $cmd = $_;
 
-        Log3($hash->{NAME}, 5, "cmd selected: $_") if (!defined($disableLog) || (defined($disableLog) && $disableLog != 1));
+        Log3($hash->{NAME}, 5, "cmd selected: $_") if !$disableLog;
         last;
     }
 
@@ -943,8 +943,10 @@ sub RHASSPY_runCmd {
     }
     # FHEM Command oder CommandChain
     elsif (defined($cmds{ (split " ", $cmd)[0] })) {
+        my @test = split q{ }, $cmd;
         Log3($hash->{NAME}, 5, "$cmd is a FHEM command");
         $error = AnalyzeCommandChain($hash, $cmd);
+        $returnVal = $test[1];
     }
     # Soll Command auf anderes Device umgelenkt werden?
     elsif ($cmd =~ m/:/) {
@@ -1325,7 +1327,7 @@ sub RHASSPY_updateSlots {
     my @shortcuts = keys %{$hash->{helper}{shortcuts}};
 
 #print Dumper($hash->{helper}{shortcuts});
-    if (@shortcuts > 0) {
+    if (@shortcuts) {
 #        my $json;
         my $deviceData;
         my $url = q{/api/sentences};
@@ -1343,7 +1345,7 @@ sub RHASSPY_updateSlots {
     }
 
     # If there are any devices, rooms, etc. found, create JSON structure and send it the the API
-    if (@devices > 0 || @rooms > 0 || @channels > 0 || @types > 0) {
+    if (@devices || @rooms || @channels || @types ) {
       my $json;
       my $deviceData;
       my $url = "/api/slots";
@@ -1454,7 +1456,7 @@ sub RHASSPY_handleCustomIntent {
         return;
     }
     my $custom = $hash->{helper}{custom}{$intentName};
-    Log3($hash->{NAME}, 5, "handleIntentShortcuts called with $intentName key");
+    Log3($hash->{NAME}, 5, "handleCustomIntent called with $intentName key");
     
     my ($intent, $response, $room);
 
@@ -1695,7 +1697,7 @@ sub RHASSPY_handleIntentSetNumeric {
                 # Neuen Wert bestimmen
                 my $newVal;
                 # Direkter Stellwert ("Stelle Lampe auf 50")
-                if ($unit ne 'Prozent' && defined($value) && !defined($change) && !$forcePercent) {
+                if ($unit ne 'Prozent' && defined $value && !defined $change && !$forcePercent) {
                     $newVal = $value;
                 }
                 # Direkter Stellwert als Prozent ("Stelle Lampe auf 50 Prozent", oder "Stelle Lampe auf 50" bei forcePercent)
@@ -1896,7 +1898,9 @@ sub RHASSPY_handleIntentGetTime {
     Log3($hash->{NAME}, 5, "handleIntentGetTime called");
 
     (my $sec,my $min,my $hour,my $mday,my $mon,my $year,my $wday,my $yday,my $isdst) = localtime();
-    my $response = "Es ist $hour Uhr $min"; #Beta-User - language
+    #my $response = "Es ist $hour Uhr $min"; #Beta-User - language
+    my $response = $hash->{helper}{lng}->{responses}->{timeRequest};
+    eval { $response =~ s{(\$\w+)}{$1}eeg; };
     Log3($hash->{NAME}, 5, "Response: $response");
     
     # Antwort senden
@@ -1972,7 +1976,7 @@ sub RHASSPY_handleIntentSetColor {
     Log3($hash->{NAME}, 5, "handleIntentSetColor called");
 
     # Mindestens Device und Color muss übergeben worden sein
-    if (exists($data->{Color}) && exists($data->{Device})) {
+    if (exists $data->{Color} && exists $data->{Device}) {
         $room = RHASSPY_roomName($hash, $data);
         $color = $data->{Color};
 
