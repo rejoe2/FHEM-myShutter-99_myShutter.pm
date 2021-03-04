@@ -85,6 +85,8 @@ my $languagevars = {
                               'DefaultConfirmation' => "OK",
                               'timerSet'   => 'Timer in $room has been set to $value $unit',
                               'timerEnd'   => "Timer expired",
+                              'timeRequest' => 'it is $hour o clock $min minutes',
+                              'weekdayRequest' => 'today it is $weekDay',
                               'duration_not_understood'   => "Sorry I could not understand the desired duration."
     }
 };
@@ -1907,7 +1909,7 @@ sub RHASSPY_handleIntentGetWeekday {
     my $weekDay  = strftime "%A", localtime;
     #Beta-User - language
     #my $response = qq(Heute ist $weekDay);
-    my $response = $hash->{helper}{lng}->{responses}->{dateRequest};
+    my $response = $hash->{helper}{lng}->{responses}->{weekdayRequest};
     eval { $response =~ s{(\$\w+)}{$1}eeg; };
     
     Log3($hash->{NAME}, 5, "Response: $response");
@@ -2152,7 +2154,7 @@ sub RHASSPY_readLanguageFromFile {
     }
 
     #my $string = join q{ }, @content;
-    return undef, join q{ }, @content;
+    return 0, join q{ }, @content;
 }
 
 1;
