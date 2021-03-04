@@ -80,17 +80,97 @@ my $languagevars = {
 =cut
 
 my $languagevars = {
-        'on' => "on",
-        'percent' => 'percent',
-        'responses'      => { 'DefaultError' => "Sorry but something seems not to work as expected.",
-                              'NoActiveMediaDevice' => "Sorry no active playback device.",
-                              'DefaultConfirmation' => "OK",
-                              'timerSet'   => 'Timer in $room has been set to $value $unit',
-                              'timerEnd'   => "Timer expired",
-                              'timeRequest' => 'it is $hour o clock $min minutes',
-                              'weekdayRequest' => 'today it is $weekDay',
-                              'duration_not_understood'   => "Sorry I could not understand the desired duration."
+  'on' => "on",
+  'percent' => 'percent',
+  'units' => {
+      'unitHours' => '(hour|hours)',
+      'unitMinutes' => '(minute|minutes)'
+   },
+  'responses' => { 
+     'DefaultError' => "Sorry but something seems not to work as expected.",
+     'NoActiveMediaDevice' => "Sorry no active playback device.",
+     'DefaultConfirmation' => "OK",
+     'timerSet'   => 'Timer in $room has been set to $value $unit',
+     'timerEnd'   => "Timer expired",
+     'timeRequest' => 'it is $hour o clock $min minutes',
+     'weekdayRequest' => 'today it is $weekDay',
+     'duration_not_understood'   => "Sorry I could not understand the desired duration."
+  },
+  'Change' => {
+    'Media' => {
+       'pause' => 'cmdPause',
+       'play' => 'cmdPlay',
+       'stop' => 'cmdStop',
+       'forward' => 'cmdFwd',
+       'backward' => 'cmdBack'
+                },
+    'Types' => {
+       'airHumidity' => 'air humidity',
+       'battery' => 'battery',
+       'brightness' => 'brightness',
+       'soilMoisture' => 'soil moisture',
+       'targetValue' => 'target value',
+       'temperature' => 'temperature',
+       'volumeSound' => 'volume',
+       'waterLevel' => 'water level'
+    },
+    'regex' => {
+       'darker' => 'brightness',
+       'brighter' => 'brightness',
+       'cooler' => 'temperature',
+       'louder' => 'volumeSound',
+       'lower' => 'volumeSound',
+       'warmer' => 'temperature',
+       'setTarget' => '(brightness|volume|target.volume)',
+       'upward' => '(higher|brighter|louder|rise|warmer)',
+       'volumeSound' => 'sound volume'
+    },
+    'responses' => {
+       'airHumidity' => 'air humidity in $location is $value percent',
+       'battery' => {
+         '0' => 'battery level in $location is $value',
+         '1' => 'battery level in $location is $value percent'
+       },
+       'brightness' => '$device was set to $value',
+       'soilMoisture' => 'soil moisture in $location is $value percent',
+       'temperature' => {
+         '0' => 'temperature in $location is $value',
+         '1' => 'temperature in $location is $value degrees',
+       },
+       'volumeSound' => '$device has been set to $value',
+       'waterLevel' => 'water level in $location is $value percent',
+       'knownType' => '$mappingType in $location is $value percent',
+       'unknownType' => 'value in $location is $value percent'
     }
+  },
+  'stateResponseType' => {
+     'on' => 'onOff',
+     'off' => 'onOff',
+     'open' => 'openClose',
+     'closed' => 'openClose',
+     'in' => 'inOut',
+     'out' => 'inOut',
+     'ready' => 'inOperation',
+     'acting' => 'inOperation'
+     },
+  'stateResponses' => {
+     'inOperation' => {
+       '0' => '$device is ready',
+       '1' => '$device is still running'
+     },
+     'inOut' => {
+       '0' => '$device is out',
+       '1' => '$device is in'
+     },
+     'onOff' => {
+       '0' => '$device is off',
+       '1' => '$device is on'
+     },
+     'openClose' => {
+       '0' => '$device is open',
+       '1' => '$device is closed'
+     }
+  }
 };
 
 BEGIN {
