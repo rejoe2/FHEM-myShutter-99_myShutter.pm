@@ -5,7 +5,7 @@
 # Originally written 2018 by Tobias Wiedenmann (Thyraz)
 # as FHEM Snips.ai module (thanks to Matthias Kleine)
 #
-# Adapted for RHASSPY 2020 by Beta-User and drhirn
+# Adapted for RHASSPY 2020/2021 by Beta-User and drhirn
 #
 # Thanks to Beta-User, rudolfkoenig, JensS, cb2sela and all the others
 # who did a great job getting this to work!
@@ -44,12 +44,12 @@ my %gets = (
 );
 
 my %sets = (
-    speak        => q{},
-    play         => q{},
-    updateSlots  => q{},
-    textCommand  => q{},
-    trainRhasspy => q{},
-    fetchSiteIds => q{},
+    speak        => [],
+    play         => [],
+    updateSlots  => [],
+    textCommand  => [],
+    trainRhasspy => [],
+    fetchSiteIds => [],
     reinit       => [qw(language)]
 #    "volume" => ""
 );
@@ -293,7 +293,12 @@ sub RHASSPY_Set {
     my $name    = shift @{$anon};
     my $command = shift @{$anon} // q{};
     my @values  = @{$anon};
-    return "Unknown argument $command, choose one of " . join(" ", sort keys %sets) if(!defined($sets{$command}));
+    return "Unknown argument $command, choose one of " 
+    . join(q{ }, map {
+        @{$sets{$_}} ? $_
+                      .':'
+                      .join ',', @{$sets{$_}} : $_} sort keys %sets)
+    if !defined $sets{$command};
 
     Log3($name, 5, "set " . $command . " - value: " . join (" ", @values));
 
@@ -2152,9 +2157,11 @@ sub RHASSPY_readLanguageFromFile {
         Log3($name, 1, "$name failed to read configFile $filename!") ;
         return $ret, undef;
     }
+    my @cleaned = grep { $_ !~ m{\A\s*[#]}x } @content;
 
     #my $string = join q{ }, @content;
-    return 0, join q{ }, @content;
+    #return 0, join q{ }, @content;
+    return 0, join q{ }, @cleaned;
 }
 
 1;
