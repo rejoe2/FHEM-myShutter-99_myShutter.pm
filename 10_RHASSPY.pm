@@ -80,6 +80,8 @@ my $languagevars = {
 =cut
 
 my $languagevars = {
+        'on' => "on",
+        'percent' => 'percent',
         'responses'      => { 'DefaultError' => "Sorry but something seems not to work as expected.",
                               'NoActiveMediaDevice' => "Sorry no active playback device.",
                               'DefaultConfirmation' => "OK",
@@ -206,12 +208,8 @@ sub firstInit {
 
     #RemoveInternalTimer($hash);
     
-    #RHASSPY_subscribeTopics($hash) if isIODevMQTT2_CLIENT($hash);
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT'; # isIODevMQTT2_CLIENT($hash);
-    
-    #$language = AttrVal($hash->{NAME},'language',lc(AttrVal('global','language',$language)));
-    #$hash->{LANGUAGE} = $language;
-    
+
     return;
 }
 
@@ -454,12 +452,11 @@ sub RHASSPY_init_custom_intents {
 
 sub RHASSPY_execute {
     my $hash   = shift // return;
-    my $device = shift;# // carp q[No target device provided!] && return;
-    my $cmd    = shift;# // carp q[No command provided!]       && return;
-    my $value  = shift;# // carp q[No value provided!]         && return;
+    my $device = shift;
+    my $cmd    = shift;
+    my $value  = shift;
     my $siteId = shift // $hash->{helper}{defaultRoom};
-    $siteId = $hash->{helper}{defaultRoom} if $siteId eq "default";
-
+    $siteId = $hash->{helper}{defaultRoom} if $siteId eq 'default';
 
     # Nutzervariablen setzen
     my %specials = (
@@ -471,14 +468,12 @@ sub RHASSPY_execute {
     $cmd  = EvalSpecials($cmd, %specials);
 
     # CMD ausführen
-    #my $returnVal = eval $cmd;
     return AnalyzePerlCommand( $hash, $cmd );
 }
 
 #from https://stackoverflow.com/a/43873983, modified...
 sub get_unique {
     my $arr    = shift;
-    #my @arr    = sort shift; #we may need to sort, see https://stackoverflow.com/a/30448251
     my $sorted = shift; #true if shall be sorted (longest first!)
     
     my %seen;
@@ -976,28 +971,33 @@ sub RHASSPY_getValue { #($$$;$$)
     my $val       = shift;
     my $siteId    = shift;
     
-    my $value;
+    #my $value;
 
     # Perl Command? -> Umleiten zu RHASSPY_runCmd
-    if ($getString =~ m{\A\s*\{.*\}\s*\z}x) { 
+    if ($getString =~ m{\A\s*\{.*\}\s*\z}x #) { 
         # Wert lesen
-        $value = RHASSPY_runCmd($hash, $device, $getString, $val, $siteId);
-    }
+        #$value = RHASSPY_runCmd($hash, $device, $getString, $val, $siteId);
+    ##}
     # String in Anführungszeichen -> Umleiten zu RHASSPY_runCmd
-    elsif ($getString =~ m/^\s*".*"\s*$/) {
+    #elsif (
+        || $getString =~ m/^\s*".*"\s*$/) {
         # Wert lesen
-        $value = RHASSPY_runCmd($hash, $device, $getString, $val, $siteId);
+        #$value = RHASSPY_runCmd($hash, $device, $getString, $val, $siteId);
+        return RHASSPY_runCmd($hash, $device, $getString, $val, $siteId);
     }
     # Reading oder Device:Reading
-    else {
+    #else {
       # Soll Reading von einem anderen Device gelesen werden?
-      my $readingsDev = ($getString =~ m/:/) ? (split(/:/, $getString))[0] : $device;
-      my $reading = ($getString =~ m/:/) ? (split(/:/, $getString))[1] : $getString;
+      if ($getString =~ m{:}x) {
+          my @replace = split m{:}x, $getString;
+          $device = $replace[0];
+          $getString = $replace[1] // $getString;
+      }
+      #$value = ReadingsVal($device, $getString, 0);
+      return ReadingsVal($device, $getString, 0);
+    #}
 
-      $value = ReadingsVal($readingsDev, $reading, 0);
-    }
-
-    return $value;
+    #return $value;
 }
 
 
@@ -1488,20 +1488,20 @@ sub RHASSPY_handleIntentSetMute {
     my $hash = shift // return;
     my $data = shift // return;
     my $value, my $siteId, my $state = 0;
-    my $response = RHASSPY_getResponse($hash, "DefaultError");
+    my $response = RHASSPY_getResponse($hash, 'DefaultError');
     
     Log3($hash->{NAME}, 5, "handleIntentSetMute called");
     
-    if (exists($data->{'Value'}) && exists($data->{'siteId'})) {
-        $siteId = makeReadingName($data->{'siteId'});
-        $value = $data->{'Value'};
+    if (exists($data->{Value}) && exists($data->{siteId})) {
+        $siteId = makeReadingName($data->{siteId});
+        $value = $data->{Value};
         
 #        Log3($hash->{NAME}, 5, "siteId: $siteId, value: $value");
         
-        if ($value eq "on") {$state = 1};
+        if ($value eq 'on') {$state = 1};
 
         readingsSingleUpdate($hash, "mute_$siteId", $state, 1);
-        $response = RHASSPY_getResponse($hash, "DefaultConfirmation");
+        $response = RHASSPY_getResponse($hash, 'DefaultConfirmation');
     }
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 }
@@ -1557,30 +1557,35 @@ sub RHASSPY_handleIntentSetOnOff {
     my $data = shift // return;
     my $value, my $numericValue, my $device, my $room, my $siteId;
     my $mapping;
-    my $response = RHASSPY_getResponse($hash, "DefaultError");
+    my $response = RHASSPY_getResponse($hash, 'DefaultError');
 
     Log3($hash->{NAME}, 5, "handleIntentSetOnOff called");
 
     # Mindestens Gerät und Wert müssen übergeben worden sein
-    if (exists($data->{'Device'}) && exists($data->{'Value'})) {
+    if (exists($data->{Device}) && exists($data->{Value})) {
         $room = RHASSPY_roomName($hash, $data);
-        $value = $data->{'Value'};
-        $device = RHASSPY_getDeviceByName($hash, $room, $data->{'Device'});
-        $mapping = RHASSPY_getMapping($hash, $device, "SetOnOff", undef);
+        $value = $data->{Value};
+        $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
+        $mapping = RHASSPY_getMapping($hash, $device, 'SetOnOff', undef);
 
         # Mapping gefunden?
-        if (defined($device) && defined($mapping)) {
-            my $cmdOn  = (defined($mapping->{'cmdOn'}))  ? $mapping->{'cmdOn'}  : "on";
-            my $cmdOff = (defined($mapping->{'cmdOff'})) ? $mapping->{'cmdOff'} : "off";
-            my $cmd = ($value eq 'an') ? $cmdOn : $cmdOff;
+        if (defined $device && defined $mapping) {
+            my $cmdOn  = $mapping->{cmdOn} //'on';
+            my $cmdOff = $mapping->{cmdOff} // 'off';
+            my $cmd = $value eq $hash->{helper}{lng}->{on} ? $cmdOn : $cmdOff;
 
             # Cmd ausführen
             RHASSPY_runCmd($hash, $device, $cmd);
             Log3($hash->{NAME}, 5, "Running command [$cmd] on device [$device]" );
 
             # Antwort bestimmen
-            $numericValue = ($value eq 'an') ? 1 : 0;
-            if (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $numericValue, $room); }
+            #$numericValue = ($value eq 'an') ? 1 : 0;
+
+            if (defined $mapping->{response}) { 
+                $numericValue = $value eq $hash->{helper}{lng}->{on} ? 1 : 0; #Beta-User: language
+                #Log3($hash->{NAME}, 5, "numericValue is $numericValue" );
+                $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $numericValue, $room); 
+            }
             else { $response = RHASSPY_getResponse($hash, 'DefaultConfirmation'); }
         }
     }
@@ -1594,28 +1599,33 @@ sub RHASSPY_handleIntentSetOnOff {
 sub RHASSPY_handleIntentGetOnOff {
     my $hash = shift // return;
     my $data = shift // return;
-    my $value, my $device, my $room, my $status;
-    my $mapping;
-    my $response = RHASSPY_getResponse($hash, "DefaultError");
+    my $device;
+    my $response;# = RHASSPY_getResponse($hash, 'DefaultError');
 
     Log3($hash->{NAME}, 5, "handleIntentGetOnOff called");
 
     # Mindestens Gerät und Status-Art wurden übergeben
     if (exists($data->{Device}) && exists($data->{Status})) {
-        $room = RHASSPY_roomName($hash, $data);
+        my $room = RHASSPY_roomName($hash, $data);
         $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
-        $mapping = RHASSPY_getMapping($hash, $device, 'GetOnOff', undef);
-        $status = $data->{Status};
+        my $mapping = RHASSPY_getMapping($hash, $device, 'GetOnOff', undef);
+        my $status = $data->{Status};
 
 #        Log3($hash->{NAME}, 5, "handleIntentGetOnOff - Device: $device - Status: $status");
 
         # Mapping gefunden?
-        if (defined($mapping)) {
+        if (defined $mapping) {
             # Gerät ein- oder ausgeschaltet?
-            $value = RHASSPY_getOnOffState($hash, $device, $mapping);
+            my $value = RHASSPY_getOnOffState($hash, $device, $mapping);
 
             # Antwort bestimmen
             if    (defined $mapping->{response}) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $room); }
+            else {
+                my $stateResponseType = $hash->{helper}{lng}->{stateResponseType}->{$status};
+                $response = $hash->{helper}{lng}->{stateResponses}{$stateResponseType}->{$value};
+                eval { $response =~ s{(\$\w+)}{$1}eeg; };
+            }
+=pod
             elsif ($status =~ m/^(an|aus)$/ && $value == 1) { $response = $data->{'Device'} . " ist eingeschaltet"; }
             elsif ($status =~ m/^(an|aus)$/ && $value == 0) { $response = $data->{'Device'} . " ist ausgeschaltet"; }
             elsif ($status =~ m/^(auf|zu)$/ && $value == 1) { $response = $data->{'Device'} . " ist geöffnet"; }
@@ -1624,9 +1634,11 @@ sub RHASSPY_handleIntentGetOnOff {
             elsif ($status =~ m/^(eingefahren|ausgefahren)$/ && $value == 0) { $response = $data->{'Device'} . " ist ausgefahren"; }
             elsif ($status =~ m/^(läuft|fertig)$/ && $value == 1) { $response = $data->{'Device'} . " läuft noch"; }
             elsif ($status =~ m/^(läuft|fertig)$/ && $value == 0) { $response = $data->{'Device'} . " ist fertig"; }
+=cut
         }
     }
     # Antwort senden
+    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $device;
 }
@@ -1639,18 +1651,32 @@ sub RHASSPY_handleIntentSetNumeric {
     my $value, my $device, my $room, my $change, my $type, my $unit;
     my $mapping;
     my $validData = 0;
-    my $response = RHASSPY_getResponse($hash, 'DefaultError');
+    my $response; # = RHASSPY_getResponse($hash, 'DefaultError');
 
     Log3($hash->{NAME}, 5, "handleIntentSetNumeric called");
 
     # Mindestens Device und Value angegeben -> Valid (z.B. Deckenlampe auf 20%)
+=pod
     $validData = 1 if (exists($data->{Device}) && exists($data->{Value}));
     # Mindestens Device und Change angegeben -> Valid (z.B. Radio lauter)
     $validData = 1 if (exists($data->{Device}) && exists($data->{Change}));
     # Nur Change für Lautstärke angegeben -> Valid (z.B. lauter)
-    $validData = 1 if (!exists($data->{Device}) && defined($data->{Change}) && $data->{Change} =~ m/^(lauter|leiser)$/i);
+    $validData = 1 if (!exists $data->{Device} && defined $data->{Change} && $data->{Change} =~ m/^(lauter|leiser)$/i);
+    
     # Nur Type = Lautstärke und Value angegeben -> Valid (z.B. Lautstärke auf 10)
-    $validData = 1 if (!exists($data->{Device}) && defined($data->{Type}) && $data->{Type} =~ m/^Lautstärke$/i && exists($data->{Value}));
+    $validData = 1 if (!exists $data->{Device} && defined $data->{Type} && $data->{Type} =~ m/^Lautstärke$/i && exists($data->{Value}));
+=cut    
+    $validData = 1 if exists $data->{Device} && exists $data->{Value} #);
+    # Mindestens Device und Change angegeben -> Valid (z.B. Radio lauter)
+    || exists $data->{Device} && exists $data->{Change}
+    # Nur Change für Lautstärke angegeben -> Valid (z.B. lauter)
+    || !exists $data->{Device} && defined $data->{Change} 
+        && defined $hash->{helper}{lng}->{regex}->{$data->{Change}} #$data->{Change}=  =~ m/^(lauter|leiser)$/i);
+        #Beta-User: muss auf lauter/leiser begrenzt werden? Was ist mit Kleinschreibung? (Letzteres muss/kann ggf. vorher erledigt werden?
+
+    # Nur Type = Lautstärke und Value angegeben -> Valid (z.B. Lautstärke auf 10)
+    ||!exists $data->{Device} && defined $data->{Type} && exists $data->{Value} && $data->{Type} =~ 
+    m{\A$hash->{helper}{lng}->{Change}->{regex}->{volumeSound}\z}xim;
 
     if ($validData) {
         $unit = $data->{Unit};
@@ -1660,80 +1686,92 @@ sub RHASSPY_handleIntentSetNumeric {
         $room = RHASSPY_roomName($hash, $data);
 
         # Type nicht belegt -> versuchen Type über change Value zu bestimmen
-        if (!defined($type) && defined($change)) {
-            if    ($change =~ m/^(kälter|wärmer)$/)  { $type = "Temperatur"; }
-            elsif ($change =~ m/^(dunkler|heller)$/) { $type = "Helligkeit"; }
-            elsif ($change =~ m/^(lauter|leiser)$/)  { $type = "Lautstärke"; }
+        if (!defined $type && defined $change) {
+            $type = $hash->{helper}{lng}->{regex}->{$change};
+            #if    ($change =~ m/^(kälter|wärmer)$/)  { $type = "Temperatur"; }
+            #elsif ($change =~ m/^(dunkler|heller)$/) { $type = "Helligkeit"; }
+            #elsif ($change =~ m/^(lauter|leiser)$/)  { $type = "Lautstärke"; }
         }
 
         # Gerät über Name suchen, oder falls über Lautstärke ohne Device getriggert wurde das ActiveMediaDevice suchen
         if (exists($data->{Device})) {
             $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
-        } elsif (defined($type) && $type =~ m/^Lautstärke$/i) {
+        #} elsif (defined($type) && $type =~ m/^Lautstärke$/i) {
+        } elsif (defined($type) && $type =~ m{\A$hash->{helper}{lng}->{Change}->{Types}->{volumeSound}\z}xi) {
             $device = RHASSPY_getActiveDeviceForIntentAndType($hash, $room, 'SetNumeric', $type);
-            $response = RHASSPY_getResponse($hash, 'NoActiveMediaDevice') if (!defined($device));
+            $response = RHASSPY_getResponse($hash, 'NoActiveMediaDevice') if (!defined $device);
         }
 
         if (defined($device)) {
             $mapping = RHASSPY_getMapping($hash, $device, 'SetNumeric', $type);
 
             # Mapping und Gerät gefunden -> Befehl ausführen
-            if (defined($mapping) && defined($mapping->{cmd})) {
+            if (defined $mapping  && defined $mapping->{cmd}) {
                 my $cmd     = $mapping->{cmd};
                 my $part    = $mapping->{part};
-                my $minVal  = (defined($mapping->{minVal})) ? $mapping->{minVal} : 0; # Rhasspy kann keine negativen Nummern bisher, daher erzwungener minVal
+                #my $minVal  = (defined($mapping->{minVal})) ? $mapping->{minVal} : 0; # Rhasspy kann keine negativen Nummern bisher, daher erzwungener minVal
+                my $minVal  = $mapping->{minVal} // 0; # Rhasspy kann keine negativen Nummern bisher, daher erzwungener minVal
                 my $maxVal  = $mapping->{maxVal};
-                my $diff    = (defined($value)) ? $value : ((defined($mapping->{step})) ? $mapping->{step} : 10);
-                my $up      = (defined($change) && ($change =~ m/^(höher|heller|lauter|wärmer)$/)) ? 1 : 0;
-                my $forcePercent = (defined($mapping->{map}) && lc($mapping->{map}) eq 'percent') ? 1 : 0;
+                #my $diff    = (defined $value) ? $value : ((defined($mapping->{step})) ? $mapping->{step} : 10);
+
+                my $diff    = $value // $mapping->{step} // 10;
+                #my $up      = (defined($change) && ($change =~ m/^(höher|heller|lauter|wärmer)$/)) ? 1 : 0;
+
+                my $up      = (defined $change && $change =~ m{\A$hash->{helper}{lng}->{regex}->{upward}\z}xi) ? 1 : 0;
+                my $forcePercent = (defined $mapping->{map} && lc($mapping->{map}) eq 'percent') ? 1 : 0;
 
                 # Alten Wert bestimmen
-                my $oldVal  = RHASSPY_getValue($hash, $device, $mapping->{'currentVal'});
-                if (defined($part)) {
-                    my @tokens = split(/ /, $oldVal);
+                my $oldVal  = RHASSPY_getValue($hash, $device, $mapping->{currentVal});
+                if (defined $part) {
+                    my @tokens = split(m{ }x, $oldVal);
                     $oldVal = $tokens[$part] if (@tokens >= $part);
                 }
 
                 # Neuen Wert bestimmen
                 my $newVal;
                 # Direkter Stellwert ("Stelle Lampe auf 50")
-                if ($unit ne 'Prozent' && defined $value && !defined $change && !$forcePercent) {
+                #if ($unit ne 'Prozent' && defined $value && !defined $change && !$forcePercent) {
+                if ($unit ne $hash->{helper}{lng}->{percent} && defined $value && !defined $change && !$forcePercent) {
                     $newVal = $value;
                 }
                 # Direkter Stellwert als Prozent ("Stelle Lampe auf 50 Prozent", oder "Stelle Lampe auf 50" bei forcePercent)
-                elsif (defined $value && ( defined $unit && $unit eq 'Prozent' || $forcePercent ) && !defined $change && defined $minVal && defined $maxVal) {
-                    # Wert von Prozent in Raw-Wert umrechnen
+                #elsif (defined $value && ( defined $unit && $unit eq 'Prozent' || $forcePercent ) && !defined $change && defined $minVal && defined $maxVal) {
+                elsif (defined $value && ( defined $unit && $unit eq $hash->{helper}{lng}->{percent} || $forcePercent ) && !defined $change && defined $minVal && defined $maxVal) {                    # Wert von Prozent in Raw-Wert umrechnen
                     $newVal = $value;
                     $newVal =   0 if ($newVal <   0);
                     $newVal = 100 if ($newVal > 100);
                     $newVal = round((($newVal * (($maxVal - $minVal) / 100)) + $minVal), 0);
                 }
                 # Stellwert um Wert x ändern ("Mache Lampe um 20 heller" oder "Mache Lampe heller")
-                elsif ((!defined $unit || $unit ne 'Prozent') && defined $change && !$forcePercent) {
+                #elsif ((!defined $unit || $unit ne 'Prozent') && defined $change && !$forcePercent) {
+                elsif ((!defined $unit || $unit ne $hash->{helper}{lng}->{percent}) && defined $change && !$forcePercent) {
                     $newVal = ($up) ? $oldVal + $diff : $oldVal - $diff;
                 }
                 # Stellwert um Prozent x ändern ("Mache Lampe um 20 Prozent heller" oder "Mache Lampe um 20 heller" bei forcePercent oder "Mache Lampe heller" bei forcePercent)
-                elsif (($unit eq 'Prozent' || $forcePercent) && defined($change)  && defined $minVal && defined $maxVal) {
+                #elsif (($unit eq 'Prozent' || $forcePercent) && defined($change)  && defined $minVal && defined $maxVal) {
+                elsif (($unit eq $hash->{helper}{lng}->{percent} || $forcePercent) && defined($change)  && defined $minVal && defined $maxVal) {
                     my $diffRaw = round((($diff * (($maxVal - $minVal) / 100)) + $minVal), 0);
                     $newVal = ($up) ? $oldVal + $diffRaw : $oldVal - $diffRaw;
                 }
 
                 if (defined $newVal) {
                     # Begrenzung auf evtl. gesetzte min/max Werte
-                    $newVal = $minVal if (defined($minVal) && $newVal < $minVal);
-                    $newVal = $maxVal if (defined($maxVal) && $newVal > $maxVal);
+                    $newVal = $minVal if (defined $minVal && $newVal < $minVal);
+                    $newVal = $maxVal if (defined $maxVal && $newVal > $maxVal);
 
                     # Cmd ausführen
                     RHASSPY_runCmd($hash, $device, $cmd, $newVal);
                     
                     # Antwort festlegen
-                    if (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $newVal, $room); }
-                    else { $response = RHASSPY_getResponse($hash, 'DefaultConfirmation'); }
+                    defined $mapping->{response} 
+                        ? $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $newVal, $room) 
+                        : $response = RHASSPY_getResponse($hash, 'DefaultConfirmation'); 
                 }
             }
         }
     }
     # Antwort senden
+    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 }
 
