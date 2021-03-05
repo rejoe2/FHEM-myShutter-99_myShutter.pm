@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 23879 2021-03-02 11:52:16Z Otto123 $
+# $Id: mqtt2.template 23886 2021-03-04 08:51:11Z Otto123 $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -47,7 +47,7 @@ attr DEVICE comment Do not use very open bridgeRegexp expressions! This might le
 attr DEVICE setStateList on off
 farewell:template has been applied successfully. Be carefull when extending the brigeRegexp!
 attr DEVICE model MQTT2_CLIENT_general_bridge
-setreading DEVICE attrTemplateVersion 20201208
+setreading DEVICE attrTemplateVersion 20210305
 
 ###############
 #MQTT2 IO ignoreRegexp
@@ -1227,7 +1227,7 @@ order:A_02
 par:CMNDTOPIC;Command topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*)?/LWT:, ? "${1}cmnd$3" : undef }
 par:STATTOPIC;ack topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*)?/LWT:, ? "${1}stat$3" : undef }
 par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attributes;{ 1 } 
-par:SETCHANNELINFO;Set this to 0 to not set any speech recogn. related attributes;{ 1 } 
+par:SETCHANNELINFO;Set this to 0 to not set channelinfo;{ 1 } 
 set DEVICE attrTemplate tasmota_basic_state_power1 \CALLSPEECHRECOGN=0
 copy DEVICE DEVICE_CH2
 deleteattr DEVICE_CH2 alias
@@ -1363,7 +1363,35 @@ attr DEVICE_CH2 readingList \
 attr DEVICE,DEVICE_CH2 model tasmota_4ch_two_shutters_invert_0
 setreading DEVICE,DEVICE_CH2 attrTemplateVersion 20201221
 set DEVICE,DEVICE_CH2 attrTemplate speechcontrol_type_blind
- 
+
+# based on a proposal by twdotnet, https://forum.fhem.de/index.php/topic,94495.msg1137400.html#msg1137400
+# shelly i3 3 channel input switches
+name:tasmota_3channel_split
+filter:TYPE=MQTT2_DEVICE:FILTER=readingList=.*(tele|cmnd|stat).*
+desc:shelly i3 3 channel device flashed with Tasmota. <br>NOTE: a second and third device will be created for the second and third channel
+order:A_03
+par:CMNDTOPIC;Command topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*)?/LWT:, ? "${1}cmnd$3" : undef }
+par:STATTOPIC;ack topic prefix, without trailing /;{ AttrVal("DEVICE","readingList","") =~ m,([^:]*)\b(tele|cmnd|stat)(/.*)?/LWT:, ? "${1}stat$3" : undef }
+par:CALLSPEECHRECOGN;Set this to 0 to not set any speech recogn. related attributes;{ 1 }
+par:SETCHANNELINFO;Set this to 0 to not set channelinfo;{ 1 }
+set DEVICE attrTemplate tasmota_2channel_split \CALLSPEECHRECOGN=0 \SETCHANNELINFO=0
+#create device for CH3
+copy DEVICE_CH2 DEVICE_CH3
+attr DEVICE_CH3 setList \
+  off:noArg    CMNDTOPIC/POWER3 0\
+  on:noArg     CMNDTOPIC/POWER3 1\
+  toggle:noArg CMNDTOPIC/POWER3 2
+attr DEVICE_CH3 setStateList on off toggle
+attr DEVICE_CH3 readingList \
+  STATTOPIC/POWER3:.* state
+option:{SETCHANNELINFO}
+set DEVICE attrTemplate set_associatedWith \CHANNELS=3
+option:{ CALLSPEECHRECOGN }
+set DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplate speechcontrol_type_switch
+option:global
+attr DEVICE,DEVICE_CH2,DEVICE_CH3 model tasmota_3channel_split
+setreading DEVICE,DEVICE_CH2,DEVICE_CH3 attrTemplateVersion 20210305
+
 
 # sonoff 4 channel device flashed with Tasmota.
 # contributed by Blauhorn, https://forum.fhem.de/index.php/topic,94495.msg976113.html#msg976113
@@ -4355,31 +4383,17 @@ set DEVICE attrTemplate sonos2mqtt_bridge
 attr DEVICE getList Favorites:noArg Favorites {sonos2mqtt($NAME,$EVENT)}
 attr DEVICE setList PauseAll:noArg $\DEVICETOPIC/cmd/pauseall\
 CheckSubscription:noArg $\DEVICETOPIC/cmd/check-subscriptions
-attr SonosBridge userReadings favlist:Favorites.* {\
-  use JSON;use HTML::Entities;use Encode qw(encode decode);\
-  my $enc = 'UTF8';\
-  my @out;\
-  my $decoded = decode_json(ReadingsVal($name,'Favorites',''));\
-  my @arr  = @{$decoded->{'Result'}};;\
-  foreach (@arr) {\
-     my $dec = encode($enc, decode_entities($_->{'Title'}));\
-     $dec =~ s/\s/./g;\
-     push @out,$dec}\
-  return join ',', sort @out},\
-grouplist:Favorites.* {\
-     my @out;\
-     foreach (devspec2array('a:model=sonos2mqtt_speaker')) {if (ReadingsVal($_,'isMaster','')) {push @out,ReadingsVal($_,'name','')}}\
-  return join(',', sort @out)}
-{sonos2mqtt_mod_list('a:model=sonos2mqtt_bridge','readingList',AttrVal("DEVICE","devicetopic",'sonos').'/RINCON_([0-9A-Z]+)/Favorites:.* Favorites')}
-{sonos2mqtt_mod_list('a:model=sonos2mqtt_bridge','readingList',AttrVal("DEVICE","devicetopic",'sonos').'/RINCON_([0-9A-Z]+)/Reply:.* Reply')}
+attr SonosBridge userReadings favlist:Favorites.* {sonos2mqtt_ur($name,'favlist')},\
+grouplist:Favorites.* {sonos2mqtt_ur($name,'grouplist')}
+{sonos2mqtt_setup('a:model=sonos2mqtt_bridge')}
 defmod n_configSonos notify global:DEFINED.MQTT2_RINCON_[A-Z0-9]+|MQTT2_RINCON_[A-Z0-9]+:IPAddress:.* {sonos2mqtt_nty($NAME,$EVENT)}
-setreading DEVICE attrTemplateVersion 20210301
+setreading DEVICE attrTemplateVersion 20210303
 
 name:sonos2mqtt_speaker
 desc:A basic sonos2mqtt speaker device, Forum #111711 and Wiki 
 filter:TYPE=MQTT2_DEVICE
 order:M_05b
-par:BASE_TOPIC;base topic set in configuration.yaml of the sonos2mqtt bridge;{ AttrVal("DEVICE","devicetopic",AttrVal("DEVICE","readingList","")) =~ m,[\b]?([^\/:]+)[\/].+, ? $1 : undef }
+par:BASE_TOPIC;base topic set in configuration.yaml of the sonos2mqtt bridge;{ AttrVal("DEVICE","devicetopic",'sonos') }
 par:DEV_ID;techname of the device ;{ AttrVal("DEVICE","readingList","") =~ m,[^\/]+[\/](RINCON_[0-9A-Z]+):.*, ? $1 : undef }
 par:ALIAS;friendly name as set in sonos gadget itself;{ ReadingsVal("DEVICE","name","unknown") }
 par:DEVNAME;friendly name, used for topic in lowercase;{ lc(ReadingsVal("DEVICE","name","unknown")) }
@@ -4400,13 +4414,10 @@ attr DEVICE userReadings Master:groupName.* {(split(' +',ReadingsVal($name,'grou
 isMaster:coordinatorUuid.* {ReadingsVal($name,'coordinatorUuid','') eq ReadingsVal($name,'uuid','')?1:0},\
 inGroup:groupName.* {ReadingsVal($name,'groupName','') =~ / \+ /?1:0},\
 inCouple:coordinatorUuid.* {(ReadingsVal($name,'coordinatorUuid','') ne ReadingsVal($name,'uuid','') and (index(ReadingsVal($name,'groupName',''), ReadingsVal($name,'name','')) != -1))?1:0},\
-Input:currentTrack_TrackUri.* {my $currentTrack_TrackUri = ReadingsVal($name,'currentTrack_TrackUri','');\
-   $currentTrack_TrackUri =~ 'x-rincon-stream'\
-      ? 'LineIn': $currentTrack_TrackUri =~ 'spdif'\
-      ? 'TV'    : ReadingsVal($name,'enqueuedMetadata_UpnpClass','') eq 'object.item.audioItem.audioBroadcast'\
-      ? 'Radio' : 'Playlist'}
+Input:currentTrack_TrackUri.* {sonos2mqtt_ur($name,'Input')}
 set DEVICE x_raw_payload {"command": "adv-command","input": {"cmd":"GetZoneInfo","reply":"ZoneInfo"}}
-setreading DEVICE attrTemplateVersion 20210302
+setreading DEVICE attrTemplateVersion 20210303
+
 
 
 ###########################################
