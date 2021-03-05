@@ -125,33 +125,43 @@ my $languagevars = {
        'upward' => '(higher|brighter|louder|rise|warmer)',
        'volumeSound' => 'sound volume'
     },
+    'regexToEn' => {
+      'temperature'  => 'temperature',
+      'airHumidity'  => 'airHumidity',
+      'battery'      => 'battery',
+      'waterLevel'   => 'waterLevel',
+      'soilMoisture' => 'soilMoisture',
+      'brightness'   => 'brightness',
+      'setTarget'    => 'setTarget',
+      'volumeSound'  => 'volumeSound'
+    },
     'responses' => {
-       'airHumidity' => 'air humidity in $location is $value percent',
-       'battery' => {
+       'airHumidity'  => 'air humidity in $location is $value percent',
+       'battery'      => {
          '0' => 'battery level in $location is $value',
          '1' => 'battery level in $location is $value percent'
        },
-       'brightness' => '$device was set to $value',
-       'setTarget' => '$device is set to $value',
+       'brightness'   => '$device was set to $value',
+       'setTarget'    => '$device is set to $value',
        'soilMoisture' => 'soil moisture in $location is $value percent',
-       'temperature' => {
+       'temperature'  => {
          '0' => 'temperature in $location is $value',
          '1' => 'temperature in $location is $value degrees',
        },
-       'volumeSound' => '$device has been set to $value',
-       'waterLevel' => 'water level in $location is $value percent',
-       'knownType' => '$mappingType in $location is $value percent',
-       'unknownType' => 'value in $location is $value percent'
+       'volumeSound'  => '$device has been set to $value',
+       'waterLevel'   => 'water level in $location is $value percent',
+       'knownType'    => '$mappingType in $location is $value percent',
+       'unknownType'  => 'value in $location is $value percent'
     }
   },
   'stateResponseType' => {
-     'on' => 'onOff',
-     'off' => 'onOff',
-     'open' => 'openClose',
+     'on'     => 'onOff',
+     'off'    => 'onOff',
+     'open'   => 'openClose',
      'closed' => 'openClose',
-     'in' => 'inOut',
-     'out' => 'inOut',
-     'ready' => 'inOperation',
+     'in'     => 'inOut',
+     'out'    => 'inOut',
+     'ready'  => 'inOperation',
      'acting' => 'inOperation'
      },
   'stateResponses' => {
@@ -159,15 +169,15 @@ my $languagevars = {
        '0' => '$device is ready',
        '1' => '$device is still running'
      },
-     'inOut' => {
+     'inOut'       => {
        '0' => '$device is out',
        '1' => '$device is in'
      },
-     'onOff' => {
+     'onOff'       => {
        '0' => '$device is off',
        '1' => '$device is on'
      },
-     'openClose' => {
+     'openClose'   => {
        '0' => '$device is open',
        '1' => '$device is closed'
      }
@@ -379,7 +389,7 @@ sub RHASSPY_Set {
                       .join ',', @{$sets{$_}} : $_} sort keys %sets)
     if !defined $sets{$command};
 
-    Log3($name, 5, "set " . $command . " - value: " . join (" ", @values));
+    Log3($name, 5, "set $command - value: " . join q{ }, @values);
 
     
     my $dispatch = {
@@ -391,6 +401,7 @@ sub RHASSPY_Set {
     return $dispatch->{$command}->($hash) if (ref $dispatch->{$command} eq 'CODE');
     
     $values[0] = $h->{text} if ($command eq 'speak' || $command eq 'textCommand' ) && defined $h->{text};
+    $values[1] = $h->{path} if ($command eq 'play' ) && defined $h->{path};
 
     $dispatch = {
         speak       => \&RHASSPY_speak,
@@ -401,7 +412,7 @@ sub RHASSPY_Set {
     return Log3($name, 3, "set $name $command requires at least one argument!") if !@values;
     
     my $params = join q{ }, @values;
-    $params = $h if defined $h->{text};
+    $params = $h if defined $h->{text} || defined $h->{path};
     return $dispatch->{$command}->($hash, $params) if (ref $dispatch->{$command} eq 'CODE');
     
     if ($command eq 'reinit') {
@@ -571,6 +582,7 @@ sub get_unique {
     return @sorted;
 }
 
+#small function to replace variables
 sub _replace {
     my $hash  = shift // return;
     my $cmd   = shift // return;
@@ -877,7 +889,7 @@ sub RHASSPY_getDeviceByMediaChannel {
 # Mappings in Key/Value Paare aufteilen
 sub RHASSPY_splitMappingString {
     my $mapping = shift // return;
-    my @tokens, my $token = q{};
+    my @tokens; my $token = q{};
     #my $char, 
     my $lastChar = q{};
     my $bracketLevel = 0;
@@ -1009,7 +1021,7 @@ sub RHASSPY_runCmd {
         $cmd = $+{inner};
 
         # Variablen ersetzen?
-        eval { $cmd =~ s/(\$\w+)/$1/eeg; };
+        eval { $cmd =~ s{(\$\w+)}{$1}eeg; };
 
         # [DEVICE:READING] Einträge ersetzen
         $returnVal = RHASSPY_ReplaceReadingsVal($hash, $cmd);
@@ -1018,11 +1030,11 @@ sub RHASSPY_runCmd {
         Log3($hash->{NAME}, 5, "...and is now: $cmd ($returnVal)");
     }
     # FHEM Command oder CommandChain
-    elsif (defined($cmds{ (split " ", $cmd)[0] })) {
-        my @test = split q{ }, $cmd;
+    elsif (defined $cmds{ (split q{ }, $cmd)[0] }) {
+        #my @test = split q{ }, $cmd;
         Log3($hash->{NAME}, 5, "$cmd is a FHEM command");
         $error = AnalyzeCommandChain($hash, $cmd);
-        $returnVal = $test[1];
+        $returnVal = (split q{ }, $cmd)[1]; #$test[1];
     }
     # Soll Command auf anderes Device umgelenkt werden?
     elsif ($cmd =~ m/:/) {
@@ -1030,6 +1042,7 @@ sub RHASSPY_runCmd {
         $cmd   = qq($cmd $val) if defined($val);
         Log3($hash->{NAME}, 5, "$cmd redirects to another device");
         $error = AnalyzeCommand($hash, "set $cmd");
+        $returnVal = (split q{ }, $cmd)[1];
     }
     # Nur normales Cmd angegeben
     else {
@@ -1037,6 +1050,7 @@ sub RHASSPY_runCmd {
         $cmd   = qq($cmd $val) if defined($val);
         Log3($hash->{NAME}, 5, "$cmd is a normal command");
         $error = AnalyzeCommand($hash, "set $cmd");
+        $returnVal = (split q{ }, $cmd)[1];
     }
     Log3($hash->{NAME}, 1, $_) if (defined($error));
 
@@ -1383,7 +1397,7 @@ sub RHASSPY_speak {
         my $text = $cmd;
         my($unnamedParams, $namedParams) = parseParams($cmd);
     
-        if (defined($namedParams->{siteId}) && defined($namedParams->{text})) {
+        if (defined $namedParams->{siteId} && defined $namedParams->{text}) {
             $sendData->{siteId} = $namedParams->{siteId};
             $sendData->{text} = $namedParams->{text};
         }
@@ -1569,11 +1583,11 @@ sub RHASSPY_handleIntentSetMute {
     my $hash = shift // return;
     my $data = shift // return;
     my $value, my $siteId, my $state = 0;
-    my $response = RHASSPY_getResponse($hash, 'DefaultError');
+    my $response;# = RHASSPY_getResponse($hash, 'DefaultError');
     
     Log3($hash->{NAME}, 5, "handleIntentSetMute called");
     
-    if (exists($data->{Value}) && exists($data->{siteId})) {
+    if (exists $data->{Value} && exists $data->{siteId}) {
         $siteId = makeReadingName($data->{siteId});
         $value = $data->{Value};
         
@@ -1584,6 +1598,7 @@ sub RHASSPY_handleIntentSetMute {
         readingsSingleUpdate($hash, "mute_$siteId", $state, 1);
         $response = RHASSPY_getResponse($hash, 'DefaultConfirmation');
     }
+    $response = $response  // RHASSPY_getResponse($hash, 'DefaultError');
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 }
 
@@ -1607,7 +1622,7 @@ sub RHASSPY_handleIntentShortcuts {
          '$NAME'   => $name
         );
 
-    if (defined($cmd)) {
+    if (defined $cmd) {
         Log3($hash->{NAME}, 5, "Perl shortcut identified: $cmd, device name is $name");
 
         $cmd  = _replace($hash, $cmd, \%specials);
@@ -1638,12 +1653,12 @@ sub RHASSPY_handleIntentSetOnOff {
     my $data = shift // return;
     my $value, my $numericValue, my $device, my $room, my $siteId;
     my $mapping;
-    my $response = RHASSPY_getResponse($hash, 'DefaultError');
+    my $response; # = RHASSPY_getResponse($hash, 'DefaultError');
 
     Log3($hash->{NAME}, 5, "handleIntentSetOnOff called");
 
     # Mindestens Gerät und Wert müssen übergeben worden sein
-    if (exists($data->{Device}) && exists($data->{Value})) {
+    if (exists $data->{Device} && exists $data->{Value}) {
         $room = RHASSPY_roomName($hash, $data);
         $value = $data->{Value};
         $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
@@ -1671,6 +1686,7 @@ sub RHASSPY_handleIntentSetOnOff {
         }
     }
     # Antwort senden
+    $response = $response  // RHASSPY_getResponse($hash, 'DefaultError');
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $device;
 }
@@ -1778,7 +1794,7 @@ sub RHASSPY_handleIntentSetNumeric {
         if (exists($data->{Device})) {
             $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
         #} elsif (defined($type) && $type =~ m/^Lautstärke$/i) {
-        } elsif (defined($type) && $type =~ m{\A$hash->{helper}{lng}->{Change}->{Types}->{volumeSound}\z}xi) {
+        } elsif (defined $type && $type =~ m{\A$hash->{helper}{lng}->{Change}->{Types}->{volumeSound}\z}xi) {
             $device = RHASSPY_getActiveDeviceForIntentAndType($hash, $room, 'SetNumeric', $type);
             $response = RHASSPY_getResponse($hash, 'NoActiveMediaDevice') if (!defined $device);
         }
@@ -1837,8 +1853,8 @@ sub RHASSPY_handleIntentSetNumeric {
 
                 if (defined $newVal) {
                     # Begrenzung auf evtl. gesetzte min/max Werte
-                    $newVal = $minVal if (defined $minVal && $newVal < $minVal);
-                    $newVal = $maxVal if (defined $maxVal && $newVal > $maxVal);
+                    $newVal = $minVal if defined $minVal && $newVal < $minVal;
+                    $newVal = $maxVal if defined $maxVal && $newVal > $maxVal;
 
                     # Cmd ausführen
                     RHASSPY_runCmd($hash, $device, $cmd, $newVal);
@@ -1895,22 +1911,22 @@ sub RHASSPY_handleIntentGetNumeric {
 
             # Zurückzuliefernden Wert bestimmen
             $value = RHASSPY_getValue($hash, $device, $mapping->{currentVal});
-            if (defined($part)) {
+            if ( defined $part ) {
               my @tokens = split(m{ }x, $value);
-              $value = $tokens[$part] if (@tokens >= $part);
+              $value = $tokens[$part] if @tokens >= $part;
             }
-            $value = round((($value * (($maxVal - $minVal) / 100)) + $minVal), 0) if ($forcePercent);
+            $value = round( ($value * ($maxVal - $minVal) / 100 + $minVal), 0) if $forcePercent;
             my $isNumber = ::looks_like_number($value);
 
             # Punkt durch Komma ersetzen in Dezimalzahlen
-            $value =~ s/\./\,/gx if $hash->{helper}{lng}->{commaconversion};
+            $value =~ s{\.}{\,}gx if $hash->{helper}{lng}->{commaconversion};
 
             my $location = $data->{Device} // $data->{Room};
             # Antwort falls mappingType matched
 
             # Antwort falls Custom Response definiert ist
             #if    (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $room); }
-            if    (defined($mapping->{response})) { 
+            if ( defined $mapping->{response} ) { 
                 return RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $location);
             }
             
@@ -1918,13 +1934,18 @@ sub RHASSPY_handleIntentGetNumeric {
             if ($mappingType =~ m{\A$hash->{helper}{lng}->{Change}->{regex}->{setTarget}\z}xim) { 
                 $response = $hash->{helper}{lng}->{Change}->{responses}->{setTarget}; 
             }
-            #$response = $response 
-            #    // $hash->{helper}{lng}->{Change}->{responses}->{$mappingType}
-            #    // {
-                
-            #}
             
-#=pod
+           else {
+                $response = 
+                    $hash->{helper}{lng}->{Change}->{responses}->{$hash->{helper}{lng}->{Change}->{responses}->{regexToEn}->{$mappingType}} 
+                //  $hash->{helper}{lng}->{Change}->{responses}->{$hash->{helper}{lng}->{Change}->{responses}->{regexToEn}->{$type}}; 
+                $response = $response->{$isNumber} if ref $response eq 'HASH';
+           }
+           $response = $response            #we already are done?
+                // defined $mappingType ?   #or not and at least know the type...
+                    $hash->{helper}{lng}->{Change}->{responses}->{knownType}
+                    : $hash->{helper}{lng}->{Change}->{responses}->{unknownType};
+=pod
             elsif ($mappingType =~ m/^Temperatur$/i) { $response = "Die Temperatur von $location beträgt $value" . ($isNumber ? " Grad" : ""); }
             elsif ($mappingType =~ m/^Luftfeuchtigkeit$/i) { $response = "Die Luftfeuchtigkeit von $location beträgt $value" . ($isNumber ? " Prozent" : ""); }
             elsif ($mappingType =~ m/^Batterie$/i) { $response = "Der Batteriestand von $location " . ($isNumber ?  " beträgt $value Prozent" : " ist $value"); }
@@ -1938,9 +1959,9 @@ sub RHASSPY_handleIntentGetNumeric {
             elsif ($type =~ m/^Batterie$/i) { $response = "Der Batteriestand von $location" . ($isNumber ?  " beträgt $value Prozent" : " ist $value"); }
             elsif ($type =~ m/^Wasserstand$/i) { $response = "Der Wasserstand von $location beträgt $value"; }
             elsif ($type =~ m/^Bodenfeuchte$/i) { $response = "Die Bodenfeuchte von $location beträgt $value Prozent"; }
-#=cut
+
             # Antwort wenn Custom Type
-            elsif (defined($mappingType)) { 
+            if (defined $mappingType) { 
                 #$response = "$mappingType von $location beträgt $value"; 
                 $response = $hash->{helper}{lng}->{Change}->{responses}->{knownType};
             }
@@ -1951,8 +1972,11 @@ sub RHASSPY_handleIntentGetNumeric {
                 #$response = "Der Wert von $location beträgt $value."; 
                 $response = $hash->{helper}{lng}->{Change}->{responses}->{unknownType}; 
             }
+=cut
         # Variablen ersetzen?
-        eval { $response =~ s/(\$\w+)/$1/eeg; };
+        eval { $response =~ s{(\$\w+)}{$1}eeg; };
+        #$response = $exp_variables->($response);
+
         #}
     }
     # Antwort senden
@@ -1995,37 +2019,37 @@ sub RHASSPY_handleIntentMediaControls {
     Log3($hash->{NAME}, 5, "handleIntentMediaControls called");
 
     # Mindestens Kommando muss übergeben worden sein
-    if (exists($data->{Command})) {
+    if (exists $data->{Command}) {
         $room = RHASSPY_roomName($hash, $data);
-        $command = $data->{'Command'};
+        $command = $data->{Command};
 
         # Passendes Gerät suchen
-        if (exists($data->{Device})) {
-            $device = RHASSPY_getDeviceByName($hash, $room, $data->{'Device'});
+        if (exists $data->{Device}) {
+            $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
         } else {
             $device = RHASSPY_getActiveDeviceForIntentAndType($hash, $room, 'MediaControls', undef);
-            $response = RHASSPY_getResponse($hash, 'NoActiveMediaDevice') if (!defined($device));
+            $response = RHASSPY_getResponse($hash, 'NoActiveMediaDevice') if !defined $device;
         }
 
         $mapping = RHASSPY_getMapping($hash, $device, 'MediaControls', undef);
 
-        if (defined($device) && defined($mapping)) {
-            my $cmd;
-            #Beta-User - language
+        if (defined $device && defined $mapping) {
+            my $cmd = $mapping->{$hash->{helper}{lng}->{Change}->{Media}->{$command}};
 
-            if    ($command =~ m/^play$/i)   { $cmd = $mapping->{cmdPlay}; }
-            elsif ($command =~ m/^pause$/i)  { $cmd = $mapping->{cmdPause}; }
-            elsif ($command =~ m/^stop$/i)   { $cmd = $mapping->{cmdStop}; }
-            elsif ($command =~ m/^vor$/i)    { $cmd = $mapping->{cmdFwd}; }
-            elsif ($command =~ m/^zurück$/i) { $cmd = $mapping->{cmdBack}; }
+#            if    ($command =~ m/^play$/i)   { $cmd = $mapping->{cmdPlay}; }
+#            elsif ($command =~ m/^pause$/i)  { $cmd = $mapping->{cmdPause}; }
+#            elsif ($command =~ m/^stop$/i)   { $cmd = $mapping->{cmdStop}; }
+#            elsif ($command =~ m/^vor$/i)    { $cmd = $mapping->{cmdFwd}; }
+#            elsif ($command =~ m/^zurück$/i) { $cmd = $mapping->{cmdBack}; }
 
-            if (defined($cmd)) {
+            if ( defined $cmd ) {
                 # Cmd ausführen
                 RHASSPY_runCmd($hash, $device, $cmd);
                 
                 # Antwort festlegen
-                if (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $command, $room); }
-                else { $response = RHASSPY_getResponse($hash, 'DefaultConfirmation'); }
+                $response = defined $mapping->{response} ?
+                     RHASSPY_getValue($hash, $device, $mapping->{response}, $command, $room)
+                     : RHASSPY_getResponse($hash, 'DefaultConfirmation');
             }
         }
     }
@@ -2200,20 +2224,14 @@ sub RHASSPY_handleIntentSetTimer {
 }
 
 sub RHASSPY_playWav {
-    my $hash = shift // return;
-    my($unnamedParams, $namedParams) = parseParams(shift);
-    
-    my $siteId = q{default};
-    my $json;
-    my $url = q{/api/play-wav};
-    my $method = q{POST};
-    my $contenttype = q{audio/wav};
-    
+    my $hash = shift;
+    my $cmd = shift;
+
     Log3($hash->{NAME}, 5, "action playWav called");
-    
-    if (defined($namedParams->{siteId}) && defined($namedParams->{path})) {
-        $siteId = $namedParams->{siteId};
-        my $filename = $namedParams->{path};
+
+    if (defined($cmd->{siteId}) && defined($cmd->{path})) {
+        my $siteId = $cmd->{siteId};
+        my $filename = $cmd->{path};
         my $encoding = q{:raw :bytes};
         my $handle   = undef;
         my $topic = "hermes/audioServer/$siteId/playBytes/999";
@@ -2329,9 +2347,10 @@ __END__
 <p>This module receives, processes and executes voice commands coming from Rhasspy voice assistent.</p>
 <a name="RHASSPYdefine"></a>
 <p><b>Define</b></p>
-<p><code>define &lt;name&gt; RHASSPY &lt;DefaultRoom&gt;</code></p>
+<p><code>define &lt;name&gt; RHASSPY &lt;DefaultRoom&gt; &lt;DefaultLanguage&gt;</code></p>
 <ul>
   <li>DefaultRoom: Default room name. Used to speak commands without a room name (e.g. &quot;turn lights on&quot; to turn on the lights in the &quot;default room&quot;)</li>
+  <li>DefaultLanguage: The language voice commands are spoken with</li>
 </ul>
 <p>Before defining RHASSPY an MQTT2_CLIENT device has to be created which connects to the same MQTT-Server the voice assistant connects to.</p>
 <p>Example for defining an MQTT2_CLIENT device and the Rhasspy device in FHEM:</p>
@@ -2339,11 +2358,24 @@ __END__
   <code><pre>defmod rhasspyMQTT2 MQTT2_CLIENT rhasspy:12183
 attr rhasspyMQTT2 clientOrder RHASSPY MQTT_GENERIC_BRIDGE MQTT2_DEVICE
 attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionStarted hermes/dialogueManager/sessionEnded</pre></code><br>
-  <code>define Rhasspy RHASSPY Wohnzimmer</code>
+  <code>define Rhasspy RHASSPY Livingroom en</code>
 </p>
 <a name="RHASSPYset"></a>
 <p><b>Set</b></p>
 <ul>
+  <li>
+    <b>play</b><br>
+    Send WAV file to Rhasspy.<br>
+    <b>Not fully implemented yet</b><br>
+    Both arguments (siteId and path) are required!<br>
+    Example: <code>set &lt;rhasspyDevice&gt play siteId="default" path="/opt/fhem/test.wav"</code>
+  </li>
+  <li>
+    <b>reinit</b>
+    Reinitialization of language file.<br>
+    Be sure to execute this command after changing something in the language-configuration files or the attribut <i>configFile</i>!<br>
+    Example: <code>set &lt;rhasspyDevice&gt reinit language</code>
+  </li>
   <li>
     <b>speak</b><br>
     Voice output over TTS.<br>
@@ -2374,7 +2406,14 @@ attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionSt
 <ul>
   <li>
     <b>rhasspyMaster</b><br>
-    Defines the URL to the Rhasspy Master for sending requests to the HTTP-API. Has to be in Format <code>protocol://fqdn:port</code> (e.g. <i>http://rhasspy.example.com:12101</i>).
+    Defines the URL to the Rhasspy Master for sending requests to the HTTP-API. Has to be in Format <code>protocol://fqdn:port</code>
+    This attribute is <b>mandatory</b>!<br>
+    Example: <code>attr &lt;rhasspyDevice&gt; rhasspyMaster http://rhasspy.example.com:12101</code>
+  </li>
+  <li>
+    <b>configFile</b>
+    Path to the language-config file. If this attribute isn't set, english is used as for voice responses.<br>
+    Example: <code>attr &lt;rhasspyDevice&gt; configFile /opt/fhem/.config/rhasspy/rhasspy-de.cfg</code>
   </li>
   <li>
     <b>response</b><br>
@@ -2385,35 +2424,30 @@ DefaultConfirmation=Klaro, mach ich</code></pre>
   </li>
   <li>
     <b>rhasspyIntents</b><br>
-    <!--Defines custom intents. See <a href="https://github.com/Thyraz/Snips-Fhem#f%C3%BCr-fortgeschrittene-eigene-custom-intents-erstellen-und-in-fhem-darauf-reagieren" hreflang="de">Custom Intent erstellen</a>.<br>-->
-    Not implemented yet
+    Optionally defines custom intents. See <a href="https://github.com/Thyraz/Snips-Fhem#f%C3%BCr-fortgeschrittene-eigene-custom-intents-erstellen-und-in-fhem-darauf-reagieren" hreflang="de">Custom Intent erstellen</a>.<br>
+    One intent per line.<br>
+    Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents Respeak=Respeak()</code>
   </li>
   <li>
     <b>shortcuts</b><br>
     Define custom sentences without editing Rhasspy sentences.ini<br>
     The shortcuts are uploaded to Rhasspy when using the updateSlots set-command.<br>
+    One shortcut per line.<br>
     Example:<pre><code>mute on=set receiver mute on
 mute off=set receiver mute off</code></pre>
   </li>
   <li>
     <b>forceNEXT</b><br>
-     If set to 1, RHASSPY will forward incoming messages also to further MQTT2-IO-client modules like MQTT2_DEVICE, even if the topic matches to one of it's own subscriptions. By default, these messages will not be forwarded for better compability with autocreate feature on MQTT2_DEVICE. See also <a href="#MQTT2_CLIENTclientOrder">clientOrder attribute in MQTT2 IO-type commandrefs</a>; setting this in one instance of RHASSPY might affect others, too.</p>
-     <br>Additionals remarks on MQTT2-IO's:
-     Using a separate MQTT server (and not the internal MQTT2_SERVER) is highly recommended, as the Rhasspy scripts also use the MQTT protocol for internal (sound!) data transfers. Best way is to either use MQTT2_CLIENT (see below) or bridge only the relevant topics from mosquitto to MQTT2_SERVER (see e.g. http://www.steves-internet-guide.com/mosquitto-bridge-configuration/ for the principles). When using MQTT2_CLIENT, it's necessary to set clientOrder to include RHASSPY (as most likely, it's the only module listening to the CLIENT, it could be just set to 
-     <pre><code>attr <m2client> clientOrder RHASSPY</code></pre><br>
-     Furthermore, you are highly encouraged to restrict subscriptions only to the relevant topics:
-     <pre><code>attr <m2client> subscriptions setByTheProgram</code></pre><br>
-     In case you are using the MQTT server also for other purposes than Rhasspy, you have to set <i>subscriptions</i> manually to at least include
-     <pre><code>hermes/intent/+
-hermes/dialogueManager/sessionStarted
-hermes/dialogueManager/sessionEnded</code></pre>
-     additionally to the other subscriptions desired for other purposes.
-    </li>
-    <li>
-      <b>language</b><br>
-     Placeholder, this is not operational yet....
-    </li>  
+     If set to 1, RHASSPY will forward incoming messages also to further MQTT2-IO-client modules like MQTT2_DEVICE, even if the topic matches to one of it's own subscriptions. By default, these messages will not be forwarded for better compability with autocreate feature on MQTT2_DEVICE. See also <a href="#MQTT2_CLIENTclientOrder">clientOrder attribute in MQTT2 IO-type commandrefs</a>; setting this in one instance of RHASSPY might affect others, too.
+  </li>
 </ul>
+<p>&nbsp;</p>
+<p><b>Additionals remarks on MQTT2-IO's:</b></p>
+<p>Using a separate MQTT server (and not the internal MQTT2_SERVER) is highly recommended, as the Rhasspy scripts also use the MQTT protocol for internal (sound!) data transfers. Best way is to either use MQTT2_CLIENT (see below) or bridge only the relevant topics from mosquitto to MQTT2_SERVER (see e.g. <a href="http://www.steves-internet-guide.com/mosquitto-bridge-configuration/">http://www.steves-internet-guide.com/mosquitto-bridge-configuration</a> for the principles). When using MQTT2_CLIENT, it's necessary to set <code>clientOrder</code> to include RHASSPY (as most likely, it's the only module listening to the CLIENT). It could be just set to <pre><code>attr <m2client> clientOrder RHASSPY</code></pre></p>
+<p>Furthermore, you are highly encouraged to restrict subscriptions only to the relevant topics: <pre><code>attr <m2client> subscriptions setByTheProgram</code></pre></p>
+<p>In case you are using the MQTT server also for other purposes than Rhasspy, you have to set <code>subscriptions</code> manually to at least include the following topics additionally to the other subscriptions desired for other purposes.<pre><code>hermes/intent/+
+hermes/dialogueManager/sessionStarted
+hermes/dialogueManager/sessionEnded</code></pre></p>
 </ul>
 
 =end html
