@@ -132,6 +132,7 @@ my $languagevars = {
          '1' => 'battery level in $location is $value percent'
        },
        'brightness' => '$device was set to $value',
+       'setTarget' => '$device is set to $value',
        'soilMoisture' => 'soil moisture in $location is $value percent',
        'temperature' => {
          '0' => 'temperature in $location is $value',
@@ -1862,12 +1863,15 @@ sub RHASSPY_handleIntentGetNumeric {
     my $data = shift // return;
     my $value, my $device, my $room, my $type;
     my $mapping;
-    my $response = RHASSPY_getResponse($hash, 'DefaultError');
+    #my $response = RHASSPY_getResponse($hash, 'DefaultError');
+    my $response; 
 
     Log3($hash->{NAME}, 5, "handleIntentGetNumeric called");
 
     # Mindestens Type oder Device muss existieren
-    if (exists($data->{Type}) || exists($data->{Device})) {
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'DefaultError')) if !exists $data->{Type} && !exists $data->{Device};
+    
+    #if (exists($data->{Type}) || exists($data->{Device})) {
         $type = $data->{Type};
         $room = RHASSPY_roomName($hash, $data);
 
@@ -1887,7 +1891,7 @@ sub RHASSPY_handleIntentGetNumeric {
             my $maxVal  = $mapping->{maxVal};
             my $mappingType = $mapping->{type};
             my $forcePercent = defined $mapping->{map} && lc($mapping->{map}) eq 'percent' && defined $minVal && defined $maxVal ? 1 : 0;
-            my $isNumber;
+            #my $isNumber;
 
             # Zurückzuliefernden Wert bestimmen
             $value = RHASSPY_getValue($hash, $device, $mapping->{currentVal});
@@ -1896,7 +1900,7 @@ sub RHASSPY_handleIntentGetNumeric {
               $value = $tokens[$part] if (@tokens >= $part);
             }
             $value = round((($value * (($maxVal - $minVal) / 100)) + $minVal), 0) if ($forcePercent);
-            $isNumber = ::looks_like_number($value);
+            my $isNumber = ::looks_like_number($value);
 
             # Punkt durch Komma ersetzen in Dezimalzahlen
             $value =~ s/\./\,/gx if $hash->{helper}{lng}->{commaconversion};
@@ -1905,9 +1909,22 @@ sub RHASSPY_handleIntentGetNumeric {
             # Antwort falls mappingType matched
 
             # Antwort falls Custom Response definiert ist
-            if    (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $room); }
+            #if    (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $room); }
+            if    (defined($mapping->{response})) { 
+                return RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $location);
+            }
             
-            elsif ($mappingType =~ m/^(Helligkeit|Lautstärke|Sollwert)$/i) { $response = $data->{Device} . " ist auf $value gestellt."; }
+            #elsif ($mappingType =~ m/^(Helligkeit|Lautstärke|Sollwert)$/i) { $response = $data->{Device} . " ist auf $value gestellt."; }
+            if ($mappingType =~ m{\A$hash->{helper}{lng}->{Change}->{regex}->{setTarget}\z}xim) { 
+                $response = $hash->{helper}{lng}->{Change}->{responses}->{setTarget}; 
+            }
+            #$response = $response 
+            #    // $hash->{helper}{lng}->{Change}->{responses}->{$mappingType}
+            #    // {
+                
+            #}
+            
+#=pod
             elsif ($mappingType =~ m/^Temperatur$/i) { $response = "Die Temperatur von $location beträgt $value" . ($isNumber ? " Grad" : ""); }
             elsif ($mappingType =~ m/^Luftfeuchtigkeit$/i) { $response = "Die Luftfeuchtigkeit von $location beträgt $value" . ($isNumber ? " Prozent" : ""); }
             elsif ($mappingType =~ m/^Batterie$/i) { $response = "Der Batteriestand von $location " . ($isNumber ?  " beträgt $value Prozent" : " ist $value"); }
@@ -1921,13 +1938,22 @@ sub RHASSPY_handleIntentGetNumeric {
             elsif ($type =~ m/^Batterie$/i) { $response = "Der Batteriestand von $location" . ($isNumber ?  " beträgt $value Prozent" : " ist $value"); }
             elsif ($type =~ m/^Wasserstand$/i) { $response = "Der Wasserstand von $location beträgt $value"; }
             elsif ($type =~ m/^Bodenfeuchte$/i) { $response = "Die Bodenfeuchte von $location beträgt $value Prozent"; }
-
+#=cut
             # Antwort wenn Custom Type
-            elsif (defined($mappingType)) { $response = "$mappingType von $location beträgt $value"; }
+            elsif (defined($mappingType)) { 
+                #$response = "$mappingType von $location beträgt $value"; 
+                $response = $hash->{helper}{lng}->{Change}->{responses}->{knownType};
+            }
 
             # Standardantwort falls der Type überhaupt nicht bestimmt werden kann
-            else { $response = "Der Wert von $location beträgt $value."; }
-        }
+            #else { $response = "Der Wert von $location beträgt $value."; }
+            else { 
+                #$response = "Der Wert von $location beträgt $value."; 
+                $response = $hash->{helper}{lng}->{Change}->{responses}->{unknownType}; 
+            }
+        # Variablen ersetzen?
+        eval { $response =~ s/(\$\w+)/$1/eeg; };
+        #}
     }
     # Antwort senden
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
