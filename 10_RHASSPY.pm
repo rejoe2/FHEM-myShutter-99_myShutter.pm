@@ -1549,14 +1549,14 @@ sub RHASSPY_handleCustomIntent {
     my $hash       = shift // return;
     my $intentName = shift;
     my $data       = shift;
-    
+   
     if (!defined $hash->{helper}{custom} || !defined $hash->{helper}{custom}{$intentName}) {
         Log3($hash->{NAME}, 2, "handleIntentShortcuts called with invalid $intentName key");
         return;
     }
     my $custom = $hash->{helper}{custom}{$intentName};
     Log3($hash->{NAME}, 5, "handleCustomIntent called with $intentName key");
-    
+   
     my ($intent, $response, $room);
 
     if (exists $data->{Device} ) {
@@ -1565,22 +1565,31 @@ sub RHASSPY_handleCustomIntent {
     }
 
     my $subName = $custom->{function};
-    my @paramNames = $custom->{args};
+    my $params = $custom->{args};
 
     if (defined $subName) { #might not be necessary...
-        my @params = map { $data->{$_} } @paramNames;
-        my $params = join q{,}, @params;
-        my $cmd = qq{ $subName( $params , $hash) };
+        for (@{$params}) {
+            if ($_ eq 'NAME') {
+               $_ = $hash->{NAME};
+            } elsif ($_ eq 'DATA') {
+                $_ = $data;
+            } elsif (defined $data->{$_}) {   
+                $_ = $data->{$_}
+            }
+        }
+        my $args = join q{,}, @{$params};
+        my $cmd = qq{ $subName( $args ) };
         Log3($hash->{NAME}, 5, "Calling sub: $cmd");
         my $error = AnalyzePerlCommand($hash, $cmd);
         $response = $error if $error !~ m{Please.define.*first}x;
-      
+     
     }
     $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
 
     # Antwort senden
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 }
+
 
 # Handle incoming "SetMute" intents
 sub RHASSPY_handleIntentSetMute {
