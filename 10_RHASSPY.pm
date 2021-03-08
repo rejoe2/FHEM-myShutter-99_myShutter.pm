@@ -429,6 +429,7 @@ sub RHASSPY_Attr {
             delete $hash->{CONFIGFILE};
             delete $attr{$name}{configFile}; 
             delete $hash->{helper}{lng};
+            $value = undef;
         }
         return initialize_Language($hash, $hash->{LANGUAGE}, $value); 
     }
@@ -1250,8 +1251,7 @@ sub RHASSPY_onmessage {
     }
 
     if ($topic =~ qr/^hermes\/intent\/.*[:_]SetMute/ && defined $siteId) {
-        $type = $message =~ m{${fhemId}
-.textCommand}x ? 'text' : 'voice';
+        $type = $message =~ m{${fhemId}.textCommand}x ? 'text' : 'voice';
         $data->{requestType} = $type;
 
         # update Readings
@@ -2239,10 +2239,7 @@ sub RHASSPY_handleIntentSetTimer {
         # Variablen ersetzen? (Testcode aus RHASSPY_runCmd())
         $response = $hash->{helper}{lng}->{responses}->{timerSet};
         eval { $response =~ s{(\$\w+)}{$1}eeg; };
-        
-        #$response = _replace( $hash, 
-        #            $hash->{helper}{lng}->{responses}->{timerSet},
-        #            {'$unit' => $unit, '$time' => $time, '$room' => $room, '$value' => $value });
+
     }
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
@@ -2339,7 +2336,7 @@ sub RHASSPY_getDataFile {
 
 sub RHASSPY_readLanguageFromFile {
     my $hash = shift // return;
-    my $cfg  = shift;
+    my $cfg  = shift // return 0, toJSON($languagevars);
     
     my $name = $hash->{NAME};
     my $filename = RHASSPY_getDataFile($hash, $cfg);
@@ -2351,8 +2348,6 @@ sub RHASSPY_readLanguageFromFile {
     }
     my @cleaned = grep { $_ !~ m{\A\s*[#]}x } @content;
 
-    #my $string = join q{ }, @content;
-    #return 0, join q{ }, @content;
     return 0, join q{ }, @cleaned;
 }
 
