@@ -65,8 +65,8 @@ my $languagevars = {
      'DefaultError' => "Sorry but something seems not to work as expected.",
      'NoActiveMediaDevice' => "Sorry no active playback device.",
      'DefaultConfirmation' => "OK",
-     'timerSet'   => 'Timer in $room has been set to $value $unit',
-     'timerEnd'   => "Timer expired",
+     'timerSet'   => 'Timer in room $room has been set to $value $unit',
+     'timerEnd'   => 'Timer in room $room expired',
      'timeRequest' => 'it is $hour o clock $min minutes',
      'weekdayRequest' => 'today it is $weekDay',
      'duration_not_understood'   => "Sorry I could not understand the desired duration."
@@ -134,20 +134,20 @@ my $languagevars = {
      },
   'stateResponses' => {
      'inOperation' => {
-       '0' => '$device is ready',
-       '1' => '$device is still running'
+       '0' => '$deviceName is ready',
+       '1' => '$deviceName is still running'
      },
      'inOut'       => {
-       '0' => '$device is out',
-       '1' => '$device is in'
+       '0' => '$deviceName is out',
+       '1' => '$deviceName is in'
      },
      'onOff'       => {
-       '0' => '$device is off',
-       '1' => '$device is on'
+       '0' => '$deviceName is off',
+       '1' => '$deviceName is on'
      },
      'openClose'   => {
-       '0' => '$device is open',
-       '1' => '$device is closed'
+       '0' => '$deviceName is open',
+       '1' => '$deviceName is closed'
      }
   }
 };
@@ -269,6 +269,8 @@ sub firstInit {
     #RemoveInternalTimer($hash);
     
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT'; # isIODevMQTT2_CLIENT($hash);
+    
+    RHASSPY_fetchSiteIds($hash);
 
     return;
 }
@@ -1467,6 +1469,7 @@ sub RHASSPY_fetchSiteIds {
     my $url    = q{/api/profile?layers=profile};
     my $method = q{GET};
     
+    Log3($hash->{NAME}, 5, "fetchSiteIds called");
     return RHASSPY_sendToApi($hash, $url, $method, undef);
 }
     
@@ -1522,9 +1525,8 @@ sub RHASSPY_ParseHttpResponse {
         my @siteIds = split /,/, $siteIds;
 #print Dumper(@siteIds);
         readingsBulkUpdate($hash, 'siteIds', $siteIds);
+        $hash->{helper}{siteIds} = $siteIds;
     }
-#    $hash->{MODULE_VERSION} = "0.4.0";
-#    $hash->{helper}{defaultRoom} = $defaultRoom;
     else {
         Log3($hash->{NAME}, 3, qq(error while requesting $param->{url} - $data));
     }
@@ -1725,8 +1727,6 @@ sub RHASSPY_handleIntentGetOnOff {
         my $mapping = RHASSPY_getMapping($hash, $device, 'GetOnOff', undef);
         my $status = $data->{Status};
 
-#        Log3($hash->{NAME}, 5, "handleIntentGetOnOff - Device: $device - Status: $status");
-
         # Mapping gefunden?
         if (defined $mapping) {
             # Gerät ein- oder ausgeschaltet?
@@ -1739,16 +1739,6 @@ sub RHASSPY_handleIntentGetOnOff {
                 $response = $hash->{helper}{lng}->{stateResponses}{$stateResponseType}->{$value};
                 eval { $response =~ s{(\$\w+)}{$1}eeg; };
             }
-=pod
-            elsif ($status =~ m/^(an|aus)$/ && $value == 1) { $response = $data->{'Device'} . " ist eingeschaltet"; }
-            elsif ($status =~ m/^(an|aus)$/ && $value == 0) { $response = $data->{'Device'} . " ist ausgeschaltet"; }
-            elsif ($status =~ m/^(auf|zu)$/ && $value == 1) { $response = $data->{'Device'} . " ist geöffnet"; }
-            elsif ($status =~ m/^(auf|zu)$/ && $value == 0) { $response = $data->{'Device'} . " ist geschlossen"; }
-            elsif ($status =~ m/^(eingefahren|ausgefahren)$/ && $value == 1) { $response = $data->{'Device'} . " ist eingefahren"; }
-            elsif ($status =~ m/^(eingefahren|ausgefahren)$/ && $value == 0) { $response = $data->{'Device'} . " ist ausgefahren"; }
-            elsif ($status =~ m/^(läuft|fertig)$/ && $value == 1) { $response = $data->{'Device'} . " läuft noch"; }
-            elsif ($status =~ m/^(läuft|fertig)$/ && $value == 0) { $response = $data->{'Device'} . " ist fertig"; }
-=cut
         }
     }
     # Antwort senden
@@ -2190,56 +2180,55 @@ sub RHASSPY_handleIntentSetColor {
     return $device;
 }
 
-sub RHASSPY_findSiteId {
-}
-    
-
 # Handle incoming SetTimer intents
 sub RHASSPY_handleIntentSetTimer {
     my $hash = shift;
     my $data = shift // return;
-
+    my $siteId = $data->{siteId} // return;
     my $name = $hash->{NAME};
-    my $unit, my $room, my $value;
-                                  
-    my @unitHours = ('stunde','stunden','hour','hours','heure','heures');
-    my @unitMinutes = ('minute','minuten','minute','minutes');
+    my $unit, my $value;
+
+    #my @unitHours = ('stunde','stunden','hour','hours','heure','heures');
+    #my @unitMinutes = ('minute','minuten','minute','minutes');
     my $response = RHASSPY_getResponse($hash, 'DefaultError');
 
     Log3($name, 5, 'handleIntentSetTimer called');
 
-    if ($data->{Room}) {$room = makeReadingName($data->{Room})};
+    my $room = $data->{Room} // $siteId;
     if ($data->{Value}) {$value = $data->{Value}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
-    if ($data->{Unit}) {$unit = $data->{Unit}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}}; # Should be unit, not duration. Sense depends on Rhasspy-sentences
+    if ($data->{Unit}) {$unit = $data->{Unit}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
     
-    my $siteId = $data->{siteId};
+    if (!defined $hash->{helper}{siteIds}) {RHASSPY_fetchSiteIds($hash)};
 
-    $room = $room // $siteId;
-
-    if( $value && $unit && $room ) {
+    my @siteIds = split /,/,$hash->{helper}{siteIds};
+    my $timerRoom = $siteId;
+    if ( grep {m{\A$room\z}ix} @siteIds ) {$timerRoom = $room};
+    
+    if( $value && $unit && $timerRoom ) {
         my $time = $value;
-        my $roomReading = makeReadingName($room);
+        my $roomReading = "timer_".makeReadingName($room);
         
-        if    ( grep { $_ eq $unit } @unitMinutes ) {$time = $value*60}
-        elsif ( grep { $_ eq $unit } @unitHours )   {$time = $value*3600};
+        #if    ( grep { $_ eq $unit } @unitMinutes ) {$time = $value*60}
+        #elsif ( grep { $_ eq $unit } @unitHours )   {$time = $value*3600};
+        if    (  $unit =~ m{ $hash->{helper}{lng}->{units}->{unitMinutes} }x ) {$time = $value*60}
+        elsif ( (  $unit =~ m{ $hash->{helper}{lng}->{units}->{unitHours} }x ) )   {$time = $value*3600};
         
-        #$time = strftime('%T', gmtime $time); # Beta-User: %T seems to fail in non-POSIX-Environments...
         $time = strftime('%H:%M:%S', gmtime $time);
         
         $response = $hash->{helper}{lng}->{responses}->{timerEnd};
-        my $cmd = qq(defmod timer_$room at +$time set $name speak siteId=\"$room\" text=\"$response\";;setreading $name timer_$roomReading 0);
+        eval { $response =~ s{(\$\w+)}{$1}eeg; };
+
+        my $cmd = qq(defmod $roomReading at +$time set $name speak siteId=\"$timerRoom\" text=\"$response\";;setreading $name timer_$roomReading 0);
         
         RHASSPY_runCmd($hash,'',$cmd);
 
-        readingsSingleUpdate($hash, "timer_" . $roomReading, 1, 1);
+        readingsSingleUpdate($hash, $roomReading, 1, 1);
         
         Log3($name, 5, "Created timer: $cmd");
         
-        #$response = "Taimer in $room gesetzt auf $value $unit";
-        # Variablen ersetzen? (Testcode aus RHASSPY_runCmd())
         $response = $hash->{helper}{lng}->{responses}->{timerSet};
         eval { $response =~ s{(\$\w+)}{$1}eeg; };
-
+        #print Dumper($response);
     }
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
@@ -2274,7 +2263,6 @@ sub RHASSPY_playWav {
     }
     return;
 }
-
 
 # Abgespeckte Kopie von ReplaceSetMagic aus fhem.pl
 sub RHASSPY_ReplaceReadingsVal {
@@ -2368,10 +2356,11 @@ __END__
 <p>This module receives, processes and executes voice commands coming from Rhasspy voice assistent.</p>
 <a name="RHASSPYdefine"></a>
 <p><b>Define</b></p>
-<p><code>define &lt;name&gt; RHASSPY &lt;DefaultRoom&gt; &lt;language=DefaultLanguage&gt;</code></p>
+<p><code>define &lt;name&gt; RHASSPY &lt;devspec&gt; &lt;defaultRoom&gt; &lt;language&gt;</code></p>
 <ul>
-  <li>DefaultRoom: Default room name. Used to speak commands without a room name (e.g. &quot;turn lights on&quot; to turn on the lights in the &quot;default room&quot;)</li>
-  <li>DefaultLanguage: The language voice commands are spoken with</li>
+  <li><b>devspec</b>: A description of devices that should be controlled by Rhasspy. Optional. Default is <code>devspec=room=Rhasspy</code></li>
+  <li><b>defaultRoom</b>: Default room name. Used to speak commands without a room name (e.g. &quot;turn lights on&quot; to turn on the lights in the &quot;default room&quot;). Optional. Default is <code>defaultRoom=default</code></li>
+  <li><b>language</b>: The language voice commands are spoken with. Optional. Default is derived from global, which defaults to <code>language=en</code></li>
 </ul>
 <p>Before defining RHASSPY an MQTT2_CLIENT device has to be created which connects to the same MQTT-Server the voice assistant connects to.</p>
 <p>Example for defining an MQTT2_CLIENT device and the Rhasspy device in FHEM:</p>
@@ -2379,7 +2368,7 @@ __END__
   <code><pre>defmod rhasspyMQTT2 MQTT2_CLIENT rhasspy:12183
 attr rhasspyMQTT2 clientOrder RHASSPY MQTT_GENERIC_BRIDGE MQTT2_DEVICE
 attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionStarted hermes/dialogueManager/sessionEnded</pre></code><br>
-  <code>define Rhasspy RHASSPY Livingroom en</code>
+  <code>define Rhasspy RHASSPY devspec=room=Rhasspy defaultRoom=Livingroom language=en</code>
 </p>
 <a name="RHASSPYset"></a>
 <p><b>Set</b></p>
@@ -2479,6 +2468,7 @@ hermes/dialogueManager/sessionEnded</code></pre></p>
 <li>SetNumeric/SetColor don't change readings of FHEM-Device (&quote;longpoll&quote;) #Beta-User: solved by returning $device?</li>
 <li>Status doesn't do anything (as expected right now) #Beta-User: intented behaviour?</li>
 <li>MediaChannels doesn't execute command #Beta-User: solved by splitting Channel mapping in keyword/command?</li>
+<li>SetTimer: $hash->{siteIds} leer beim Start von FHEM: <code>PERL WARNING: Use of uninitialized value in split at ./FHEM/10_RHASSPY.pm line 2194.</code></li>
 </ul>
 
 =end html
