@@ -79,19 +79,19 @@ my $languagevars = {
        'soilMoisture' => 'soil moisture',
        'targetValue' => 'target value',
        'temperature' => 'temperature',
-       'volumeSound' => 'volume',
+       'volume' => 'volume',
        'waterLevel' => 'water level'
     },
     'regex' => {
        'darker' => 'brightness',
        'brighter' => 'brightness',
        'cooler' => 'temperature',
-       'louder' => 'volumeSound',
-       'lower' => 'volumeSound',
+       'louder' => 'volume',
+       'lower' => 'volume',
        'warmer' => 'temperature',
        'setTarget' => '(brightness|volume|target.volume)',
        'upward' => '(higher|brighter|louder|rise|warmer)',
-       'volumeSound' => 'sound volume'
+       'volume' => 'sound volume'
     },
     'regexToEn' => {
       'temperature'  => 'temperature',
@@ -101,7 +101,7 @@ my $languagevars = {
       'soilMoisture' => 'soilMoisture',
       'brightness'   => 'brightness',
       'setTarget'    => 'setTarget',
-      'volumeSound'  => 'volumeSound'
+      'volume'       => 'volume'
     },
     'responses' => {
        'airHumidity'  => 'air humidity in $location is $value percent',
@@ -116,7 +116,7 @@ my $languagevars = {
          '0' => 'temperature in $location is $value',
          '1' => 'temperature in $location is $value degrees',
        },
-       'volumeSound'  => '$device has been set to $value',
+       'volume'  => '$device set to $value',
        'waterLevel'   => 'water level in $location is $value percent',
        'knownType'    => '$mappingType in $location is $value percent',
        'unknownType'  => 'value in $location is $value percent'
@@ -239,7 +239,7 @@ sub RHASSPY_Define {
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{RHASSPY}; #Beta-User: extended Perl defined-or
     #) = @args;
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
-    $hash->{MODULE_VERSION} = "0.4.1beta";
+    $hash->{MODULE_VERSION} = "0.4.2beta";
     $hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -1016,7 +1016,6 @@ sub RHASSPY_runCmd {
         $cmd = $+{inner};
 
         # Variablen ersetzen?
-        
         if ( !eval { $cmd =~ s{(\$\w+)}{$1}eeg; 1 } ) {
             Log3($hash->{NAME}, 1, "$cmd returned Error: $@") 
         };
@@ -1274,10 +1273,11 @@ sub RHASSPY_onmessage {
     }
 
     if ($mute) {
+        $data->{requestType} = $message =~ m{${fhemId}.textCommand}x ? 'text' : 'voice';
         RHASSPY_respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, q{ });
-        return @updatedList;
+        return \@updatedList;
     }
-    
+
     my $command = $data->{input};
     $type = $message =~ m{${fhemId}
 .textCommand}x ? 'text' : 'voice';
@@ -1327,13 +1327,15 @@ sub RHASSPY_onmessage {
     
 
 # Antwort ausgeben
-sub RHASSPY_respond { 
+sub RHASSPY_respond {
     my $hash      = shift // return;
     my $type      = shift // return;
     my $sessionId = shift // return;
     my $siteId    = shift // return;
     my $response  = shift // return;
-    
+
+print "\n$type\n";
+
     my $sendData =  {
         sessionId => $sessionId,
         siteId => $siteId,
@@ -1343,12 +1345,9 @@ sub RHASSPY_respond {
     my $json = toJSON($sendData);
 
     readingsBeginUpdate($hash);
-    if ($type eq 'voice') {
-        readingsBulkUpdate($hash, 'voiceResponse', $response);
-    }
-    elsif ($type eq 'text') {
-        readingsBulkUpdate($hash, 'textResponse', $response);
-    } #Beta-User: könnte effizienter notiert werden, wenn sicher ist, dass es nur diese beiden $type geben kann...
+    $type eq 'voice' ?
+        readingsBulkUpdate($hash, 'voiceResponse', $response)
+      : readingsBulkUpdate($hash, 'textResponse', $response);
     readingsBulkUpdate($hash, 'responseType', $type);
     readingsEndUpdate($hash,1);
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/endSession $json});
@@ -1589,21 +1588,30 @@ sub RHASSPY_handleCustomIntent {
                 $_ = $data->{$_}
             }
         }
-
-        my $args;
-        for (@{$params}) {
-            $args .= q{,} if $args;
-            if (ref $_ eq 'SCALAR') {
-               $args .= q{'}. $_ . q{'};
-            } else {
-               $args .= $_;
-            }
-        }
+=pod
+        #my @args;
+        #for (@{$params}) {
+        #    $args .= q{,} if $args;
+        #    if (ref $_ eq 'SCALAR') {
+        #       $args .= q{'}. $_ . q{'};
+        #    } else {
+        #       $args .= $_;
+        #    }
+        #}
         #my $args = join q{,}, @{$params};
-        my $cmd = qq{ $subName( "$args" ) };
+        #my $cmd = qq{ $subName( "$args" ) };
+        attr rhasspy rhasspyIntents GetAllOff=GetAllOff(Room,Type)\
+SetAllOff=SetAllOff(Room,Type)\
+SetAllOn=SetAllOn(Room,Type)
 
-        Log3($hash->{NAME}, 5, "Calling sub: $cmd");
-        my $error = AnalyzePerlCommand($hash, $cmd);
+sub SetAllOn($$){
+my ($Raum,$Typ) = @_;
+return Log3('rhasspy',3 , "RHASSPY: Raum $Raum, Typ $Typ");
+}
+=cut
+        Log3($hash->{NAME}, 5, "Calling sub: $cmd with ". join q{,}, @{$params} );
+        #my $error = AnalyzePerlCommand($hash, $cmd);
+        my $error = AnalyzePerlCommand($hash, $subName( @{$params} ) );
         
         $response = $error if $error !~ m{Please.define.*first}x;
      
@@ -1801,7 +1809,7 @@ sub RHASSPY_handleIntentSetNumeric {
 
     # Nur Type = Lautstärke und Value angegeben -> Valid (z.B. Lautstärke auf 10)
     ||!exists $data->{Device} && defined $data->{Type} && exists $data->{Value} && $data->{Type} =~ 
-    m{\A$hash->{helper}{lng}->{Change}->{regex}->{volumeSound}\z}xim;
+    m{\A$hash->{helper}{lng}->{Change}->{regex}->{volume}\z}xim;
 
     if ($validData) {
         $unit = $data->{Unit};
@@ -1822,7 +1830,7 @@ sub RHASSPY_handleIntentSetNumeric {
         if (exists($data->{Device})) {
             $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
         #} elsif (defined($type) && $type =~ m/^Lautstärke$/i) {
-        } elsif (defined $type && $type =~ m{\A$hash->{helper}{lng}->{Change}->{Types}->{volumeSound}\z}xi) {
+        } elsif (defined $type && $type =~ m{\A$hash->{helper}{lng}->{Change}->{Types}->{volume}\z}xi) {
             $device = RHASSPY_getActiveDeviceForIntentAndType($hash, $room, 'SetNumeric', $type);
             $response = RHASSPY_getResponse($hash, 'NoActiveMediaDevice') if (!defined $device);
         }
@@ -2005,6 +2013,7 @@ sub RHASSPY_handleIntentGetNumeric {
         #eval { $response =~ s{(\$\w+)}{$1}eeg; };
         $response =~ s{(\$\w+)}{$1}eegx;
 
+          
     }
     # Antwort senden
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
@@ -2487,9 +2496,11 @@ hermes/dialogueManager/sessionEnded</code></pre></p>
 <li>SetNumeric/SetColor don't change readings of FHEM-Device (&quote;longpoll&quote;) #Beta-User: solved by returning $device?</li>
 <li>Status doesn't do anything (as expected right now) #Beta-User: intented behaviour?</li>
 <li>MediaChannels doesn't execute command #Beta-User: solved by splitting Channel mapping in keyword/command?</li>
-<li>SetTimer: $hash->{siteIds} leer beim Start von FHEM: <code>PERL WARNING: Use of uninitialized value in split at ./FHEM/10_RHASSPY.pm line 2194.</code></li>
+<li><s>SetTimer: $hash->{siteIds} leer beim Start von FHEM: <code>PERL WARNING: Use of uninitialized value in split at ./FHEM/10_RHASSPY.pm line 2194.</code></s></li>
 <li>Dialogue Session wird nicht beendet, wenn SetMute = 1; Reading listening_$roomReading wird nicht 0. Weil das in onmessage nicht zurück gesetzt wird.</li>
-<li>Shortcuts always returning Default-Error but commands are executed. #Beta-User: solved by changing default in line 1630 to DefaultConfirmation?
+<li>Shortcuts always returning Default-Error but commands are executed. #Beta-User: solved by changing default in line 1630 to DefaultConfirmation?</li>
+<li>Add Shortcuts to README (<a href="https://forum.fhem.de/index.php/topic,118926.msg1136115.html#msg1136115">https://forum.fhem.de/index.php/topic,118926.msg1136115.html#msg1136115</a>) (drhirn)</li>
+<li>Shortcuts: &quot;Longpoll&quot; only works when &quot;n&quot; is given. Perl-Code only works when &quot;n&quot; is given when using $NAME in Perl-code.</li>
 </ul>
 
 =end html
