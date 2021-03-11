@@ -295,7 +295,7 @@ sub RHASSPY_Define {
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{RHASSPY}; #Beta-User: extended Perl defined-or
     #) = @args;
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
-    $hash->{MODULE_VERSION} = "0.4.3beta1";
+    $hash->{MODULE_VERSION} = "0.4.3beta2";
     $hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -322,7 +322,7 @@ sub firstInit {
 
     return if !$init_done || !defined $IODev;
 
-    #RemoveInternalTimer($hash);
+    RemoveInternalTimer($hash);
     
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT'; # isIODevMQTT2_CLIENT($hash);
     
@@ -401,7 +401,6 @@ sub RHASSPY_Delete {
 
 # Set Befehl aufgerufen
 sub RHASSPY_Set {
-    #my ($hash, $name, $command, @values) = @_;
     my $hash    = shift;
     my $anon    = shift;
     my $h       = shift;
@@ -428,7 +427,10 @@ sub RHASSPY_Set {
     return $dispatch->{$command}->($hash) if (ref $dispatch->{$command} eq 'CODE');
     
     $values[0] = $h->{text} if ($command eq 'speak' || $command eq 'textCommand' ) && defined $h->{text};
-    $values[1] = $h->{path} if ($command eq 'play' ) && defined $h->{path};
+    if ($command eq 'play' ) {
+        $values[0] = $h->{siteId} if defined $h->{siteId};
+        $values[1] = $h->{path}   if defined $h->{path};
+    }
 
     $dispatch = {
         speak       => \&RHASSPY_speak,
@@ -588,6 +590,33 @@ sub RHASSPY_execute {
     # CMD ausführen
     return AnalyzePerlCommand( $hash, $cmd );
 }
+
+sub RHASSPY_sleep {
+    my $hash   = shift // return;
+    my $mode   = shift; #undef => timeout, 1 => cancellation, 
+                        #2 => set timer, 3 => execution?
+    my $data   = shift;
+    
+    #timeout Case
+    if (!defined $mode) {
+        RemoveInternalTimer($hash);
+        
+        return;
+    }
+
+    #cancellation Case
+    if ( $mode == 1 ) {
+        RemoveInternalTimer($hash);
+        
+        return;
+    }
+    
+    return if $mode != 2;
+    
+    
+    return $hash->{NAME};
+}
+
 
 #from https://stackoverflow.com/a/43873983, modified...
 sub get_unique {
@@ -1006,6 +1035,7 @@ sub RHASSPY_getMapping { #($$$$;$)
                 || defined $type && $de_mappings->{ToEn}->{$matchedMapping->{type}} ne $type && $de_mappings->{ToEn}->{$currentMapping{type}} eq $type
                 ) {
                 $matchedMapping = \%currentMapping;
+                #Beta-User: könnte man ergänzen durch den match "vorne" bei Reading, kann aber sein, dass es effektiver geht, wenn wir das künftig sowieso anders machen...
 
                 Log3($hash->{NAME}, 5, "${prefix}Mapping selected: $_") if !$disableLog;
             }
@@ -1129,6 +1159,7 @@ sub RHASSPY_getValue {
 
     # Soll Reading von einem anderen Device gelesen werden?
     if ($getString =~ m{:}x) {
+        $getString =~ s{\[([^]]+)]}{$1}x; #remove brackets
         my @replace = split m{:}x, $getString;
         $device = $replace[0];
         $getString = $replace[1] // $getString;
@@ -1895,8 +1926,7 @@ sub RHASSPY_handleIntentSetNumeric {
                 my $part    = $mapping->{part};
                 #my $minVal  = (defined($mapping->{minVal})) ? $mapping->{minVal} : 0; # Rhasspy kann keine negativen Nummern bisher, daher erzwungener minVal
                 my $minVal  = $mapping->{minVal} // 0; # Rhasspy kann keine negativen Nummern bisher, daher erzwungener minVal
-                my $maxVal  = $mapping->{maxVal};
-                #my $diff    = (defined $value) ? $value : ((defined($mapping->{step})) ? $mapping->{step} : 10);
+                my $maxVal  = $mapping->{maxVal}; # // 100; #Beta-User: might help to avoid uninitialized value in calculation ("line 1947"...
 
                 my $diff    = $value // $mapping->{step} // 10;
 
@@ -1947,7 +1977,8 @@ sub RHASSPY_handleIntentSetNumeric {
                 }
                 # Stellwert um Prozent x ändern ("Mache Lampe um 20 Prozent heller" oder "Mache Lampe um 20 heller" bei forcePercent oder "Mache Lampe heller" bei forcePercent)
                 #elsif (($unit eq 'Prozent' || $forcePercent) && defined($change)  && defined $minVal && defined $maxVal) {
-                elsif (($ispct || $forcePercent) && defined($change)  && defined $minVal && defined $maxVal) {
+                elsif (($ispct || $forcePercent) && defined $change && defined $minVal && defined $maxVal) {
+                    $maxVal = 100 if !::looks_like_number($maxVal); #Beta-User: Workaround, should be fixed in mapping (tbd)
                     my $diffRaw = round((($diff * (($maxVal - $minVal) / 100)) + $minVal), 0);
                     $newVal = ($up) ? $oldVal + $diffRaw : $oldVal - $diffRaw;
                 }
