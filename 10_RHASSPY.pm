@@ -51,8 +51,8 @@ my %sets = (
     textCommand  => [],
     trainRhasspy => [],
     fetchSiteIds => [],
-    reinit       => [qw(language)]
-    #reinit       => [qw(language devicemap)]
+    #reinit       => [qw(language)]
+    reinit       => [qw(language devicemap all)]
 #    "volume" => ""
 );
 
@@ -306,7 +306,7 @@ sub RHASSPY_Define {
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{RHASSPY}; #Beta-User: extended Perl defined-or
     #) = @args;
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
-    $hash->{MODULE_VERSION} = "0.4.3beta";
+    $hash->{MODULE_VERSION} = "0.4.3beta3";
     $hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -335,7 +335,7 @@ sub firstInit {
 
     RemoveInternalTimer($hash);
     
-    IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT'; # isIODevMQTT2_CLIENT($hash);
+    IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
     
     RHASSPY_fetchSiteIds($hash) if !ReadingsVal( $hash->{NAME}, 'siteIds', 0 );
 
@@ -621,7 +621,7 @@ sub initialize_devicemap {
     
     $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
         $room oder $name müssen übergeben werden, es werden alle Devices mit passendem rhasspyName auf Übereinstimmung mit $room gecheckt 
-        => Hash mit {$room}{rhasspyName}{FHEM-Device-Name}?
+        => Hash mit {$room}{rhasspyName}{FHEM-Device-Name}? (done)
     
     $device = RHASSPY_getDeviceByIntentAndType($hash, $room, $intent, $type); 
         erst wird an RHASSPY_getDevicesByIntentAndType() übergeben => 
@@ -638,7 +638,7 @@ sub initialize_devicemap {
         1. alle Devices sammeln, 
         2. rausfiltern, was diesen $channel kennt
         3. erster Treffer wird device, es sei denn, es wird was im passenden $room gefunden
-        => Hash mit {$channel}{$room}{FHEM-Device-Name}?
+            => Hash mit {$channel}{$room}{FHEM-Device-Name}?
     
     $mapping = RHASSPY_getMapping($hash, $device, $intent, $type) if defined $device;
         $type kann ggf. offen bleiben
@@ -656,25 +656,61 @@ sub _analyze_rhassypAttr {
     my $device = shift // return;
     
     my $prefix = $hash->{prefix};
+    my $ret = 1;
     #rhasspyRooms ermitteln
     my @rooms = split m{,}x,AttrVal($device,"${prefix}Room",undef);
-    $rooms[0] = $hash->{helper}{defaultRoom} if !@rooms;
+    if (!@rooms) {
+        $rooms[0] = $hash->{helper}{defaultRoom};
+        $ret = 0;
+    };
 
     #rhasspyNames ermitteln
     my @names = split m{,}x, AttrVal($device,"${prefix}Name",undef);
     
+    return 0 if !@names && !$ret; #might need review!
+    
+    #my $devmp = $hash->{helper}{devicemap};
+    
     for my $dn (@names) {
-        my %map = map {$_ => {$dn => $device }} @rooms;
-        %map = _combineHashes( \%map , \$hash->{helper}->{devicemap}->{rhasspyRooms}) if defined $hash->{helper}->{devicemap}->{rhasspyRooms};
-        $hash->{helper}->{devicemap}->{rhasspyRooms} = %map;
+       for (@rooms) {
+           $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
+       }
     }
-    return;
+    for my $item ("Channels", "Colors") {
+        my @rows = split m{\n}x, AttrVal($device, "${prefix}${item}", q{});
+
+        for my $row (@rows) {
+            
+            my ($key, $val) = split m{=}x, $row, 2;
+            next if !$val; 
+            for (@rooms) {
+                $hash->{helper}{devicemap}{$item}{$_}{$key} = $device;
+            }
+            $hash->{helper}{devicemap}{$device}{$item}{$key} = $val;
+        }
+    }
+    
+    #Hash mit {FHEM-Device-Name}{$intent}{$type}?
+    my $mappingsString = AttrVal($device, "${prefix}Mapping", undef);
+    for (split m{\n}x, $mappingsString) {
+        my ($key, $val) = split m{:}x, $_, 2;
+        #$key = lc($key);
+        #$val = lc($val);
+        my %currentMapping = RHASSPY_splitMappingString($val);
+
+        # Übersetzen, falls möglich:
+        $currentMapping{type} = $de_mappings->{ToEn}->{$currentMapping{type}} // $currentMapping{type};
+        $hash->{helper}{devicemap}{$device}{intents}->{$key} = \%currentMapping;
+    }
+
+    return 1;
 }
 
 sub _analyze_genDevType {
     my $hash   = shift // return;
     my $device = shift // return;
-
+    
+    return;
 }
 
 sub RHASSPY_execute {
@@ -1361,7 +1397,7 @@ sub RHASSPY_parseJSON {
     }
 
     # Standard-Keys auslesen
-    ($data->{intent} = $decoded->{intent}{intentName}) =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName}; 
+    ($data->{intent} = $decoded->{intent}{intentName}) =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName};
     $data->{probability} = $decoded->{intent}{confidenceScore}         if exists $decoded->{intent}{confidenceScore}; #Beta-User: macht diese Abfrage überhaupt Sinn? Ist halt so
     $data->{sessionId} = $decoded->{sessionId}                         if exists $decoded->{sessionId};
     $data->{siteId} = $decoded->{siteId}                               if exists $decoded->{siteId};
