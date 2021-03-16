@@ -119,17 +119,6 @@ my $languagevars = {
 };
 
 my $internal_mappings = {
-#  'Types' => {
-#     'airHumidity' => 'air humidity',
-#     'battery' => 'battery',
-#     'brightness' => 'brightness',
-#     'soilMoisture' => 'soil moisture',
-#     'targetValue' => 'target value',
-#     'temperature' => 'temperature',
-#     'volume' => 'volume',
-#     'waterLevel' => 'water level'
-#  },
-#  'changeType' => {
   'Change' => {
     'lightUp' => { 
       'Type' => 'brightness',
@@ -1112,8 +1101,8 @@ sub RHASSPY_getDevicesByIntentAndType {
             }
             elsif ( defined $type && $mappingType && $type =~ m{\A$mappingType\z}ix ) {
                 grep { m{\A$room\z}ix } @rooms
-                ? push @matchesInRoom, $_
-                : push @matchesOutsideRoom, $_;
+                ? push @matchesInRoom, $devs
+                : push @matchesOutsideRoom, $devs;
             }
         }
         return (\@matchesInRoom, \@matchesOutsideRoom);;
@@ -1126,7 +1115,7 @@ sub RHASSPY_getDevicesByIntentAndType {
     # devspec2array sendet bei keinen Treffern als einziges Ergebnis den devSpec String zurück
     return if (@devices == 1 && $devices[0] eq $devspec);
 
-    for(@devices) {
+    for my $devs (@devices) {
         # Array bilden mit Räumen des Devices
         #my @rooms = split m{,}x, AttrVal($_,"${prefix}Room",undef);
         my $rooms = AttrVal($_, "${prefix}Room", undef);
@@ -1138,15 +1127,13 @@ sub RHASSPY_getDevicesByIntentAndType {
         # Geräte sammeln
         if ( !defined $type ) {
             $rooms =~ m{\b$room\b}ix
-            #grep ( {/^$room$/i} @rooms)
-                ? push @matchesInRoom, $_ 
-                : push @matchesOutsideRoom, $_;
+                ? push @matchesInRoom, $devs 
+                : push @matchesOutsideRoom, $devs;
         }
         elsif ( defined $type && $mappingType && $type =~ m{\A$mappingType\z}ix ) {
-            #grep( {/^$room$/i} @rooms)
             $rooms =~ m{\b$room\b}ix
-            ? push @matchesInRoom, $_
-            : push @matchesOutsideRoom, $_;
+            ? push @matchesInRoom, $devs
+            : push @matchesOutsideRoom, $devs;
         }
     }
 
@@ -1169,7 +1156,7 @@ sub RHASSPY_getDeviceByIntentAndType {
     # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
     $device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
 
-    Log3($hash->{NAME}, 5, "Device selected: $device");
+    Log3($hash->{NAME}, 5, "Device selected: ". $device ? $device : "none");
 
     return $device;
 }
@@ -2699,11 +2686,7 @@ sub RHASSPY_ReplaceReadingsVal {
     my $hash = shift;
     my $arr  = shift // return;
 
-    #my $to_analyze = join q{ }, @{$arr};
     my $to_analyze = $arr;
-
-    #my @arr  = shift // return;
-    #my $to_analyze = join q{ }, @arr;
 
     my $readingsVal = sub ($$$$$) {
         my $all = shift;
@@ -2725,19 +2708,19 @@ sub RHASSPY_ReplaceReadingsVal {
             }
             $val = $r->{$n}{VAL} if($r && $r->{$n});
         }
-        $val = $dhash->{$n}   if(!defined $val && (!$t || $t eq 'i:'));
+        $val = $dhash->{$n}  if(!defined $val && (!$t || $t eq 'i:'));
         $val = $attr{$d}{$n} if(!defined $val && (!$t || $t eq 'a:') && $attr{$d});
         return $all if !defined $val;
 
-    if($s && $s =~ m{:d|:r|:i}x && $val =~ m{(-?\d+(\.\d+)?)}x) {
+        if($s && $s =~ m{:d|:r|:i}x && $val =~ m{(-?\d+(\.\d+)?)}x) {
             $val = $1;
             $val = int($val) if $s eq ':i';
-            $val = round($val, defined $1 ? $1 : 1) if $s =~ m{^:r(\d)?}x;
+            $val = round($val, defined $1 ? $1 : 1) if $s =~ m{\A:r(\d)?}x;
         }
         return $val;
     };
 
-    $to_analyze =~s/(\[([ari]:)?([a-zA-Z\d._]+):([a-zA-Z\d._\/-]+)(:(t|sec|i|d|r|r\d))?\])/$readingsVal->($1,$2,$3,$4,$5)/egx;
+    $to_analyze =~s{(\[([ari]:)?([a-zA-Z\d._]+):([a-zA-Z\d._\/-]+)(:(t|sec|i|d|r|r\d))?\])}{$readingsVal->($1,$2,$3,$4,$5)}egx;
     return $to_analyze;
 }
 
