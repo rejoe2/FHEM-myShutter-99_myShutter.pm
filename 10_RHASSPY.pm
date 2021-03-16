@@ -2354,40 +2354,41 @@ sub RHASSPY_handleIntentGetNumeric {
     }
     $value = round( ($value * ($maxVal - $minVal) / 100 + $minVal), 0) if $forcePercent;
 
+    my $isNumber = looks_like_number($value);
     # Punkt durch Komma ersetzen in Dezimalzahlen
     $value =~ s{\.}{\,}gx if $hash->{helper}{lng}->{commaconversion};
 
     my $location = $data->{Device} // $data->{Room};
-    # Antwort falls mappingType matched
-
+    
     # Antwort falls Custom Response definiert ist
-    #if    (defined($mapping->{response})) { $response = RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $room); }
     if ( defined $mapping->{response} ) { 
         return RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $location);
     }
-    
+    my $responses = $hash->{helper}{lng}->{responses}->{Change};
     #elsif ($mappingType =~ m/^(Helligkeit|Lautstärke|Sollwert)$/i) { $response = $data->{Device} . " ist auf $value gestellt."; }
     #if ($mappingType =~ m{\A$hash->{helper}{lng}->{Change}->{regex}->{setTarget}\z}xim) {
-    if ($mappingType eq 'setTarget' 
-            || $mappingType=~ m{\A$internal_mappings->{regex}->{setTarget}\z}xim 
-            || $mappingType=~ m{\A$de_mappings->{regex}->{setTarget}\z}xim) { 
-        $response = $hash->{helper}{lng}->{Change}->{responses}->{setTarget}; 
-    }
-    else {
 
-        $response = 
-            $hash->{helper}{lng}->{responses}->{Change}->{$mappingType} 
-        //  $hash->{helper}{lng}->{responses}->{Change}->{$de_mappings->{ToEn}->{$mappingType}} 
-        //  $hash->{helper}{lng}->{responses}->{Change}->{$type} 
-        //  $hash->{helper}{lng}->{responses}->{Change}->{$de_mappings->{ToEn}->{$type}}; 
-        ; 
-        #my $isNumber = looks_like_number($value);
-        $response = $response->{looks_like_number($value)} if ref $response eq 'HASH';
-   }
-   $response = $response            #we already are done?
-        // defined $mappingType ?   #or not and at least know the type...
-            $hash->{helper}{lng}->{Change}->{responses}->{knownType}
-            : $hash->{helper}{lng}->{Change}->{responses}->{unknownType};
+    # Antwort falls mappingType oder type matched
+    $response = 
+        $responses->{$mappingType} 
+        //  $responses->{$de_mappings->{ToEn}->{$mappingType}} 
+        //  $responses->{$type} 
+        //  $responses->{$de_mappings->{ToEn}->{$type}}; 
+        $response = $response->{$isNumber} if ref $response eq 'HASH';
+    #Log3($hash->{NAME}, 3, "#2378: resp is $response, mT is $mappingType");
+    
+    # Antwort falls mappingType auf regex (en bzw. de) matched
+    if (!defined $response && (
+            $mappingType=~ m{\A$internal_mappings->{regex}->{setTarget}\z}xim 
+            || $mappingType=~ m{\A$de_mappings->{regex}->{setTarget}\z}xim)) { 
+        $response = $responses->{setTarget}; 
+        #Log3($hash->{NAME}, 3, "#2384: resp now is $response");
+    }
+    if (!defined $response) {
+        defined $mappingType   #or not and at least know the type...
+            ? $responses->{knownType}
+            : $responses->{unknownType};
+    }
 
     # Variablen ersetzen?
     $response =~ s{(\$\w+)}{$1}eegx;
@@ -2428,7 +2429,7 @@ sub RHASSPY_handleIntentMediaControls {
     my $data = shift // return;
     my $command, my $device, my $room;
     my $mapping;
-    my $response = RHASSPY_getResponse($hash, "DefaultError");
+    my $response = RHASSPY_getResponse($hash, 'DefaultError');
 
     Log3($hash->{NAME}, 5, "handleIntentMediaControls called");
 
@@ -2459,9 +2460,9 @@ sub RHASSPY_handleIntentMediaControls {
                 };
                 $cmd = $mapping->{ $Media->{$command} };
                 Log3($hash->{NAME}, 4, "MediaControls with outdated mapping $command called. Please change to avoid future problems...");
-            }
+            } 
 
-            if ( defined $cmd ) {
+            else {
                 # Cmd ausführen
                 RHASSPY_runCmd($hash, $device, $cmd);
                 
