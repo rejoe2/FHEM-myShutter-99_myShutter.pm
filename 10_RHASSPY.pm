@@ -753,6 +753,7 @@ sub _analyze_genDevType {
     my $gdt    = AttrVal($device, 'genericDeviceType', undef); 
     my $allset = getAllSets($device);
     my $currentMapping;
+    
     if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+\b}x ) {
         #$hash->{helper}{devicemap}{devices}{$device}{intents}
         #{$key}->{$currentMapping{type}} = \%currentMapping;
@@ -760,18 +761,31 @@ sub _analyze_genDevType {
             { GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}}, 
               SetOnOff => {SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}}
             };
-        if ( $gdt eq 'light' && $allset =~ m{\bpct\b}x ) {
+        if ( $gdt eq 'light' && $allset =~ m{\bdim\b}x ) {
+            my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
+            $currentMapping->{SetNumeric} = {
+            brightness => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '3', type => 'brightness'}};
+        }
+        
+        elsif ( $gdt eq 'light' && $allset =~ m{\bpct\b}x ) {
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '5', type => 'brightness'}};
         }
-        if ( $gdt eq 'light' && $allset =~ m{\bdim\b}x ) {
-            $currentMapping->{SetNumeric} = {
-            brightness => { cmd => 'dim', currentVal => 'state', maxVal => '99', minVal => '0', step => '3', type => 'brightness'}};
-        }
+        
         elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness\b}x ) {
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', type => 'brightness'}};
         }
+        $devmp->{devices}{$device}->{intents} = $currentMapping;
+    }
+    elsif ( $gdt eq 'thermostat' ) {
+        my $desTemp = $allset =~ m{\b(desiredTemp)\b}x ? $1 : 'desired-temp';
+        my $measTemp = InternalVal($device, 'TYPE', 'unknown') eq 'CUL_HM' ? 'measured-temp' : 'temperature';
+        $currentMapping = 
+            { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'temperature'},
+            temperature => {currentVal => $measTemp, type => 'temperature'}}, 
+              SetNumeric => {'desired-temp' => { cmd => $desTemp, currentVal => $desTemp, maxVal => '28', minVal => '10', step => '0.5', type => 'temperature'}}
+            };
         $devmp->{devices}{$device}->{intents} = $currentMapping;
     }
 =pod    
