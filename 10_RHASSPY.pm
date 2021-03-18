@@ -252,6 +252,7 @@ BEGIN {
     FileRead
     trim
     looks_like_number
+    getAllSets
   ))
 
 };
@@ -287,8 +288,6 @@ sub RHASSPY_Define {
     my $h    = shift;
     #parseParams: my ( $hash, $a, $h ) = @_;
     
-    #my @args = split("[ \t]+", $def);
-
     # Minimale Anzahl der nötigen Argumente vorhanden?
     #return "Invalid number of arguments: define <name> RHASSPY DefaultRoom" if (int(@args) < 3);
 
@@ -306,11 +305,14 @@ sub RHASSPY_Define {
     initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
     $hash->{encoding} = $h->{encoding};
-    initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{useHash} = $h->{useHash};
     $hash->{addDGTAttrs} = $h->{addDGTAttrs};
     #Beta-User: Für's Ändern von defaultRoom oder prefix vielleicht (!?!) hilfreich: https://forum.fhem.de/index.php/topic,119150.msg1135838.html#msg1135838 (Rudi zu resolveAttrRename) 
-
+    
+    if ($hash->{addDGTAttrs}) {
+        addToAttrList(q{genericDeviceType});
+        addToAttrList(q{homebridgeMapping});
+    }
 
     # IODev setzen und als MQTT Client registrieren
     #$attr{$name}{IODev} = $IODev;
@@ -730,27 +732,58 @@ sub _analyze_genDevType {
     #convert to lower case
     for (@names) { $names[$_] = lc; }
     
-    my @rooms = split m{,}x,AttrVal($device,'alexaRoom',undef);
-    push @rooms, split m{,}x, AttrVal($device,'room',undef);
+    my @rooms;
+    my $attrv = join q{,}, (AttrVal($device,'alexaRoom',undef), AttrVal($device,'room',undef));
+    push @rooms, split m{,}x, $attrv if $attrv;
     $rooms[0] = $hash->{helper}{defaultRoom} if !@rooms;
 
     #convert to lower case
     for (@rooms) { $rooms[$_] = lc; }
-
+    
+    my $devmp = $hash->{helper}{devicemap};
+    
     for my $dn (@names) {
        for (@rooms) {
-           $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
+           $devmp->{rhasspyRooms}{$_}{$dn} = $device;
        }
     }
+    push @{$devmp->{devices}{$device}{rooms}}, @rooms;
     
-    my $hbmap = AttrVal($device, 'homeBridgeMapping', undef); 
-    #{ getAllSets('lampe2') }
-    
+    my $hbmap  = AttrVal($device, 'homeBridgeMapping', undef); 
+    my $gdt    = AttrVal($device, 'genericDeviceType', undef); 
+    my $allset = getAllSets($device);
+    my $currentMapping;
+    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+\b}x ) {
+        #$hash->{helper}{devicemap}{devices}{$device}{intents}
+        #{$key}->{$currentMapping{type}} = \%currentMapping;
+        $currentMapping = 
+            { GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}}, 
+              SetOnOff => {SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}}
+            };
+        if ( $gdt eq 'light' && $allset =~ m{\bpct\b}x ) {
+            $currentMapping->{SetNumeric} = {
+            brightness => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '5', type => 'brightness'}};
+        }
+        if ( $gdt eq 'light' && $allset =~ m{\bdim\b}x ) {
+            $currentMapping->{SetNumeric} = {
+            brightness => { cmd => 'dim', currentVal => 'state', maxVal => '99', minVal => '0', step => '3', type => 'brightness'}};
+        }
+        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness\b}x ) {
+            $currentMapping->{SetNumeric} = {
+            brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', type => 'brightness'}};
+        }
+        $devmp->{devices}{$device}->{intents} = $currentMapping;
+    }
 =pod    
     attr DEVICE genericDeviceType switch
     attr DEVICE genericDeviceType light
     für "brightness":
     attr DEVICE homebridgeMapping Brightness=brightness::brightness,maxValue=100,factor=0.39216,delay=true
+    
+    if(defined($defs{$d}) &&
+     defined($defs{$d}{READINGS}) &&
+     defined($defs{$d}{READINGS}{$n}) &&
+  
 
     attr DEVICE genericDeviceType blind
     
