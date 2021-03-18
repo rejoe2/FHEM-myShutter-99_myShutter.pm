@@ -788,6 +788,20 @@ sub _analyze_genDevType {
             };
         $devmp->{devices}{$device}->{intents} = $currentMapping;
     }
+    
+    if ( $gdt eq 'blind' ) {
+        if ( $allset =~ m{\bdim\b}x ) {
+            my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
+            $currentMapping->{SetNumeric} = {
+            setTarget => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '11', type => 'setTarget'}};
+        }
+        
+        elsif ( $allset =~ m{\bpct\b}x ) {
+            $currentMapping->{SetNumeric} = {
+            setTarget => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '13', type => 'setTarget'}};
+        }
+        $devmp->{devices}{$device}->{intents} = $currentMapping;
+    }    
 =pod    
     attr DEVICE genericDeviceType switch
     attr DEVICE genericDeviceType light
