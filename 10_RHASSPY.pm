@@ -611,12 +611,14 @@ sub initialize_devicemap {
 
     my @devices = devspec2array($devspec);
 
-    # devspec2array sendet bei keinen Treffern als einziges Ergebnis den devSpec String zurück #Beta-User: ist das so?
+    # when called with just one keyword, devspec2array may return the keyword, even if the device doesn't exist...
     return if (@devices == 1 && $devices[0] eq $devspec);
     
     for (@devices) {
-        my $done = _analyze_rhassypAttr($hash, $_);
-        _analyze_genDevType($hash, $_) if !$done;
+        #my $done = _analyze_rhassypAttr($hash, $_);
+        #_analyze_genDevType($hash, $_) if !$done;
+        _analyze_genDevType($hash, $_) if $hash->{addDGTAttrs};
+        _analyze_rhassypAttr($hash, $_);
     }
 =pod    
     $room = RHASSPY_roomName($hash, $data);
