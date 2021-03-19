@@ -2720,15 +2720,28 @@ sub RHASSPY_handleIntentSetTimer {
     my $data = shift // return;
     my $siteId = $data->{siteId} // return;
     my $name = $hash->{NAME};
-    my $unit, my $value;
-
-    my $response = RHASSPY_getResponse($hash, 'DefaultError');
+    my ($unit, $value, $response);
 
     Log3($name, 5, 'handleIntentSetTimer called');
 
     my $room = $data->{Room} // $siteId;
-    if ($data->{Value}) {$value = $data->{Value}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
-    if ($data->{Unit}) {$unit = $data->{Unit}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
+    
+    #additional logic for new type of timer setting
+    if ($data->{sec}) { 
+        $value = $data->{sec};
+        $unit  = q{seconds};
+    }
+    if ($data->{min}) { 
+        $value += 60 * $data->{min};
+        $unit  = q{seconds};
+    }
+    if ($data->{hour}) { 
+        $value += 3600 * $data->{hour};
+        $unit  = q{seconds};
+    }
+    
+    if ($data->{Value} && !$value) {$value = $data->{Value}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
+    if ($data->{Unit} && !$unit) {$unit = $data->{Unit}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
     
     my $siteIds = ReadingsVal( $name, 'siteIds',0);
     RHASSPY_fetchSiteIds($hash) if !$siteIds;
@@ -2764,6 +2777,8 @@ sub RHASSPY_handleIntentSetTimer {
         $response = $hash->{helper}{lng}->{responses}->{timerSet};
         $response =~ s{(\$\w+)}{$1}eegx;
     }
+
+    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $name;
