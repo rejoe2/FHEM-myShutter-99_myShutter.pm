@@ -758,7 +758,6 @@ sub _analyze_genDevType {
     push @{$devmp->{devices}{$device}{rooms}}, @rooms;
 
     my $hbmap  = AttrVal($device, 'homeBridgeMapping', q{}); 
-    my $gdt    = AttrVal($device, 'genericDeviceType', q{}); 
     my $allset = getAllSets($device);
     my $currentMapping;
 
@@ -1356,7 +1355,7 @@ sub RHASSPY_getDeviceByMediaChannel {
         }
         for (sort keys %{$hash->{helper}{devicemap}{Channels}}) {
             #$device = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
-            my $devices = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
+            $devices = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
             $device = ${$devices}[0];
         
             #return $device if $device;
@@ -2510,9 +2509,9 @@ sub RHASSPY_handleIntentGetNumeric {
         #Log3($hash->{NAME}, 3, "#2384: resp now is $response");
     }
     if (!defined $response) {
-                                                          
-        defined $mappingType   
-            ? $responses->{knownType} #or not and at least know the type...
+        #or not and at least know the type...?
+        $response = defined $mappingType   
+            ? $responses->{knownType} 
             : $responses->{unknownType};
     }
 
