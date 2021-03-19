@@ -309,10 +309,10 @@ sub RHASSPY_Define {
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
     $hash->{encoding} = $h->{encoding};
     $hash->{useHash} = $h->{useHash};
-    $hash->{addDGTAttrs} = $h->{addDGTAttrs};
+    $hash->{useGenericAttrs} = $h->{useGenericAttrs};
     #Beta-User: Für's Ändern von defaultRoom oder prefix vielleicht (!?!) hilfreich: https://forum.fhem.de/index.php/topic,119150.msg1135838.html#msg1135838 (Rudi zu resolveAttrRename) 
 
-    if ($hash->{addDGTAttrs}) {
+    if ($hash->{useGenericAttrs}) {
         addToAttrList(q{genericDeviceType});
         addToAttrList(q{homebridgeMapping});
     }
@@ -622,7 +622,7 @@ sub initialize_devicemap {
     for (@devices) {
         #my $done = _analyze_rhassypAttr($hash, $_);
         #_analyze_genDevType($hash, $_) if !$done;
-        _analyze_genDevType($hash, $_) if $hash->{addDGTAttrs};
+        _analyze_genDevType($hash, $_) if $hash->{useGenericAttrs};
         _analyze_rhassypAttr($hash, $_);
     }
 =pod    
@@ -781,7 +781,7 @@ sub _analyze_genDevType {
 
         elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness\b}x ) {
             $currentMapping->{SetNumeric} = {
-            brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', type => 'brightness'}};
+                brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', map => 'percent', type => 'brightness'}};
         }
         $devmp->{devices}{$device}->{intents} = $currentMapping;
     }
@@ -2324,6 +2324,7 @@ sub RHASSPY_handleIntentSetNumeric {
     my $value  = $data->{Value};
     my $room   = RHASSPY_roomName($hash, $data);
 
+
     # Gerät über Name suchen, oder falls über Lautstärke ohne Device getriggert wurde das ActiveMediaDevice suchen
     if ( exists $data->{Device} ) {
         $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
@@ -2334,10 +2335,9 @@ sub RHASSPY_handleIntentSetNumeric {
             // return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoActiveMediaDevice'));
     }
 
-    if ( !defined $device ) {
-        return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound'));
-    }
-    
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound')) if !defined $device;
+
+
     my $mapping = 
         RHASSPY_getMapping($hash, $device, 'SetNumeric', $type, defined $hash->{helper}{devicemap}, 0)
         // return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
