@@ -61,8 +61,18 @@ my %sets = (
 
 my $languagevars = {
   'units' => {
-      'unitHours' => '(hour|hours)',
-      'unitMinutes' => '(minute|minutes)'
+      'unitHours' => {
+          0    => 'hours',
+          1    => 'one hour'
+      },
+      'unitMinutes' => {
+          0    => 'minutes',
+          1    => 'one minute'
+      },
+      'unitSeconds' => {
+          0    => 'seconds',
+          1    => 'one second'
+      }
    },
   'responses' => { 
     'DefaultError' => "Sorry but something seems not to work as expected",
@@ -75,7 +85,7 @@ my $languagevars = {
     'DefaultConfirmationTimeout' => "Sorry too late to confirm",
     'DefaultCancelConfir' => "Thanks aborted",
     'DefaultConfirReceived' => "ok will do it",
-    'timerSet'   => 'Timer in room $room has been set to $value $unit',
+    'timerSet'   => 'Timer in room $room has been set to $text',
     'timerEnd'   => {
         '0' => 'Timer expired',
         '1' =>  'Timer in room $room expired'
@@ -665,20 +675,34 @@ sub initialize_devicemap {
 sub _analyze_rhassypAttr {
     my $hash   = shift // return;
     my $device = shift // return;
-    
+
     my $prefix = $hash->{prefix};
-    my $ret = 1;
+    
+    return if !defined AttrVal($device,"${prefix}Room",undef) 
+          &&  !defined AttrVal($device,"${prefix}Name",undef)
+          &&  !defined AttrVal($device,"${prefix}Channels",undef) 
+          &&  !defined AttrVal($device,"${prefix}Colors",undef);
+
     #rhasspyRooms ermitteln
-    my @rooms = split m{,}x,AttrVal($device,"${prefix}Room",q{});
+    my @rooms;
+    my $attrv = AttrVal($device,"${prefix}Room",undef);
+    @rooms = split m{,}x, $attrv if defined $attrv;
+    @rooms = $hash->{helper}{devicemap}{devices}{$device}{rooms} if !@rooms;
     if (!@rooms) {
         $rooms[0] = $hash->{helper}{defaultRoom};
-        $ret = 0;
-    };
+    } #else {
+    #    @rooms = get_unique(\@rooms);
+    #}
 
     #rhasspyNames ermitteln
-    my @names = split m{,}x, AttrVal($device,"${prefix}Name",q{});
+    my @names;
+    $attrv = AttrVal($device,"${prefix}Name",undef);
+    push @names, split m{,}x, $attrv if $attrv;
     
-    return 0 if !@names && !$ret; #might need review!
+    #if (!@names) {
+    #    @names = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
+    #};
+    #return if !@names; #might need review!
     
     for my $dn (@names) {
        for (@rooms) {
@@ -709,7 +733,7 @@ sub _analyze_rhassypAttr {
         #$key = lc($key);
         #$val = lc($val);
         my %currentMapping = RHASSPY_splitMappingString($val);
-
+    next if !%currentMapping;
         # Übersetzen, falls möglich:
         $currentMapping{type} = 
             defined $currentMapping{type} ?
@@ -717,9 +741,12 @@ sub _analyze_rhassypAttr {
             : $key;
         $hash->{helper}{devicemap}{devices}{$device}{intents}{$key}->{$currentMapping{type}} = \%currentMapping;
     }
-    push @{$hash->{helper}{devicemap}{devices}{$device}{rooms}}, @rooms;
 
-    return 1;
+    my $allrooms = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
+    for (@rooms) {
+        push @{$allrooms}, $_ if !grep { m{\A$_\z}ix } @{$allrooms};
+    }
+    return;
 }
 
 
@@ -730,103 +757,93 @@ sub _analyze_genDevType {
     #prerequesite: gdt has to be set!
     my $gdt = AttrVal($device, 'genericDeviceType', undef) // return; 
 
+    my @names;
     #additional names?
-    my @names = split m{,}x, AttrVal($device,'alexaName',q{});
-    push @names, split m{,}x, AttrVal($device,'siriName',q{});
+    my $attrv = AttrVal($device,'alexaName', undef);
+    push @names, split m{,}x, $attrv if $attrv;
+
+    $attrv = AttrVal($device,'siriName',undef);
+    push @names, split m{,}x, $attrv if $attrv;
+
     my $alias = AttrVal($device,'alias',undef);
-    push @names, $alias if !@names && $alias;
-    push @names, $device if !@names;
+    $names[0] = $alias if !@names && $alias;
+    $names[0] = $device if !@names;
 
     #convert to lower case
     for (@names) { $_ = lc; }
+    @names = get_unique(\@names);
 
     my @rooms;
-    my $attrv = join q{,}, ( AttrVal($device,'alexaRoom',q{}), AttrVal($device,'room',q{}) );
+    $attrv = AttrVal($device,'alexaRoom', undef);
+    push @rooms, split m{,}x, $attrv if $attrv;
+
+    $attrv = AttrVal($device,'room',undef);
     push @rooms, split m{,}x, $attrv if $attrv;
     $rooms[0] = $hash->{helper}{defaultRoom} if !@rooms;
 
     #convert to lower case
-    for (@rooms) { $_ = lc; }
+    for (@rooms) { $_ = lc }
+    @rooms = get_unique(\@rooms);
 
-    my $devmp = $hash->{helper}{devicemap};
+    #my $devmp = $hash->{helper}{devicemap};
 
     for my $dn (@names) {
        for (@rooms) {
-           $devmp->{rhasspyRooms}{$_}{$dn} = $device;
+           $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
        }
     }
-    push @{$devmp->{devices}{$device}{rooms}}, @rooms;
+    push @{$hash->{helper}{devicemap}{devices}{$device}{rooms}} , @rooms;
 
     my $hbmap  = AttrVal($device, 'homeBridgeMapping', q{}); 
     my $allset = getAllSets($device);
     my $currentMapping;
 
-    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+[\b:]}x ) {
-        #$hash->{helper}{devicemap}{devices}{$device}{intents}
-        #{$key}->{$currentMapping{type}} = \%currentMapping;
+    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+[\b:]}xms ) {
         $currentMapping = 
             { GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}}, 
-              SetOnOff => {SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}}
+              SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}}
             };
-        if ( $gdt eq 'light' && $allset =~ m{\bdim\b}x ) {
+        if ( $gdt eq 'light' && $allset =~ m{\bdim[\b:]}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '3', type => 'brightness'}};
         }
 
-        elsif ( $gdt eq 'light' && $allset =~ m{\bpct\b}x ) {
+        elsif ( $gdt eq 'light' && $allset =~ m{\bpct[\b:]}xms ) {
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '5', type => 'brightness'}};
         }
 
-        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness\b}x ) {
+        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness[\b:]}xms ) {
             $currentMapping->{SetNumeric} = {
                 brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', map => 'percent', type => 'brightness'}};
         }
-        $devmp->{devices}{$device}->{intents} = $currentMapping;
+        $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
     elsif ( $gdt eq 'thermostat' ) {
-        my $desTemp = $allset =~ m{\b(desiredTemp)\b}x ? $1 : 'desired-temp';
+        my $desTemp = $allset =~ m{\b(desiredTemp)[\b:]}xms ? $1 : 'desired-temp';
         my $measTemp = InternalVal($device, 'TYPE', 'unknown') eq 'CUL_HM' ? 'measured-temp' : 'temperature';
         $currentMapping = 
             { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'temperature'},
             temperature => {currentVal => $measTemp, type => 'temperature'}}, 
               SetNumeric => {'desired-temp' => { cmd => $desTemp, currentVal => $desTemp, maxVal => '28', minVal => '10', step => '0.5', type => 'temperature'}}
             };
-        $devmp->{devices}{$device}->{intents} = $currentMapping;
+        $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
     if ( $gdt eq 'blind' ) {
-        if ( $allset =~ m{\bdim\b}x ) {
+        if ( $allset =~ m{\bdim[\b:]}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
             $currentMapping->{SetNumeric} = {
             setTarget => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '11', type => 'setTarget'}};
         }
 
-        elsif ( $allset =~ m{\bpct\b}x ) {
+        elsif ( $allset =~ m{\bpct[\b:]}xms ) {
             $currentMapping->{SetNumeric} = {
             setTarget => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '13', type => 'setTarget'}};
         }
-        $devmp->{devices}{$device}->{intents} = $currentMapping;
-    }    
-=pod    
-    attr DEVICE genericDeviceType switch
-    attr DEVICE genericDeviceType light
-    für "brightness":
-    attr DEVICE homebridgeMapping Brightness=brightness::brightness,maxValue=100,factor=0.39216,delay=true
-    
-    if(defined($defs{$d}) &&
-     defined($defs{$d}{READINGS}) &&
-     defined($defs{$d}{READINGS}{$n}) &&
-  
-
-    attr DEVICE genericDeviceType blind
-    
-    attr DEVICE genericDeviceType thermostat
-    
-
-    
-=cut    
+        $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
+    }   
     return;
 }
 
@@ -2714,34 +2731,48 @@ sub RHASSPY_handleIntentSetColor {
     return $device;
 }
 
+
 # Handle incoming SetTimer intents
 sub RHASSPY_handleIntentSetTimer {
     my $hash = shift;
     my $data = shift // return;
     my $siteId = $data->{siteId} // return;
     my $name = $hash->{NAME};
-    my ($unit, $value, $response);
+    my ($value, $response, $time, $text);
 
     Log3($name, 5, 'handleIntentSetTimer called');
 
     my $room = $data->{Room} // $siteId;
     
-    #additional logic for new type of timer setting
-    if ($data->{sec}) { 
-        $value = $data->{sec};
-        $unit  = q{seconds};
+    if ($data->{hour}) {
+        my $hour = $data->{hour};
+        $value = 3600 * $hour;
+        if ($hour > 1) {
+            $text = $hour." ".$hash->{helper}{lng}->{units}->{unitHours}->{0}
+        } else {
+            $text = $hash->{helper}{lng}->{units}->{unitHours}->{1}
+        }
     }
-    if ($data->{min}) { 
-        $value += 60 * $data->{min};
-        $unit  = q{seconds};
+    if ($data->{min}) {
+        my $min = $data->{min};
+        $value += 60 * $min;
+        if ($min > 1) {
+            $text .= $min." ".$hash->{helper}{lng}->{units}->{unitMinutes}->{0}
+        } else {
+            $text .= $hash->{helper}{lng}->{units}->{unitMinutes}->{1}
+        }
     }
-    if ($data->{hour}) { 
-        $value += 3600 * $data->{hour};
-        $unit  = q{seconds};
+    if ($data->{sec}) {
+        my $sec = $data->{sec};
+        $value += $sec;
+        if ($sec > 1) {
+            $text .= $sec." ".$hash->{helper}{lng}->{units}->{unitSeconds}->{0}
+        } else {
+            $text .= $hash->{helper}{lng}->{units}->{unitSeconds}->{1}
+        }
     }
-    
-    if ($data->{Value} && !$value) {$value = $data->{Value}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
-    if ($data->{Unit} && !$unit) {$unit = $data->{Unit}} else {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
+
+    if (!$value) {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
     
     my $siteIds = ReadingsVal( $name, 'siteIds',0);
     RHASSPY_fetchSiteIds($hash) if !$siteIds;
@@ -2755,18 +2786,14 @@ sub RHASSPY_handleIntentSetTimer {
         $responseEnd = $hash->{helper}{lng}->{responses}->{timerEnd}->{0};
     }
 
-    if( $value && $unit && $timerRoom ) {
-        my $time = $value;
+    if( $value && $text && $timerRoom ) {
         my $roomReading = "timer_".makeReadingName($room);
         
-        if    (  $unit =~ m{ $hash->{helper}{lng}->{units}->{unitMinutes} }x ) {$time = $value*60}
-        elsif ( (  $unit =~ m{ $hash->{helper}{lng}->{units}->{unitHours} }x ) )   {$time = $value*3600};
-        
-        $time = strftime('%H:%M:%S', gmtime $time);
+        $value = strftime('%H:%M:%S', gmtime $value);
         
         $responseEnd =~ s{(\$\w+)}{$1}eegx;
 
-        my $cmd = qq(defmod $roomReading at +$time set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";;setreading $name $roomReading 0);
+        my $cmd = qq(defmod $roomReading at +$value set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";;setreading $name $roomReading 0);
         
         RHASSPY_runCmd($hash,'',$cmd);
 
@@ -3057,15 +3084,7 @@ hermes/dialogueManager/sessionEnded</code></pre></p>
 <p>&nbsp;</p>
 <p><b>ToDo</b></p>
 <ul>
-                                                                                                                                                                                                                                                                
-                                                         
-                                                                                                                                                                                                                                                                                                                                                              
-                                                                                                                                          
-<li>Status: &quot;[Device:Reading]&quot; isn't recognized</li>
-<li>MediaChannels <code>RHASSPY_getCmd($hash, $device, 'rhasspyChannels', $channel, undef);</code> stays undef</li>
-<li>Add Shortcuts to README (<a href="https://forum.fhem.de/index.php/topic,118926.msg1136115.html#msg1136115">https://forum.fhem.de/index.php/topic,118926.msg1136115.html#msg1136115</a>) (drhirn)</li>
-<li>Shortcuts: &quot;Longpoll&quot; only works when &quot;n&quot; is given. Perl-Code does never &quot;longpoll&quot;</li>
-<li>GetNumeric: Answer "already at max/min" if minVal or maxVal is reached</li>
+<li><s>Status: &quot;[Device:Reading]&quot; isn't recognized</s></li>
 <li><s>getValue doesn't work with device/reading (e.g. [lampe1:volume])</s></li>
 <li><s>SetTimer: $hash->{siteIds} leer beim Start von FHEM: <code>PERL WARNING: Use of uninitialized value in split at ./FHEM/10_RHASSPY.pm line 2194.</code></s></li>
 <li><s>Dialogue Session wird nicht beendet, wenn SetMute = 1; Reading listening_$roomReading wird nicht 0. Weil das in onmessage nicht zurück gesetzt wird.</s></li>
@@ -3078,4 +3097,4 @@ hermes/dialogueManager/sessionEnded</code></pre></p>
 </ul>
 
 =end html
-=cut
+=cut=cut
