@@ -687,7 +687,7 @@ sub _analyze_rhassypAttr {
     my @rooms;
     my $attrv = AttrVal($device,"${prefix}Room",undef);
     @rooms = split m{,}x, $attrv if defined $attrv;
-    @rooms = $hash->{helper}{devicemap}{devices}{$device}{rooms} if !@rooms;
+    @rooms = @{$hash->{helper}{devicemap}{devices}{$device}->{rooms}} if !@rooms;
     if (!@rooms) {
         $rooms[0] = $hash->{helper}{defaultRoom};
     } #else {
@@ -785,14 +785,12 @@ sub _analyze_genDevType {
     for (@rooms) { $_ = lc }
     @rooms = get_unique(\@rooms);
 
-    #my $devmp = $hash->{helper}{devicemap};
-
     for my $dn (@names) {
        for (@rooms) {
            $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
        }
     }
-    push @{$hash->{helper}{devicemap}{devices}{$device}{rooms}} , @rooms;
+    push @{$hash->{helper}{devicemap}{devices}{$device}{rooms}}, @rooms;
 
     my $hbmap  = AttrVal($device, 'homeBridgeMapping', q{}); 
     my $allset = getAllSets($device);
