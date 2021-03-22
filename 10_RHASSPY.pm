@@ -307,8 +307,7 @@ sub RHASSPY_Define {
 
     my $name = shift @{$anon};
     my $type = shift @{$anon};
-    my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{rhasspy}; #Beta-User: extended Perl defined-or
-    #) = @args;
+    my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
     $hash->{MODULE_VERSION} = "0.4.5c";
     $hash->{helper}{defaultRoom} = $defaultRoom;
@@ -2768,17 +2767,14 @@ sub RHASSPY_setVolume {
         sessionId => '0'
     };
 
-
     Log3($hash->{NAME}, 5, 'setVolume called');
 
-                                                            
     $sendData->{siteId} = $cmd->{siteId};
     $sendData->{volume} = 0 + $cmd->{volume};
 
     my $json = toJSON($sendData);
-    return IOWrite($hash, 'publish', qq{rhasspy/audioServer/setVolume $json});    
-      
-           
+    return IOWrite($hash, 'publish', qq{rhasspy/audioServer/setVolume $json});
+
 }
 
 
@@ -2875,7 +2871,7 @@ Denkbare Verwendung:
 - Bestätigungs-Mapping
 
 # "rhasspyGroup" als weiteres Attribut?
-Beta-User: Tendenziell fehlt zwischen Einzeldevice und Room noch ein optionales  Unterscheidungsmerkmal Ich würde dazu neigen, das (allg.) group-Attribut auszuwerten und 
+Beta-User: Tendenziell fehlt zwischen Einzeldevice und Room noch ein optionales  Unterscheidungsmerkmal Die Auswertung des (allg.) group-Attributs ist vorbereitet... 
 
 =end ToDo
 
