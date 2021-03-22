@@ -42,6 +42,7 @@ use Data::Dumper;
 
 sub ::RHASSPY_Initialize { goto &RHASSPY_Initialize }
 
+#Beta-User: no GefFn defined...?
 my %gets = (
     version => q{},
     status  => q{}
@@ -54,8 +55,7 @@ my %sets = (
     textCommand  => [],
     trainRhasspy => [qw(noArg)],
     fetchSiteIds => [qw(noArg)],
-                                   
-    reinit       => [qw(language devicemap all)],
+    update       => [qw(language devicemap devicemap_only slots slots_no_training all)],
     volume       => []
 );
 
@@ -306,10 +306,10 @@ sub RHASSPY_Define {
 
     my $name = shift @{$anon};
     my $type = shift @{$anon};
-    my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{RHASSPY}; #Beta-User: extended Perl defined-or
+    my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{rhasspy}; #Beta-User: extended Perl defined-or
     #) = @args;
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
-    $hash->{MODULE_VERSION} = "0.4.5beta";
+    $hash->{MODULE_VERSION} = "0.4.5c";
     $hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -318,7 +318,7 @@ sub RHASSPY_Define {
     initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
     $hash->{encoding} = $h->{encoding};
-    $hash->{useHash} = $h->{useHash};
+    #$hash->{useHash} = $h->{useHash};
     $hash->{useGenericAttrs} = $h->{useGenericAttrs};
     #Beta-User: Für's Ändern von defaultRoom oder prefix vielleicht (!?!) hilfreich: https://forum.fhem.de/index.php/topic,119150.msg1135838.html#msg1135838 (Rudi zu resolveAttrRename) 
 
@@ -348,7 +348,7 @@ sub firstInit {
     
     RHASSPY_fetchSiteIds($hash) if !ReadingsVal( $hash->{NAME}, 'siteIds', 0 );
     
-    initialize_devicemap($hash) if defined $hash->{useHash};
+    initialize_devicemap($hash); # if defined $hash->{useHash};
 
     return;
 }
@@ -388,6 +388,8 @@ sub initialize_prefix {
     addToAttrList("${prefix}Name");  #rhasspyName
     addToAttrList("${prefix}Room");  #rhasspyRoom
     addToAttrList("${prefix}Mapping:textField-long"); #rhasspyMapping
+    addToAttrList("${prefix}Channels:textField-long");
+    addToAttrList("${prefix}Colors:textField-long");
 
     return;
 }
@@ -411,13 +413,19 @@ sub RHASSPY_Delete {
     
     #Beta-User: globale Attribute löschen
     for (devspec2array("${prefix}Mapping=.+")) {
-        delFromDevAttrList($_,"${prefix}NameMapping:textField-long");
+        delFromDevAttrList($_,"${prefix}Mapping:textField-long");
     }
     for (devspec2array("${prefix}Name=.+")) {
         delFromDevAttrList($_,"${prefix}Name");
     }
     for (devspec2array("${prefix}Room=.+")) {
         delFromDevAttrList($_,"${prefix}Room");
+    }
+    for (devspec2array("${prefix}Room=.+")) {
+        delFromDevAttrList($_,"${prefix}Channels");
+    }
+    for (devspec2array("${prefix}Room=.+")) {
+        delFromDevAttrList($_,"${prefix}Colors");
     }
 
 =end comment
@@ -475,20 +483,33 @@ sub RHASSPY_Set {
     $params = $h if defined $h->{text} || defined $h->{path} || defined $h->{volume};
     return $dispatch->{$command}->($hash, $params) if ref $dispatch->{$command} eq 'CODE';
     
-    if ($command eq 'reinit') {
+    if ($command eq 'update') {
         if ($values[0] eq 'language') {
             return initialize_Language($hash, $hash->{LANGUAGE});
         }
         if ($values[0] eq 'devicemap') {
+            initialize_devicemap($hash);
+            RHASSPY_updateSlots($hash);
+            return RHASSPY_trainRhasspy($hash);
+        }
+        if ($values[0] eq 'devicemap_only') {
+            return initialize_devicemap($hash);
+        }
+        if ($values[0] eq 'slots') {
+            RHASSPY_updateSlots($hash);
+            return RHASSPY_trainRhasspy($hash);
+        }
+        if ($values[0] eq 'slots_no_training') {
+            RHASSPY_updateSlots($hash);
             return initialize_devicemap($hash);
         }
         if ($values[0] eq 'all') {
             initialize_Language($hash, $hash->{LANGUAGE});
-            return initialize_devicemap($hash);
+            initialize_devicemap($hash);
+            RHASSPY_updateSlots($hash);
+            return RHASSPY_trainRhasspy($hash);
         }
-        
     }
-    
     return;
 }
 
@@ -550,7 +571,7 @@ sub RHASSPY_init_shortcuts {
             $hash->{helper}{shortcuts}{$intent}{perl} = $perlcommand;
             $hash->{helper}{shortcuts}{$intent}{NAME} = $hash->{NAME};
             next;
-        } 
+        }
         next if !length $line;
         my($unnamed, $named) = parseParams($line); 
         #return "unnamed parameters are not supported! (line: $line)" if ($unnamed) > 1 && $init_done;
@@ -687,7 +708,7 @@ sub _analyze_rhassypAttr {
     my @rooms;
     my $attrv = AttrVal($device,"${prefix}Room",undef);
     @rooms = split m{,}x, $attrv if defined $attrv;
-    @rooms = @{$hash->{helper}{devicemap}{devices}{$device}->{rooms}} if !@rooms;
+    @rooms = @{$hash->{helper}{devicemap}{devices}{$device}->{rooms}} if !@rooms && defined $hash->{helper}{devicemap}{devices}{$device}->{rooms};
     if (!@rooms) {
         $rooms[0] = $hash->{helper}{defaultRoom};
     } #else {
@@ -760,7 +781,7 @@ sub _analyze_genDevType {
     my @names;
     #additional names?
     my $attrv = AttrVal($device,'alexaName', undef);
-    push @names, split m{,}x, $attrv if $attrv;
+    push @names, split m{;}x, $attrv if $attrv;
 
     $attrv = AttrVal($device,'siriName',undef);
     push @names, split m{,}x, $attrv if $attrv;
@@ -796,52 +817,69 @@ sub _analyze_genDevType {
     my $allset = getAllSets($device);
     my $currentMapping;
 
-    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+[\b:]}xms ) {
+    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+[\b:\s]}xms ) {
         $currentMapping = 
             { GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}}, 
               SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}}
             };
-        if ( $gdt eq 'light' && $allset =~ m{\bdim[\b:]}xms ) {
+        if ( $gdt eq 'light' && $allset =~ m{\bdim[\b:\s]}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '3', type => 'brightness'}};
         }
 
-        elsif ( $gdt eq 'light' && $allset =~ m{\bpct[\b:]}xms ) {
+        elsif ( $gdt eq 'light' && $allset =~ m{\bpct[\b:\s]}xms ) {
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '5', type => 'brightness'}};
         }
 
-        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness[\b:]}xms ) {
+        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness[\b:\s]}xms ) {
             $currentMapping->{SetNumeric} = {
                 brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', map => 'percent', type => 'brightness'}};
         }
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
     elsif ( $gdt eq 'thermostat' ) {
-        my $desTemp = $allset =~ m{\b(desiredTemp)[\b:]}xms ? $1 : 'desired-temp';
+        my $desTemp = $allset =~ m{\b(desiredTemp)[\b:\s]}xms ? $1 : 'desired-temp';
         my $measTemp = InternalVal($device, 'TYPE', 'unknown') eq 'CUL_HM' ? 'measured-temp' : 'temperature';
         $currentMapping = 
             { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'temperature'},
             temperature => {currentVal => $measTemp, type => 'temperature'}}, 
-              SetNumeric => {'desired-temp' => { cmd => $desTemp, currentVal => $desTemp, maxVal => '28', minVal => '10', step => '0.5', type => 'temperature'}}
+            SetNumeric => {'desired-temp' => { cmd => $desTemp, currentVal => $desTemp, maxVal => '28', minVal => '10', step => '0.5', type => 'temperature'}}
             };
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
     if ( $gdt eq 'blind' ) {
-        if ( $allset =~ m{\bdim[\b:]}xms ) {
+        if ( $allset =~ m{\bdim[\b:\s]}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
-            $currentMapping->{SetNumeric} = {
-            setTarget => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '11', type => 'setTarget'}};
+            $currentMapping = 
+            { GetNumeric => { dim => {currentVal => 'state', type => 'setTarget' } },
+            SetOnOff => { SetOnOff => {cmdOff => 'dim 0', type => 'SetOnOff', cmdOn => "dim $maxval"} },
+            SetNumeric => { setTarget => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '11', type => 'setTarget'} }
+            };
         }
 
-        elsif ( $allset =~ m{\bpct[\b:]}xms ) {
-            $currentMapping->{SetNumeric} = {
-            setTarget => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '13', type => 'setTarget'}};
+        elsif ( $allset =~ m{\bpct[\b:\s]}xms ) {
+            $currentMapping = { 
+            GetNumeric => { 'pct' => {currentVal => 'pct', type => 'setTarget'} },
+            SetOnOff => { SetOnOff => {cmdOff => 'pct 0', type => 'SetOnOff', cmdOn => 'pct 100'} },
+            SetNumeric => { setTarget => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '13', type => 'setTarget'} }
+            };
         }
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
-    }   
+    }
+
+    if ( $gdt eq 'media' ) { #genericDeviceType media
+        $currentMapping = { 
+            GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}},
+            SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}},
+            GetNumeric => { 'volume' => {currentVal => 'volume', type => 'volume' }},
+              SetNumeric => {'volume' => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 'channel' => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}}, 
+              MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'}};
+        $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
+    }
+
     return;
 }
 
@@ -1948,8 +1986,7 @@ sub RHASSPY_updateSlots {
     my $language = $hash->{LANGUAGE};
     my $fhemId   = $hash->{fhemId};
     my $method   = q{POST};
-    my $contenttype = q{application/json};
-
+    
     initialize_devicemap($hash) if defined $hash->{useHash} && $hash->{useHash};
 
     # Collect everything and store it in arrays
@@ -2958,6 +2995,50 @@ sub RHASSPY_readLanguageFromFile {
 __END__
 
 =pod
+
+=begin ToDo
+
+#Hash-Usage (Beta-User):
+Die Hash-Struktur der language-File sollte gegen die interne geprüft werden und nur vorhandene Keys bzw. SCALAR ersetzt werden. Sonst kann es zu schnell zu Crashes kommen, wenn der User etwas falsch macht oder noch nicht auf dem letzten Stand ist.
+
+# Timer:
+- Sollte als Wecker ergänzt werden, so dass man auch absolute Uhrzeiten angeben kann.
+- Die Antwort sollte sich danach richten, wann der Timer abläuft, z.B. bis 100 Sekunden => "auf ... Sekunden gestellt", bis 15/20 Minuten => "auf ... Minuten gestellt", sonst: "auf [morgen] ... Uhr ... (Sekunden) gestellt" 
+- "Benannten Timer" als Option ergänzen
+
+# "rhasspySpecials" als weiteres Attribut?
+Denkbare Verwendung:
+- siteId2room für mobile Geräte (Auswertung BT-RSSI per Perl, aktives Setzen über ein Reading? Oder einen intent?
+- Ansteuerung von Lamellenpositionen (auch an anderem Device?)
+- Bestätigungs-Mapping
+
+
+=end ToDo
+
+=begin ToClarify
+
+#defaultRoom (JensS):
+- überhaupt erforderlich?
+- Schreibweise: RHASSPY ist raus, Rhasspy scheint der überkommene Raumname für die devspec zu sein => ist erst mal weiter beides drin
+
+# GetTimer implementieren?
+https://forum.fhem.de/index.php/topic,113180.msg1130139.html#msg1130139
+
+# Audiowiedergabe
+(Beispiel: "Flasche" mit Timer)
+https://forum.fhem.de/index.php/topic,113180.msg1130450.html#msg1130450
+
+# Kopfrechnen 
+ist eine Stärke von Rhasspy. Solch ein Intent benötigt wenig Code.
+https://forum.fhem.de/index.php/topic,113180.msg1130754.html#msg1130754
+
+# Wetterdurchsage
+Ist möglich. Dazu hatte ich einen rudimentären Intent in diesem Thread erstellt. Müsste halt nur erweitert werden.
+https://forum.fhem.de/index.php/topic,113180.msg1130754.html#msg1130754
+
+
+=end ToClarify
+
 =encoding utf8
 =item device
 =item summary Control FHEM with Rhasspy voice assistant
