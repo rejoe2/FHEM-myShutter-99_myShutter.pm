@@ -391,12 +391,13 @@ sub initialize_prefix {
     my $prefix =  shift // q{rhasspy};
     my $old_prefix = $hash->{prefix}; #Beta-User: Marker, evtl. müssen wir uns was für Umbenennungen überlegen...
     
-    # Attribute rhasspyName und rhasspyRoom für andere Devices zur Verfügung abbestellen
-    addToAttrList("${prefix}Name");  #rhasspyName
-    addToAttrList("${prefix}Room");  #rhasspyRoom
-    addToAttrList("${prefix}Mapping:textField-long"); #rhasspyMapping
+    # provide attributes "rhasspyName" etc. for all devices
+    addToAttrList("${prefix}Name");
+    addToAttrList("${prefix}Room");
+    addToAttrList("${prefix}Mapping:textField-long");
     addToAttrList("${prefix}Channels:textField-long");
     addToAttrList("${prefix}Colors:textField-long");
+    addToAttrList("${prefix}Group:textField-long");
 
     return;
 }
@@ -432,6 +433,9 @@ sub RHASSPY_Delete {
         delFromDevAttrList($_,"${prefix}Channels");
     }
     for (devspec2array("${prefix}Room=.+")) {
+        delFromDevAttrList($_,"${prefix}Colors");
+    }
+    for (devspec2array("${prefix}Group=.+")) {
         delFromDevAttrList($_,"${prefix}Colors");
     }
 
@@ -707,9 +711,10 @@ sub _analyze_rhassypAttr {
     my $prefix = $hash->{prefix};
     
     return if !defined AttrVal($device,"${prefix}Room",undef) 
-          &&  !defined AttrVal($device,"${prefix}Name",undef)
-          &&  !defined AttrVal($device,"${prefix}Channels",undef) 
-          &&  !defined AttrVal($device,"${prefix}Colors",undef);
+           && !defined AttrVal($device,"${prefix}Name",undef)
+           && !defined AttrVal($device,"${prefix}Channels",undef) 
+           && !defined AttrVal($device,"${prefix}Colors",undef)
+           && !defined AttrVal($device,"${prefix}Group",undef);
 
     #rhasspyRooms ermitteln
     my @rooms;
@@ -718,19 +723,12 @@ sub _analyze_rhassypAttr {
     @rooms = @{$hash->{helper}{devicemap}{devices}{$device}->{rooms}} if !@rooms && defined $hash->{helper}{devicemap}{devices}{$device}->{rooms};
     if (!@rooms) {
         $rooms[0] = $hash->{helper}{defaultRoom};
-    } #else {
-    #    @rooms = get_unique(\@rooms);
-    #}
-
+    }
+    
     #rhasspyNames ermitteln
     my @names;
     $attrv = AttrVal($device,"${prefix}Name",undef);
     push @names, split m{,}x, $attrv if $attrv;
-    
-    #if (!@names) {
-    #    @names = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
-    #};
-    #return if !@names; #might need review!
     
     for my $dn (@names) {
        for (@rooms) {
@@ -741,7 +739,6 @@ sub _analyze_rhassypAttr {
         my @rows = split m{\n}x, AttrVal($device, "${prefix}${item}", q{});
 
         for my $row (@rows) {
-            
             my ($key, $val) = split m{=}x, $row, 2;
             next if !$val; 
             for my $rooms (@rooms) {
@@ -749,11 +746,10 @@ sub _analyze_rhassypAttr {
                 #push @{$hash->{helper}{devicemap}{$item}{$key}{$dn}}, $device if !grep( { m{\A$device\z}x } @{$hash->{helper}{devicemap}{$item}{$key}{$dn}});
                  push @{$hash->{helper}{devicemap}{$item}{$rooms}{$key}}, $device if !grep { m{\A$device\z}x } @{$hash->{helper}{devicemap}{$item}{$rooms}{$key}};
             }
-             
             $hash->{helper}{devicemap}{devices}{$device}{$item}{$key} = $val;
         }
     }
-    
+
     #Hash mit {FHEM-Device-Name}{$intent}{$type}?
     my $mappingsString = AttrVal($device, "${prefix}Mapping", q{});
     for (split m{\n}x, $mappingsString) {
@@ -774,6 +770,13 @@ sub _analyze_rhassypAttr {
     for (@rooms) {
         push @{$allrooms}, $_ if !grep { m{\A$_\z}ix } @{$allrooms};
     }
+
+    my @groups;
+    $attrv = AttrVal($device,"${prefix}Group", undef);
+    $attrv = $attrv // AttrVal($device,'group', undef);
+    $attrv = lc $attrv if $attrv;
+    @{$hash->{helper}{devicemap}{devices}{$device}{groups}} = split m{,}x, $attrv if $attrv;
+
     return;
 }
 
@@ -819,6 +822,9 @@ sub _analyze_genDevType {
        }
     }
     push @{$hash->{helper}{devicemap}{devices}{$device}{rooms}}, @rooms;
+    
+    $attrv = lc AttrVal($device,'group', undef);
+    @{$hash->{helper}{devicemap}{devices}{$device}{groups}} = split m{,}x, $attrv if $attrv;
 
     my $hbmap  = AttrVal($device, 'homeBridgeMapping', q{}); 
     my $allset = getAllSets($device);
@@ -882,8 +888,8 @@ sub _analyze_genDevType {
             GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}},
             SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}},
             GetNumeric => { 'volume' => {currentVal => 'volume', type => 'volume' }},
-              SetNumeric => {'volume' => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 'channel' => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}}, 
-              MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'}};
+            SetNumeric => {'volume' => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 'channel' => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}}, 
+            MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'}};
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
@@ -1037,7 +1043,6 @@ sub _replace {
 
 #based on compareHashes https://stackoverflow.com/a/56128395
 #Beta-User: might be usefull in case we want to allow some kind of default + user-diff logic, especially in language...
-
 sub _combineHashes {
     my ($hash1, $hash2, $parent) = @_;
 
@@ -1055,28 +1060,16 @@ sub _combineHashes {
 }
     
 
-# Alle Gerätenamen sammeln
+# Get all devicenames with Rhasspy relevance
 sub RHASSPY_allRhasspyNames {
     my $hash = shift // return;
-    #my $devspec = 'room=Rhasspy';
-    #return keys %{$hash->{helper}{devicemap}{devices}} if defined $hash->{helper}{devicemap};
+
     my @devices;
-    
-    if (defined $hash->{helper}{devicemap}) {
-        my $rRooms = $hash->{helper}{devicemap}{rhasspyRooms};
-        for my $key (keys %{$rRooms}) {
-            push @devices, keys %{$rRooms->{$key}};
-        }
-        return get_unique(\@devices, 1 );
-    }
 
-    my @devs = devspec2array($hash->{devspec});
-    my $prefix = $hash->{prefix};
-
-    # Alle RhasspyNames sammeln
-    for (@devs) {
-        my $attrv = AttrVal($_,"${prefix}Name",undef) // next;
-        push @devices, split m{,}x, $attrv;
+    return if !defined $hash->{helper}{devicemap};
+    my $rRooms = $hash->{helper}{devicemap}{rhasspyRooms};
+    for my $key (keys %{$rRooms}) {
+        push @devices, keys %{$rRooms->{$key}};
     }
     return get_unique(\@devices, 1 );
 }
@@ -1086,17 +1079,7 @@ sub RHASSPY_allRhasspyRooms {
     my $hash = shift // return;
 
     return keys %{$hash->{helper}{devicemap}{rhasspyRooms}} if defined $hash->{helper}{devicemap};
-
-
-    my @rooms;
-
-    my $prefix = $hash->{prefix};
-    # Alle RhasspyNames sammeln
-    for (devspec2array($hash->{devspec})) {
-        my $attrv = AttrVal($_,"${prefix}Room",undef) // next;
-        push @rooms, split m{,}x, $attrv;
-    }
-    return get_unique(\@rooms, 1 );
+    return;
 }
 
 
@@ -1106,23 +1089,10 @@ sub RHASSPY_allRhasspyChannels {
     
     my @channels;
     
-    if (defined $hash->{helper}{devicemap}) {
+    return if !defined $hash->{helper}{devicemap};
         
-        for my $room (keys %{$hash->{helper}{devicemap}{Channels}}) {
-            push @channels, keys %{$hash->{helper}{devicemap}{Channels}{$room}}
-        }
-        return get_unique(\@channels, 1 );
-    }
-
-    my $prefix = $hash->{prefix};
-    # Alle RhasspyNames sammeln
-    for (devspec2array($hash->{devspec})) { 
-        my $attrv = AttrVal($_,"${prefix}Channels",undef) // next;
-        my @rows = split m{\n}x, $attrv;
-        for (@rows) {
-            my @tokens = split m{=}x;
-            push @channels, shift @tokens;
-        }
+    for my $room (keys %{$hash->{helper}{devicemap}{Channels}}) {
+        push @channels, keys %{$hash->{helper}{devicemap}{Channels}{$room}}
     }
     return get_unique(\@channels, 1 );
 }
@@ -1133,35 +1103,13 @@ sub RHASSPY_allRhasspyTypes {
     my $hash = shift // return;
     my @types;
 
-    if (defined $hash->{helper}{devicemap}) {
-        
-        for my $dev (keys %{$hash->{helper}{devicemap}{devices}}) {
-            for my $intent (keys %{$hash->{helper}{devicemap}{devices}{$dev}{intents}}) {
-                my $type;
-                $type = $hash->{helper}{devicemap}{devices}{$dev}{intents}{$intent};
-                push @types, keys %{$type} if $intent =~ m{\A[GS]etNumeric}x;
-            }
-        }
-        return get_unique(\@types, 1 );
-    }
+    return if !defined $hash->{helper}{devicemap};
 
-
-    #my $devspec = q{room=Rhasspy};
-    my @devs = devspec2array($hash->{devspec});
-
-    my $prefix = $hash->{prefix};
-    # Alle RhasspyNames sammeln
-    for (@devs) {
-        my $attrv = AttrVal($_,"${prefix}Mapping",undef) // next;
-        my @mappings = split m{\n}x, $attrv;
-        for (@mappings) {
-            # Nur GetNumeric und SetNumeric verwenden
-            next if $_ !~ m{\A[SG]etNumeric}x;
-            #$_ =~ s{[SG]etNumeric:}{}x;
-            s{[SG]etNumeric:}{}x;
-            my %mapping = RHASSPY_splitMappingString($_);
-
-            push @types, $mapping{type} if defined $mapping{type};
+    for my $dev (keys %{$hash->{helper}{devicemap}{devices}}) {
+        for my $intent (keys %{$hash->{helper}{devicemap}{devices}{$dev}{intents}}) {
+            my $type;
+            $type = $hash->{helper}{devicemap}{devices}{$dev}{intents}{$intent};
+            push @types, keys %{$type} if $intent =~ m{\A[GS]etNumeric}x;
         }
     }
     return get_unique(\@types, 1 );
@@ -1173,29 +1121,28 @@ sub RHASSPY_allRhasspyColors {
     my $hash = shift // return;
     my @colors;
 
-    if (defined $hash->{helper}{devicemap}) {
-        
-        for my $room (keys %{$hash->{helper}{devicemap}{Colors}}) {
-            push @colors, keys %{$hash->{helper}{devicemap}{Colors}{$room}}
-        }
-        return get_unique(\@colors, 1 );
-    }
+    return if !defined $hash->{helper}{devicemap};
 
-    my @devs = devspec2array($hash->{devspec});
-
-    my $prefix = $hash->{prefix};
-    # Alle RhasspyNames sammeln
-    for(@devs) {
-        my $attrv = AttrVal($_,"${prefix}Colors",undef) // next;
-        for (split m{\n}x, $attrv) {
-            my @tokens = split m{=}x;
-            my $color = shift @tokens;
-            push @colors, $color;
-        }
+    for my $room (keys %{$hash->{helper}{devicemap}{Colors}}) {
+        push @colors, keys %{$hash->{helper}{devicemap}{Colors}{$room}}
     }
     return get_unique(\@colors, 1 );
 }
 
+
+# get a list of all used groups
+sub RHASSPY_allRhasspyGroups {
+    my $hash = shift // return;
+    my @groups;
+    
+    for my $device (keys %{$hash->{helper}{devicemap}{devices}}) {
+        my $devgroups = $hash->{helper}{devicemap}{devices}{$device}->{groups};
+        for (@{$devgroups}) {
+            push @groups, $_;
+        }
+    }
+    return get_unique(\@groups, 1);
+}
 
 # Raum aus gesprochenem Text oder aus siteId verwenden? (siteId "default" durch Attr defaultRoom ersetzen)
 sub RHASSPY_roomName {
@@ -1222,53 +1169,24 @@ sub RHASSPY_getDeviceByName {
     
     my $device;
     
-    if (defined $hash->{helper}{devicemap}) {
-        $device = $hash->{helper}{devicemap}{rhasspyRooms}{$room}{$name};
+    return if !defined $hash->{helper}{devicemap};
+    
+    $device = $hash->{helper}{devicemap}{rhasspyRooms}{$room}{$name};
+        #return $device if $device;
+    if ($device) {
+        Log3($hash->{NAME}, 5, "Device selected (by hash, with room and name): $device");
+        return $device ;
+    }
+    for (keys %{$hash->{helper}{devicemap}{rhasspyRooms}}) {
+        $device = $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$name};
         #return $device if $device;
         if ($device) {
-            Log3($hash->{NAME}, 5, "Device selected (by hash, with room and name): $device");
+            Log3($hash->{NAME}, 5, "Device selected (by hash, using only name): $device");
             return $device ;
         }
-        for (keys %{$hash->{helper}{devicemap}{rhasspyRooms}}) {
-            $device = $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$name};
-            #return $device if $device;
-            if ($device) {
-                Log3($hash->{NAME}, 5, "Device selected (by hash, using only name): $device");
-                return $device ;
-            }
-        }
-        Log3($hash->{NAME}, 1, "No device for >>$name<< found, especially not in room >>$room<< (also not outside)!");
-        return;
     }
-
-
-    my $devspec = $hash->{devspec}; # q{room=Rhasspy};
-    my @devices = devspec2array($devspec);
-
-    my $prefix = $hash->{prefix};
-    # devspec2array sendet bei keinen Treffern als einziges Ergebnis den devSpec String zurück
-    return if (@devices == 1 && $devices[0] eq $devspec);
-
-    for (@devices) {
-        # 2 Arrays bilden mit Namen und Räumen des Devices
-        my @names = split m{,}x, AttrVal($_,"${prefix}Name",q{});
-        my $rooms = AttrVal($_, "${prefix}Room", undef);
-        #my @rooms = split m{,}x, AttrVal($_,"${prefix}Room",q{});
-
-        # Case Insensitive schauen ob der gesuchte Name (oder besser Name und Raum) in den Arrays vorhanden ist
-#        if (grep( /^$name$/i, @names)) {
-        my $inRoom = $rooms =~ m{\b$room\b}ix;
-        if (grep { m{\A$name\z}ix } @names ) {
-            if (!defined($device) || $inRoom) {
-                $device = $_;
-                last if $inRoom;
-            }
-        }
-    }
-
-    Log3($hash->{NAME}, 5, "Device selected: $device");
-
-    return $device;
+    Log3($hash->{NAME}, 1, "No device for >>$name<< found, especially not in room >>$room<< (also not outside)!");
+    return;
 }
 
 
@@ -1282,56 +1200,24 @@ sub RHASSPY_getDevicesByIntentAndType {
     my @matchesInRoom; my @matchesOutsideRoom;
     my $prefix = $hash->{prefix};
     
-    if (defined $hash->{helper}{devicemap}) {
-        for my $devs (keys %{$hash->{helper}{devicemap}{devices}}) {
-            my $mapping = RHASSPY_getMapping($hash, $devs, $intent, $type, 1, 1) // next;
-            my $mappingType = $mapping->{type};
-            my @rooms = $hash->{helper}{devicemap}{devices}{$devs}{rooms};
-
-            # Geräte sammeln
-            if ( !defined $type ) {
-                grep { m{\A$room\z}ix } @rooms
-                    ? push @matchesInRoom, $devs 
-                    : push @matchesOutsideRoom, $devs;
-            }
-            elsif ( defined $type && $mappingType && $type =~ m{\A$mappingType\z}ix ) {
-                grep { m{\A$room\z}ix } @rooms
-                ? push @matchesInRoom, $devs
-                : push @matchesOutsideRoom, $devs;
-            }
-        }
-        return (\@matchesInRoom, \@matchesOutsideRoom);;
-    }
-    
-    #old method
-    my $devspec = $hash->{devspec}; 
-    my @devices = devspec2array($hash->{devspec});
-
-    # devspec2array sendet bei keinen Treffern als einziges Ergebnis den devSpec String zurück
-    return if (@devices == 1 && $devices[0] eq $devspec);
-
-    for my $devs (@devices) {
-        # Array bilden mit Räumen des Devices
-        #my @rooms = split m{,}x, AttrVal($_,"${prefix}Room",undef);
-        my $rooms = AttrVal($_, "${prefix}Room", undef);
-        # Mapping mit passendem Intent vorhanden?
-        my $mapping = RHASSPY_getMapping($hash, $_, $intent, $type, 0, 1) // next;
-
+    return if !defined $hash->{helper}{devicemap};
+    for my $devs (keys %{$hash->{helper}{devicemap}{devices}}) {
+        my $mapping = RHASSPY_getMapping($hash, $devs, $intent, $type, 1, 1) // next;
         my $mappingType = $mapping->{type};
+        my @rooms = $hash->{helper}{devicemap}{devices}{$devs}{rooms};
 
         # Geräte sammeln
         if ( !defined $type ) {
-            $rooms =~ m{\b$room\b}ix
+            grep { m{\A$room\z}ix } @rooms
                 ? push @matchesInRoom, $devs 
                 : push @matchesOutsideRoom, $devs;
         }
         elsif ( defined $type && $mappingType && $type =~ m{\A$mappingType\z}ix ) {
-            $rooms =~ m{\b$room\b}ix
+            grep { m{\A$room\z}ix } @rooms
             ? push @matchesInRoom, $devs
             : push @matchesOutsideRoom, $devs;
         }
     }
-
     return (\@matchesInRoom, \@matchesOutsideRoom);
 }
 
@@ -1405,53 +1291,27 @@ sub RHASSPY_getDeviceByMediaChannel {
     
     my $device;
     
-    if (defined $hash->{helper}{devicemap}) {
-        my $devices = $hash->{helper}{devicemap}{Channels}{$room}->{$channel};
+    return if !defined $hash->{helper}{devicemap};
+    my $devices = $hash->{helper}{devicemap}{Channels}{$room}->{$channel};
+    $device = ${$devices}[0];
+    #return $device if $device;
+    if ($device) {
+        Log3($hash->{NAME}, 5, "Device selected (by hash, with room and channel): $device");
+        return $device ;
+    }
+    for (sort keys %{$hash->{helper}{devicemap}{Channels}}) {
+        #$device = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
+        $devices = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
         $device = ${$devices}[0];
+    
         #return $device if $device;
         if ($device) {
-            Log3($hash->{NAME}, 5, "Device selected (by hash, with room and channel): $device");
+            Log3($hash->{NAME}, 5, "Device selected (by hash, using only channel): $device");
             return $device ;
         }
-        for (sort keys %{$hash->{helper}{devicemap}{Channels}}) {
-            #$device = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
-            $devices = $hash->{helper}{devicemap}{Channels}{$_}{$channel};
-            $device = ${$devices}[0];
-        
-            #return $device if $device;
-            if ($device) {
-                Log3($hash->{NAME}, 5, "Device selected (by hash, using only channel): $device");
-                return $device ;
-            }
-        }
-        Log3($hash->{NAME}, 1, "No device for >>$channel<< found, especially not in room >>$room<< (also not outside)!");
-        return;
     }
-
-    
-    my $devspec = $hash->{devspec};
-    my @devices = devspec2array($devspec);
-
-    # devspec2array sendet bei keinen Treffern als einziges Ergebnis den devSpec String zurück
-    return if (@devices == 1 && $devices[0] eq $devspec);
-    
-    my $prefix = $hash->{prefix};
-    for (@devices) {
-        my $rooms = AttrVal($_,"${prefix}Room",undef) // next;
-                                        
-        my $cmd = RHASSPY_getCmd($hash, $_, "${prefix}Channels", $channel, 1) // next;
-        
-        # Erster Treffer wählen, überschreiben falls besserer Treffer (Raum matched auch) kommt
-        my $inRoom = $rooms =~ m{\b$room\b}ix;
-        if (!defined $device || $inRoom ) {
-            $device = $_;
-            last if $inRoom;
-        }
-    }
-
-    Log3($hash->{NAME}, 5, "Device selected: ". $device ? $device : 'unknown');
-
-    return $device;
+    Log3($hash->{NAME}, 1, "No device for >>$channel<< found, especially not in room >>$room<< (also not outside)!");
+    return;
 }
 
 
@@ -1542,7 +1402,7 @@ sub RHASSPY_getMapping { #($$$$;$)
 
 
 # Cmd von Attribut mit dem Format value=cmd pro Zeile lesen
-sub RHASSPY_getCmd { #($$$$;$)
+sub RHASSPY_getCmd {
     my $hash       = shift // return;
     my $device     = shift;
     my $reading    = shift;
@@ -1551,8 +1411,7 @@ sub RHASSPY_getCmd { #($$$$;$)
     #my ($hash, $device, $reading, $key, $disableLog) = @_;
 
     my $cmd;
-    #my $attrString = AttrVal($device, $reading, undef);
-
+    
     # String in einzelne Mappings teilen
     my @rows = split(m{\n}x, AttrVal($device, $reading, q{}));
 
@@ -1821,10 +1680,6 @@ sub RHASSPY_onmessage {
             for (keys %{$mutated_vowels}) {
                 $room =~ s{$_}{$mutated_vowels->{$_}}gx;
             }
-            #my $keys = join q{|}, keys %{$mutated_vowels};
-            #Log3($hash->{NAME}, 5, "mutated_vowels regex is $keys");
-
-            #$room =~ s{($keys)}{$mutated_vowels->{$1}}gx;
         }
 
         if ( $topic =~ m{sessionStarted}x ) {
@@ -1913,8 +1768,8 @@ sub RHASSPY_respond {
 
     my $sendData =  {
         sessionId => $sessionId,
-        siteId => $siteId,
-        text => $response
+        siteId    => $siteId,
+        text      => $response
     };
 
     my $json = toJSON($sendData);
@@ -2002,6 +1857,7 @@ sub RHASSPY_updateSlots {
     my @channels  = RHASSPY_allRhasspyChannels($hash);
     my @colors    = RHASSPY_allRhasspyColors($hash);
     my @types     = RHASSPY_allRhasspyTypes($hash);
+    my @groups    = RHASSPY_allRhasspyGroups($hash);
     my @shortcuts = keys %{$hash->{helper}{shortcuts}};
 
                                           
@@ -2023,23 +1879,25 @@ sub RHASSPY_updateSlots {
     }
 
     # If there are any devices, rooms, etc. found, create JSON structure and send it the the API
-    if (@devices || @rooms || @channels || @types ) {
-      my $json;
-      my $deviceData;
-      my $url = q{/api/slots?overwrite_all=true};
+    return if !@devices && !@rooms && !@channels && !@types && !@groups;
+    
+    my $json;
+    my $deviceData;
+    my $url = q{/api/slots?overwrite_all=true};
 
-      $deviceData->{qq(${language}.${fhemId}.Device)}        = \@devices if @devices;
-      $deviceData->{qq(${language}.${fhemId}.Room)}          = \@rooms if @rooms;
-      $deviceData->{qq(${language}.${fhemId}.MediaChannels)} = \@channels if @channels;
-      $deviceData->{qq(${language}.${fhemId}.Color)}         = \@colors if @colors;
-      $deviceData->{qq(${language}.${fhemId}.NumericType)}   = \@types if @types;
+    $deviceData->{qq(${language}.${fhemId}.Device)}        = \@devices if @devices;
+    $deviceData->{qq(${language}.${fhemId}.Room)}          = \@rooms if @rooms;
+    $deviceData->{qq(${language}.${fhemId}.MediaChannels)} = \@channels if @channels;
+    $deviceData->{qq(${language}.${fhemId}.Color)}         = \@colors if @colors;
+    $deviceData->{qq(${language}.${fhemId}.NumericType)}   = \@types if @types;
+    $deviceData->{qq(${language}.${fhemId}.Group)}         = \@groups if @groups;
 
-      $json = eval { toJSON($deviceData) };
+    $json = eval { toJSON($deviceData) };
 
-      Log3($hash->{NAME}, 5, "Updating Rhasspy Slots with data ($language): $json");
+    Log3($hash->{NAME}, 5, "Updating Rhasspy Slots with data ($language): $json");
       
-      RHASSPY_sendToApi($hash, $url, $method, $json);
-    }
+    RHASSPY_sendToApi($hash, $url, $method, $json);
+
     return;
 }
 
@@ -3016,6 +2874,8 @@ Denkbare Verwendung:
 - Ansteuerung von Lamellenpositionen (auch an anderem Device?)
 - Bestätigungs-Mapping
 
+# "rhasspyGroup" als weiteres Attribut?
+Beta-User: Tendenziell fehlt zwischen Einzeldevice und Room noch ein optionales  Unterscheidungsmerkmal Ich würde dazu neigen, das (allg.) group-Attribut auszuwerten und 
 
 =end ToDo
 
