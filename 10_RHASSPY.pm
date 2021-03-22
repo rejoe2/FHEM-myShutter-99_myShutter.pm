@@ -75,6 +75,7 @@ my $languagevars = {
       }
    },
   'responses' => { 
+    '01_testentry' => "This should remain in english!",
     'DefaultError' => "Sorry but something seems not to work as expected",
     'NoValidData' => "Sorry but the received data is not sufficient to derive any action",
     'NoDeviceFound' => "Sorry but I could not find a matching device",
@@ -374,8 +375,14 @@ sub initialize_Language {
         Log3($hash->{NAME}, 1, "JSON decoding error in languagefile $cfg:  $@");
         return "languagefile $cfg seems not to contain valid JSON!";
     }
+    
+    if ( defined $decoded->{default} ) {
+        $decoded = _combineHashes( $decoded->{default}, $decoded->{user} );
+        Log3($hash->{NAME}, 4, "try to use user specific sentences and defaults in languagefile $cfg");
+    }
 
-    $hash->{helper}{lng} = $decoded;
+    #$hash->{helper}{lng} = $decoded;
+    $hash->{helper}{lng} = _combineHashes( $lngvars, $decoded);
     return;
 }
 
@@ -2998,9 +3005,6 @@ __END__
 
 =begin ToDo
 
-#Hash-Usage (Beta-User):
-Die Hash-Struktur der language-File sollte gegen die interne geprüft werden und nur vorhandene Keys bzw. SCALAR ersetzt werden. Sonst kann es zu schnell zu Crashes kommen, wenn der User etwas falsch macht oder noch nicht auf dem letzten Stand ist.
-
 # Timer:
 - Sollte als Wecker ergänzt werden, so dass man auch absolute Uhrzeiten angeben kann.
 - Die Antwort sollte sich danach richten, wann der Timer abläuft, z.B. bis 100 Sekunden => "auf ... Sekunden gestellt", bis 15/20 Minuten => "auf ... Minuten gestellt", sonst: "auf [morgen] ... Uhr ... (Sekunden) gestellt" 
@@ -3008,7 +3012,7 @@ Die Hash-Struktur der language-File sollte gegen die interne geprüft werden und
 
 # "rhasspySpecials" als weiteres Attribut?
 Denkbare Verwendung:
-- siteId2room für mobile Geräte (Auswertung BT-RSSI per Perl, aktives Setzen über ein Reading? Oder einen intent?
+- siteId2room für mobile Geräte (Denkbare Anwendungsfälle: Auswertung BT-RSSI per Perl, aktives Setzen über ein Reading? Oder einen intent?
 - Ansteuerung von Lamellenpositionen (auch an anderem Device?)
 - Bestätigungs-Mapping
 
