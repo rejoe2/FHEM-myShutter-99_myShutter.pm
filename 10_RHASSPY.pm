@@ -577,6 +577,21 @@ sub RHASSPY_init_shortcuts {
     my $hash    = shift // return;
     my $attrVal = shift // return;
     
+=pod 
+Syntax:
+funktionieren sollten:
+i => intent (damit muss eine Zeile starten, damit nicht alte Syntax unterstellt wird, Leerzeichen können vorher kommen)
+f => FHEM-Kommando
+p => Perl-Kommando (hat Vorrang vor "f")
+n => Name des zurückzugebenden Devices (für longpoll ;) ); sonst wird der Rückgabewert versucht
+r => Response (sonst der Rückgabewert)
+
+Confirmation:
+c => nummerisch oder Text. Wenn nummerisch: Wartezeit, bis abgebrochen wird, wenn Text: response (Bestätigungsabfrage).
+ct => nummerisch. Wartezeit, default: 15
+
+=cut
+    
     my ($intent, $perlcommand, $device, $err );
     for my $line (split m{\n}x, $attrVal) {
         #old syntax
@@ -974,17 +989,19 @@ c) eine Bestätigung => Ausführen des geparkten Befehls, Dialog beenden
 Probleme: sessionId ist möglicherweise nicht mehr gültig!
 =cut
 
-sub RHASSPY_sleep {
-    my $hash   = shift // return;
-    my $mode   = shift; #undef => timeout, 1 => cancellation, 
+sub RHASSPY_confirm_timer {
+    my $hash     = shift // return;
+    my $mode     = shift; #undef => timeout, 1 => cancellation, 
                         #2 => set timer
-    my $data   = shift // $hash->{helper}{'.delayed'};
-    
-    my $response;
+    my $data     = shift // $hash->{helper}{'.delayed'};
+    my $timeout  = shift;
+    my $response = shift;
+
     #timeout Case
     if (!defined $mode) {
-        RemoveInternalTimer($hash);
+        RemoveInternalTimer( $hash, \&RHASSPY_confirm_timer );
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
+        #Beta-User: we may need to start a new session first?
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
         return;
@@ -992,19 +1009,20 @@ sub RHASSPY_sleep {
 
     #cancellation Case
     if ( $mode == 1 ) {
-        RemoveInternalTimer($hash);
+        RemoveInternalTimer( $hash, \&RHASSPY_confirm_timer );
         $response = $hash->{helper}{lng}->{responses}->{DefaultCancelConfir};
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
         return $hash->{NAME};
     }
     if ( $mode == 2 ) {
-        RemoveInternalTimer($hash);
+        RemoveInternalTimer( $hash, \&RHASSPY_confirm_timer );
         $hash->{helper}{'.delayed'} = $data;
-        $response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};
+        #$response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirReceived} if $response eq 'default';
         
-        InternalTimer(time + $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout}, \&RHASSPY_sleep, $hash, 0);
+        #InternalTimer(time + $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout}, \&RHASSPY_confirm_timer, $hash, 0);
+        InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
 
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 
@@ -1550,6 +1568,11 @@ sub RHASSPY_runCmd {
     return $returnVal;
 }
 
+sub RHASSPY_runCmdIndirect {
+
+}
+
+
 # Wert über Format 'reading', 'device:reading' oder '{<perlcode}' lesen
 sub RHASSPY_getValue {
     my $hash      = shift // return;
@@ -1699,6 +1722,27 @@ sub RHASSPY_updateLastIntentReadings {
     return;
 }
 
+#Make globally available to allow later use by other functions, esp.  RHASSPY_handleIntentConfirmAction
+my $dispatchFns = {
+    Shortcuts     => \&RHASSPY_handleIntentShortcuts, 
+    SetOnOff      => \&RHASSPY_handleIntentSetOnOff,
+    SetOnOffGroup => \&RHASSPY_handleIntentSetOnOffGroup,
+    GetOnOff      => \&RHASSPY_handleIntentGetOnOff,
+    SetNumeric    => \&RHASSPY_handleIntentSetNumeric,
+    GetNumeric    => \&RHASSPY_handleIntentGetNumeric,
+    Status        => \&RHASSPY_handleIntentStatus,
+    MediaControls => \&RHASSPY_handleIntentMediaControls,
+    MediaChannels => \&RHASSPY_handleIntentMediaChannels,
+    SetColor      => \&RHASSPY_handleIntentSetColor,
+    GetTime       => \&RHASSPY_handleIntentGetTime,
+    GetWeekday    => \&RHASSPY_handleIntentGetWeekday,
+    SetTimer      => \&RHASSPY_handleIntentSetTimer,
+    ConfirmAction => \&RHASSPY_handleIntentConfirmAction,
+    ReSpeak       => \&RHASSPY_handleIntentReSpeak
+};
+
+
+
 # Daten vom MQTT Modul empfangen -> Device und Room ersetzen, dann erneut an NLU übergeben
 sub RHASSPY_onmessage {
     my $hash    = shift // return;
@@ -1772,24 +1816,8 @@ sub RHASSPY_onmessage {
     RHASSPY_updateLastIntentReadings($hash, $topic,$data);
 
     # Passenden Intent-Handler aufrufen
-    my $dispatch = {
-        Shortcuts     => \&RHASSPY_handleIntentShortcuts, 
-        SetOnOff      => \&RHASSPY_handleIntentSetOnOff,
-        SetOnOffGroup => \&RHASSPY_handleIntentSetOnOffGroup,
-        GetOnOff      => \&RHASSPY_handleIntentGetOnOff,
-        SetNumeric    => \&RHASSPY_handleIntentSetNumeric,
-        GetNumeric    => \&RHASSPY_handleIntentGetNumeric,
-        Status        => \&RHASSPY_handleIntentStatus,
-        MediaControls => \&RHASSPY_handleIntentMediaControls,
-        MediaChannels => \&RHASSPY_handleIntentMediaChannels,
-        SetColor      => \&RHASSPY_handleIntentSetColor,
-        GetTime       => \&RHASSPY_handleIntentGetTime,
-        GetWeekday    => \&RHASSPY_handleIntentGetWeekday,
-        SetTimer      => \&RHASSPY_handleIntentSetTimer,
-        ReSpeak       => \&RHASSPY_handleIntentReSpeak
-    };
-    if (ref $dispatch->{$intent} eq 'CODE') {
-        $device = $dispatch->{$intent}->($hash, $data);
+    if (ref $dispatchFns->{$intent} eq 'CODE') {
+        $device = $dispatchFns->{$intent}->($hash, $data);
     } else {
         $device = RHASSPY_handleCustomIntent($hash, $intent, $data);
     }
@@ -2120,6 +2148,11 @@ sub RHASSPY_handleIntentShortcuts {
     my $shortcut = $hash->{helper}{shortcuts}{$data->{input}};
     Log3($hash->{NAME}, 5, "handleIntentShortcuts called with $data->{input} key");
     
+    if (defined $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout}) {
+        my $timeout = $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout};
+        my $response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};
+        return RHASSPY_confirm_timer($hash, 2, $data, $timeout, $response);
+    }
     my $response = $shortcut->{response} // RHASSPY_getResponse($hash, 'DefaultConfirmation');
     my $ret;
     my $device = $shortcut->{NAME};;
@@ -2246,7 +2279,7 @@ sub RHASSPY_handleIntentSetOnOffGroup {
             $delaysum += $devices->{$device}->{delay};
             $updatedList = $updatedList ? "$updatedList,$device" : $device;
         } else {
-            InternalTimer(time + $delaysum, sub {\&RHASSPY_runCmd($hash, $device, $cmd)}, $hash, 0);
+        InternalTimer(time + $delaysum, sub { \&RHASSPY_runCmd($hash, $device, $cmd) }, $hash, 0);
             Log3($hash->{NAME}, 5, "Delayed command [$cmd] on device [$device], waiting for $delaysum seconds" );
             $delaysum += $devices->{$device}->{delay};
         }
@@ -2743,7 +2776,7 @@ sub RHASSPY_handleIntentSetTimer {
     my $data = shift // return;
     my $siteId = $data->{siteId} // return;
     my $name = $hash->{NAME};
-    my ($value, $response, $time, $text);
+    my ($value, $response, $text);
 
     Log3($name, 5, 'handleIntentSetTimer called');
 
@@ -2814,6 +2847,33 @@ sub RHASSPY_handleIntentSetTimer {
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $name;
+}
+
+sub RHASSPY_handleIntentConfirmAction {
+    my $hash = shift // return;
+    my $data = shift // return;
+    
+    Log3($hash->{NAME}, 5, 'RHASSPY_handleIntentConfirmAction called');
+    
+    #cancellation case
+    return RHASSPY_confirm_timer($hash, 1) if $data->{Mode} ne 'OK';
+    
+    #confirmed case
+    my $data_old = $hash->{helper}{'.delayed'};
+    delete $hash->{helper}{'.delayed'};
+    
+    $data_old->{siteId} = $data->{siteId};
+    $data_old->{sessionId} = $data->{sessionId};
+    
+    my $intent = $data_old->{intent};
+    my $device;
+
+    # Passenden Intent-Handler aufrufen
+    if (ref $dispatchFns->{$intent} eq 'CODE') {
+        $device = $dispatchFns->{$intent}->($hash, $data_old);
+    }
+
+    return $device;
 }
 
 sub RHASSPY_handleIntentReSpeak {
@@ -2956,6 +3016,7 @@ sub RHASSPY_readLanguageFromFile {
 
     return 0, join q{ }, @cleaned;
 }
+
 
 1;
 
