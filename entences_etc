@@ -1,0 +1,80 @@
+hermes/intent/de.fhem_SetOnOffGroup 
+
+{"Group":"licht","Room":"wohnzimmer","Value":"on","input":"schalt sämtliche licht im wohnzimmer on","intent":"SetOnOffGroup","probability":1,"rawInput":"schalt sämtliche licht im wohnzimmer an","requestType":"voice","sessionId":"000b1cf3-57f0-afe2-9196-ce758bbc91cc","siteId":"mobile1"}
+
+{"Group":"licht","Room":"global","Value":"off","input":"mach alle licht global off","intent":"SetOnOffGroup","probability":1,"rawInput":"mach alle licht überall aus","requestType":"voice","sessionId":"4dc399b5-c2d7-5cc5-8adc-508cb2c4f33a","siteId":"mobile1"}
+
+[de.fhem:SetOnOffGroup]
+\[(schalt|mach|fahr)] (alle | sämtliche ) $de.fhem.Group{Group} [im] [( überall:global | $de.fhem.Room){Room}] $OnOffValue{Value}
+
+{"hourabs":8,"input":"wecker auf 8 uhr 15","intent":"SetTimer","min":15,"probability":1,"rawInput":"wecker auf acht uhr fünfzehn","requestType":"voice","sessionId":"0034e69d-aaa7-9629-24e9-4d12867c6946","siteId":"mobile1"}
+
+{"hourabs":10,"input":"timer Eier auf 10 uhr","intent":"SetTimer","label":"Eier","probability":1,"rawInput":"timer eier auf zehn uhr","requestType":"voice","sessionId":"61130d97-9eec-1a66-ed50-26b562fc4949","siteId":"mobile1"}
+
+
+########################
+
+[de.fhem:SetNumeric]
+(schalt|schalte) $de.fhem.Device{Device} [um] [(0..10){Value!int}] [dezibel{Unit}] (lauter|höher){Change:volUp}
+(schalt|schalte) $de.fhem.Device{Device} [um] [(0..10){Value!int}] [dezibel{Unit}] (leiser|niedriger){Change:volDown}
+(schalt|schalte) $de.fhem.Device{Device} [um] [(0..10){Value!int}] [grad{Unit}] (höher|wärmer){Change:tempUp}
+(schalt|schalte) $de.fhem.Device{Device} [um] [(0..10){Value!int}] [grad{Unit}] (niedriger|kälter){Change:tempDown}
+(schalt|schalte) $de.fhem.Device{Device} [um] [(0..100){Value}] [prozent{Unit:percent}] (heller){Change:lightUp}
+(schalt|schalte) $de.fhem.Device{Device} [um] [(0..100){Value}] [prozent{Unit:percent}] (dunkler){Change:lightDown}
+(schalt|schalte) $de.fhem.Device{Device} auf (0..100){Value!float}
+(mehr{Change:lightUp}|weniger{Change:lightDown}) $de.fhem.Device{Device} [$de.fhem.Room{Room}]
+
+[de.fhem:MediaControls]
+(starte|start){Command:cmdPlay} [die wiedergabe] [$de.fhem.Device{Device}] [$de.fhem.Room{Room}]
+(stoppe|stop){Command:cmdStop} [die wiedergabe] [$de.fhem.Device{Device}] [$de.fhem.Room{Room}]
+(pausiere){Command:cmdPause} [die wiedergabe] [$de.fhem.Device{Device}] [$de.fhem.Room{Room}]
+(nächstes|nächster){Command:cmdFwd} (lied|titel) [$de.fhem.Device{Device}] [$de.fhem.Room{Room}]
+(vorheriges|voriges|vorheriger|voriger){Command:cmdBack} (lied|titel) [$de.fhem.Device{Device}] [$de.fhem.Room{Room}]
+
+[de.fhem:GetWeekday]
+\[bitte] weißt du [bitte] welcher Tag heute ist [bitte]
+\[bitte] kannst du mir [bitte] sagen welcher Tag heute ist [bitte]
+\[bitte] könntest du mir [bitte] sagen welcher Tag heute ist [bitte]
+\[bitte] kannst du mir [bitte] den [heutigen] Tag sagen [bitte]
+welcher [wochentag|tag] ist heute [bitte]
+welchen [wochentag|tag] haben wir heute [bitte]
+
+[de.fhem:GetTime]
+wie spät [ist es]
+sag mir die uhrzeit
+(wia|wie) schpät [isch es]
+
+[de.fhem:SetTimer]
+( timer | wecker ) [$TimerNames{label}] auf [((1..60){hour} (stunde|stunden) | (1..24){hourabs} (uhr) )] [und] [((1..60){min})]
+( timer | wecker ) [$TimerNames{label}] auf [((1..60){hour} (stunde|stunden) | (1..24){hourabs} (uhr) )] [und] [((1..60){min} (minute|minuten))] [und] [((1..60){sec} (sekunde|sekunden))]
+( timer | wecker ) [$TimerNames{label}] auf (1..60){hour} (einviertel{min:15}|einhalb{min:30}|dreiviertel{min:45}) (stunde|stunden)
+( timer | wecker ) [$TimerNames{label}] auf (1..60){min} (einviertel{sec:15}|einhalb{sec:30}|dreiviertel{sec:45}) (minute|minuten)
+
+[de.fhem:ReSpeak]
+was hast du gesagt
+
+[de.fhem:SetMute]
+(gute nacht){Value:on}
+(guten morgen){Value:off}
+
+[de.fhem:Shortcuts]
+motor aus
+auto an
+motor an
+ton aus
+auto aus
+ton an
+du bisch cool
+
+[de.fhem:Status]
+wie ist der status{Status} $de.fhem.Device{Device} [(im|in der|auf der|draußen|auf dem)] [$de.fhem.Room{Room}]
+
+[de.fhem:GetOnOff]
+ist [der|die|das] $de.fhem.Device{Device} [$de.fhem.Room{Room}] $OnOffValue{Status}
+(läuft){Status} $de.fhem.Device{Device} [$de.fhem.Room{Room}]
+
+[de.fhem:SetOnOff]
+\[(schalt|mach|fahr)] [den|die|das] $de.fhem.Device{Device} [$de.fhem.Room{Room}] $OnOffValue{Value}
+
+[de.fhem:SetOnOffGroup]
+\[(schalt|mach|fahr)] (alle | sämtliche ) $de.fhem.Group{Group} [im] [( überall:global | $de.fhem.Room){Room}] $OnOffValue{Value}
