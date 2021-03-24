@@ -1109,7 +1109,7 @@ sub _combineHashes {
         }
         if ( ref $hash1->{$key} eq 'HASH' and ref $hash2->{$key} eq 'HASH' ) {
             _combineHashes($hash1->{$key}, $hash2->{$key}, $key);
-        } else { 
+        } elsif ( !ref $hash1->{$key} && !ref $hash2->{$key} ) { 
             $hash1->{$key} = $hash2->{$key};
         }
     }
