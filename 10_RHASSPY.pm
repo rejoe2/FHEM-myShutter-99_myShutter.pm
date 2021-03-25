@@ -88,9 +88,11 @@ my $languagevars = {
     'DefaultConfirReceived' => "ok will do it",
     'timerSet'   => {
         '0' => 'Timer $label in room $room has been set to $seconds seconds',
-        '1' => 'Timer $label in room $room has been set to $minutes minutes',
-        '2' => 'Timer $label in room $room has been set to $hours hours $minutes minutes',
-        '3' => 'Timer $label in room $room has been set to $hour o clock $minutes'
+        '1' => 'Timer $label in room $room has been set to $minutes minutes $seconds',
+        '2' => 'Timer $label in room $room has been set to $minutes minutes',
+        '3' => 'Timer $label in room $room has been set to $hours hours $minutes minutes',
+        '4' => 'Timer $label in room $room has been set to $hour o clock $minutes',
+        '5' => 'Timer $label in room $room has been set to tomorrow $hour o clock $minutes'
     },
     'timerEnd'   => {
         '0' => 'Timer $label expired',
@@ -2798,20 +2800,20 @@ sub RHASSPY_handleIntentSetTimer {
     my $now = $value;
     my @time = localtime($now);
     if ( defined $data->{hourabs} ) {
-        $hour = $data->{hourabs} - $time[2];
-        $value = $value - $time[2] * HOURSECONDS - $time[1] * MINUTESECONDS - $time[0]; #last midnight
+        $hour  = $data->{hourabs};
+        $value = $value - ($time[2] * HOURSECONDS) - ($time[1] * MINUTESECONDS) - $time[0]; #last midnight
     }
     elsif ($data->{hour}) {
         $hour = $data->{hour};
     }
-    $value = 3600 * $hour;
-    $value += 60 * $data->{min} if $data->{min};
+    $value += HOURSECONDS * $hour;
+    $value += MINUTESECONDS * $data->{min} if $data->{min};
     $value += $data->{sec} if $data->{sec};
     
-    my $tomorrow;
+    my $tomorrow = 0;
     if ( $value < $now ) {
         $tomorrow = 1;
-        $value += DAYSECONDS;
+        $value += +DAYSECONDS;
     }
 
     if (!$value) {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
@@ -2832,10 +2834,11 @@ sub RHASSPY_handleIntentSetTimer {
         my $roomReading = "timer_".makeReadingName($room);
         my $label = $data->{label} // q{};
         $roomReading .= "_$label" if $label ne ''; 
-        
-        my $attime = strftime('%H', gmtime $value);
+        my $seconds = $value - $now; 
+        my $diff = $seconds;
+        my $attime = strftime('%H', gmtime $diff);
         $attime += 24 if $tomorrow;
-        $attime .= strftime(':%M:%S', gmtime $value);
+        $attime .= strftime(':%M:%S', gmtime $diff);
 
         $responseEnd =~ s{(\$\w+)}{$1}eegx;
 
@@ -2848,23 +2851,28 @@ sub RHASSPY_handleIntentSetTimer {
         Log3($name, 5, "Created timer: $cmd");
 
         my ($range, $minutes, $hours);
-        my $seconds = $value - $now; 
+        @time = localtime($value);
         if ( $seconds < 101 ) { 
             $range = 0;
         } elsif ( $seconds < HOURSECONDS ) {
             $minutes = int ($seconds/MINUTESECONDS);
-            $range = 1;
+            $range = $seconds < 9*MINUTESECONDS ? 1 : 2;
+            $seconds = $seconds % MINUTESECONDS;
         } elsif ( $seconds < 3 * HOURSECONDS ) {
-            $hours = int ($seconds/HOURSECONDS);
+            $hours = $time[2];
             $seconds = $seconds % HOURSECONDS;
-            $minutes = int ($seconds/MINUTESECONDS);
-            $range = 2;
-        } else {
-            $hours   = int strftime('%H', gmtime $value);
-            $minutes = int strftime('%M', gmtime $value);
+            $minutes = int ($seconds/MINUTESECONDS) + $time[1];
             $range = 3;
+#        } elsif ($tomorrow) {
+#           $hours   =  strftime('%H', gmtime $diff);
+#            $minutes =  strftime('%M', gmtime $diff);
+#            $range = 4 + $tomorrow;
+        } else {
+            $hours = $time[2];
+            #$seconds = $seconds % HOURSECONDS;
+            $minutes = $time[1];
+            $range = 4 + $tomorrow;
         }
-
         $response = $hash->{helper}{lng}->{responses}->{timerSet}->{$range};
         $response =~ s{(\$\w+)}{$1}eegx;
     }
