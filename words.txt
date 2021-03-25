@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+cat /usr/share/dict/ngerman | grep '[A-Z][a-z]\+$' | head -n1000
+
+# https://german.stackexchange.com/a/502
+# may require package wngerman to be installed; for old spelling see "ogerman"
+
+
