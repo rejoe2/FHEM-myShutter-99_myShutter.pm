@@ -2198,6 +2198,7 @@ sub RHASSPY_handleIntentShortcuts {
 
         $cmd  = _replace($hash, $cmd, \%specials);
         #execute Perl command
+        $cmd = qq({$cmd}) if ($cmd !~ m{\A\{.*\}\z}x); 
 
         $ret = RHASSPY_runCmd($hash, undef, $cmd, undef, $data->{siteId});
         $device = $ret if $ret !~ m{Please.define.*first}x;
