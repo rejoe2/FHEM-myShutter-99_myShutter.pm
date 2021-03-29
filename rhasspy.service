@@ -1,0 +1,19 @@
+[Unit]
+Description=Rhasspy Service
+After=syslog.target network.target mosquitto.service
+
+[Service]
+Type=simple
+# for command, see https://github.com/rhasspy/rhasspy/issues/42#issuecomment-711472505
+ExecStart=/bin/bash -c 'rhasspy -p de --user-profiles /opt/rhasspy/profiles 2>&1 | cat'
+WorkingDirectory=/opt/rhasspy
+User=rhasspy
+Group=audio
+RestartSec=10
+Restart=on-failure
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=rhasspy
+
+[Install]
+WantedBy=multi-user.target
