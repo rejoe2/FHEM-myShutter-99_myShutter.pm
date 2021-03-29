@@ -1225,8 +1225,11 @@ sub RHASSPY_roomName {
     return $data->{Room} if exists($data->{Room});
     
     my $room;
-    $room = $
-    $data->{siteId};
+    
+    #Beat-User: This might be the right place to check, if there's additional logic implemented...
+    
+    my $rreading = makeReadingName("siteId2room_$data->{siteId}");
+    $room = ReadingsVal($hash->{NAME}, $rreading, $data->{siteId});
     $room = $hash->{helper}{defaultRoom} if ($room eq 'default' || !(length $room));
 
     return $room;
