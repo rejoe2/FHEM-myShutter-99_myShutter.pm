@@ -1111,7 +1111,8 @@ sub RHASSPY_asyncQueue {
     my $hash = shift // return;
     my $next_cmd = shift @{$hash->{".asyncQueue"}};
     if (defined $next_cmd) {
-        RHASSPY_runCmd($hash, $next_cmd->{device}, $next_cmd->{cmd});
+        RHASSPY_runCmd($hash, $next_cmd->{device}, $next_cmd->{cmd}) if $next_cmd->{cmd};
+        RHASSPY_handleIntentSetNumeric($hash, $next_cmd->{SetNumeric}) if $next_cmd->{SetNumeric};
         my $async_delay = $next_cmd->{delay} // 0;
         InternalTimer(time+$async_delay,\&RHASSPY_asyncQueue,$hash,0);
     }
@@ -1404,11 +1405,14 @@ sub RHASSPY_getDevicesByGroup {
 
     for my $dev (keys %{$hash->{helper}{devicemap}{devices}}) {
         my $allrooms = $hash->{helper}{devicemap}{devices}{$dev}->{rooms};
-        next if $room ne 'global' && !grep { m{\A$room\z}ix } @{$allrooms};
+        #next if $room ne 'global' && !grep { m{\A$room\z}ix } @{$allrooms};
+        next if $room ne 'global' && !any { $_ eq $room } @{$allrooms};
         my $allgroups = $hash->{helper}{devicemap}{devices}{$dev}->{groups};
-        next if !grep { m{\A$group\z}ix } @{$allgroups};
+        #next if !grep { m{\A$group\z}ix } @{$allgroups};
+        next if !any { $_ eq $group } @{$allgroups};
         my $specials = $hash->{helper}{devicemap}{devices}{$dev}{group_specials};
         my $label = $specials->{partOf} // $dev;
+        next if defined $devices->{$label};
         my $delay = $specials->{async_delay} // 0;
         my $prio  = $specials->{prio} // 0;
 
@@ -1756,21 +1760,22 @@ sub RHASSPY_updateLastIntentReadings {
 
 #Make globally available to allow later use by other functions, esp.  RHASSPY_handleIntentConfirmAction
 my $dispatchFns = {
-    Shortcuts     => \&RHASSPY_handleIntentShortcuts, 
-    SetOnOff      => \&RHASSPY_handleIntentSetOnOff,
-    SetOnOffGroup => \&RHASSPY_handleIntentSetOnOffGroup,
-    GetOnOff      => \&RHASSPY_handleIntentGetOnOff,
-    SetNumeric    => \&RHASSPY_handleIntentSetNumeric,
-    GetNumeric    => \&RHASSPY_handleIntentGetNumeric,
-    Status        => \&RHASSPY_handleIntentStatus,
-    MediaControls => \&RHASSPY_handleIntentMediaControls,
-    MediaChannels => \&RHASSPY_handleIntentMediaChannels,
-    SetColor      => \&RHASSPY_handleIntentSetColor,
-    GetTime       => \&RHASSPY_handleIntentGetTime,
-    GetWeekday    => \&RHASSPY_handleIntentGetWeekday,
-    SetTimer      => \&RHASSPY_handleIntentSetTimer,
-    ConfirmAction => \&RHASSPY_handleIntentConfirmAction,
-    ReSpeak       => \&RHASSPY_handleIntentReSpeak
+    Shortcuts       => \&RHASSPY_handleIntentShortcuts, 
+    SetOnOff        => \&RHASSPY_handleIntentSetOnOff,
+    SetOnOffGroup   => \&RHASSPY_handleIntentSetOnOffGroup,
+    GetOnOff        => \&RHASSPY_handleIntentGetOnOff,
+    SetNumeric      => \&RHASSPY_handleIntentSetNumeric,
+    SetNumericGroup => \&RHASSPY_handleIntentSetNumericGroup,
+    GetNumeric      => \&RHASSPY_handleIntentGetNumeric,
+    Status          => \&RHASSPY_handleIntentStatus,
+    MediaControls   => \&RHASSPY_handleIntentMediaControls,
+    MediaChannels   => \&RHASSPY_handleIntentMediaChannels,
+    SetColor        => \&RHASSPY_handleIntentSetColor,
+    GetTime         => \&RHASSPY_handleIntentGetTime,
+    GetWeekday      => \&RHASSPY_handleIntentGetWeekday,
+    SetTimer        => \&RHASSPY_handleIntentSetTimer,
+    ConfirmAction   => \&RHASSPY_handleIntentConfirmAction,
+    ReSpeak         => \&RHASSPY_handleIntentReSpeak
 };
 
 
@@ -2393,6 +2398,64 @@ sub isValidData {
     return $validData;
 }
 
+sub RHASSPY_handleIntentSetNumericGroup {
+    my $hash = shift // return;
+    my $data = shift // return;
+
+    Log3($hash->{NAME}, 5, "handleIntentSetNumericGroup called");
+    #{"Group":"licht","Room":"wohnzimmer","Value":"on", ...
+    
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData')) if !exists $data->{Value} && !exists $data->{Change}; 
+    
+    my $devices = RHASSPY_getDevicesByGroup($hash, $data);
+
+    #see https://perlmaven.com/how-to-sort-a-hash-of-hashes-by-value for reference
+    my @devlist = sort {
+        $devices->{$a}{prio} <=> $devices->{$b}{prio}
+        or
+        $devices->{$a}{delay} <=> $devices->{$b}{delay}
+        }  keys %{$devices};
+        
+    #$hash->{helper}->{groups2} = \@devlist;
+    Log3($hash, 5, 'sorted devices list is: ' . join q{ }, @devlist);
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound')) if !keys %{$devices}; 
+
+    my $delaysum = 0;
+    
+    my $value = $data->{Value};
+    $value = $value eq $de_mappings->{on} ? 'on' : $value;
+    
+    my $updatedList;
+
+    my $init_delay = 0;
+    my $needs_sorting = (@{$hash->{".asyncQueue"}});
+        
+    for my $device (@devlist) {
+        my $tempdata = $data;
+        $tempdata->{Device} = $device;
+        $tempdata->{'.inBulk'} = 1;
+        
+        # execute Cmd
+        if ( !$delaysum) {
+            RHASSPY_handleIntentSetNumeric($hash, $tempdata);
+            Log3($hash->{NAME}, 5, "Running SetNumeric on device [$device]" );
+            $delaysum += $devices->{$device}->{delay};
+            $updatedList = $updatedList ? "$updatedList,$device" : $device;
+        } else {
+            my $hlabel = $devices->{$device}->{delay};
+            push @{$hash->{".asyncQueue"}}, {device => $device, SetNumeric => $tempdata, prio => $devices->{$device}->{prio}, delay => $hlabel};
+            InternalTimer(time+$delaysum,\&RHASSPY_asyncQueue,$hash,0) if !$init_delay;
+            $init_delay = 1;
+        }
+    }
+    
+    _sortAsyncQueue($hash) if $init_delay && $needs_sorting;
+
+    # Send response
+    RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'DefaultConfirmation'));
+    return $updatedList;
+}
+
 # Eingehende "SetNumeric" Intents bearbeiten
 sub RHASSPY_handleIntentSetNumeric {
     my $hash = shift // return;
@@ -2405,7 +2468,7 @@ sub RHASSPY_handleIntentSetNumeric {
 
     if (!isValidData($data)) {
         return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData'));
-    
+        #nnnnn
     }
     
     my $unit   = $data->{Unit};
