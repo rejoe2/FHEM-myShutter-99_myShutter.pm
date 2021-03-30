@@ -37,7 +37,7 @@ use GPUtils qw(:all);
 use JSON;
 use Encode;
 use HttpUtils;
-use List::Util qw(max min);
+use List::Util 1.45 qw(max min any uniq);
 use Data::Dumper;
 
 sub ::RHASSPY_Initialize { goto &RHASSPY_Initialize }
@@ -75,7 +75,6 @@ my $languagevars = {
       }
    },
   'responses' => { 
-    '01_testentry' => "This should remain in english!",
     'DefaultError' => "Sorry but something seems not to work as expected",
     'NoValidData' => "Sorry but the received data is not sufficient to derive any action",
     'NoDeviceFound' => "Sorry but I could not find a matching device",
@@ -90,7 +89,7 @@ my $languagevars = {
         '0' => 'Timer $label in room $room has been set to $seconds seconds',
         '1' => 'Timer $label in room $room has been set to $minutes minutes $seconds',
         '2' => 'Timer $label in room $room has been set to $minutes minutes',
-        '3' => 'Timer $label in room $room has been set to $hours hours $minutes minutes',
+        '3' => 'Timer $label in room $room has been set to $hours hours $minutetext',
         '4' => 'Timer $label in room $room has been set to $hour o clock $minutes',
         '5' => 'Timer $label in room $room has been set to tomorrow $hour o clock $minutes'
     },
@@ -1051,10 +1050,11 @@ sub get_unique {
     my $arr    = shift;
     my $sorted = shift; #true if shall be sorted (longest first!)
     
-    my %seen;
+    #my %seen;
     
     #method 2 from https://stackoverflow.com/a/43873983
-    my @unique = grep {!$seen{$_}++} @{$arr}; #we may need to sort, see https://stackoverflow.com/a/30448251
+    #my @unique = grep {!$seen{$_}++} @{$arr}; #we may need to sort, see https://stackoverflow.com/a/30448251
+    my @unique = uniq @{$arr};
     
     return if !@unique;
 
@@ -1285,12 +1285,14 @@ sub RHASSPY_getDevicesByIntentAndType {
 
         # Geräte sammeln
         if ( !defined $type ) {
-            grep { m{\A$room\z}ix } @rooms
+            #any { m{\A$room\z}ix } @rooms
+            any { $_ eq $room } @rooms
                 ? push @matchesInRoom, $devs 
                 : push @matchesOutsideRoom, $devs;
         }
         elsif ( defined $type && $mappingType && $type =~ m{\A$mappingType\z}ix ) {
-            grep { m{\A$room\z}ix } @rooms
+            #any { m{\A$room\z}ix } @rooms
+            any { $_ eq $room } @rooms
             ? push @matchesInRoom, $devs
             : push @matchesOutsideRoom, $devs;
         }
@@ -2832,9 +2834,11 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
 
     Log3($name, 5, 'handleIntentSetTimer called');
 
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $hash->{helper}{lng}->{responses}->{duration_not_understood}) 
+    if !defined $data->{hourabs} && !defined $data->{hour} && !defined $data->{min} && !defined $data->{sec} && !defined $data->{Cancel};
+
     my $room = RHASSPY_roomName($hash, $data); #$data->{Room} // $siteId
-    
-    
+
     my $hour = 0;
     my $value = time;
     my $now = $value;
@@ -2856,8 +2860,6 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         $value += +DAYSECONDS;
     }
 
-    if (!$value) {$response = $hash->{helper}{lng}->{responses}->{duration_not_understood}};
-    
     my $siteIds = ReadingsVal( $name, 'siteIds',0);
     RHASSPY_fetchSiteIds($hash) if !$siteIds;
 
@@ -2883,7 +2885,8 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         return $name;
     }
-    
+
+
     if( $value && $timerRoom ) {
         my $seconds = $value - $now; 
         my $diff = $seconds;
@@ -2902,7 +2905,7 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
 
         Log3($name, 5, "Created timer: $roomReading at +$attime");
 
-        my ($range, $minutes, $hours);
+        my ($range, $minutes, $hours, $minutetext);
         @time = localtime($value);
         if ( $seconds < 101 ) { 
             $range = 0;
@@ -2910,15 +2913,14 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
             $minutes = int ($seconds/MINUTESECONDS);
             $range = $seconds < 9*MINUTESECONDS ? 1 : 2;
             $seconds = $seconds % MINUTESECONDS;
+            $range = 2 if !$seconds;
         } elsif ( $seconds < 3 * HOURSECONDS ) {
-            $hours = $time[2];
+            $hours = int ($seconds/HOURSECONDS);
             $seconds = $seconds % HOURSECONDS;
-            $minutes = int ($seconds/MINUTESECONDS) + $time[1];
+            $minutes = int ($seconds/MINUTESECONDS);
             $range = 3;
-#        } elsif ($tomorrow) {
-#           $hours   =  strftime('%H', gmtime $diff);
-#            $minutes =  strftime('%M', gmtime $diff);
-#            $range = 4 + $tomorrow;
+            $minutetext =  $minutes ? $hash->{helper}{lng}->{units}->{unitMinutes}->{$minutes > 1 ? 0 : 1} : q{};
+            $minutetext = qq{$minutes $minutetext} if $minutes > 1;
         } else {
             $hours = $time[2];
             #$seconds = $seconds % HOURSECONDS;
