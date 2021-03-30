@@ -1111,8 +1111,8 @@ sub RHASSPY_asyncQueue {
     my $hash = shift // return;
     my $next_cmd = shift @{$hash->{".asyncQueue"}};
     if (defined $next_cmd) {
-        RHASSPY_runCmd($hash, $next_cmd->{device}, $next_cmd->{cmd}) if $next_cmd->{cmd};
-        RHASSPY_handleIntentSetNumeric($hash, $next_cmd->{SetNumeric}) if $next_cmd->{SetNumeric};
+        RHASSPY_runCmd($hash, $next_cmd->{device}, $next_cmd->{cmd}) if defined $next_cmd->{cmd};
+        RHASSPY_handleIntentSetNumeric($hash, $next_cmd->{SetNumeric}) if defined $next_cmd->{SetNumeric};
         my $async_delay = $next_cmd->{delay} // 0;
         InternalTimer(time+$async_delay,\&RHASSPY_asyncQueue,$hash,0);
     }
@@ -2977,6 +2977,8 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
             $range = $seconds < 9*MINUTESECONDS ? 1 : 2;
             $seconds = $seconds % MINUTESECONDS;
             $range = 2 if !$seconds;
+            $minutetext =  $hash->{helper}{lng}->{units}->{unitMinutes}->{$minutes > 1 ? 0 : 1};
+            $minutetext = qq{$minutes $minutetext} if $minutes > 1;
         } elsif ( $seconds < 3 * HOURSECONDS ) {
             $hours = int ($seconds/HOURSECONDS);
             $seconds = $seconds % HOURSECONDS;
