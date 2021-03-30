@@ -83,8 +83,8 @@ my $languagevars = {
     'NoActiveMediaDevice' => "Sorry no active playback device",
     'DefaultConfirmation' => "OK",
     'DefaultConfirmationTimeout' => "Sorry too late to confirm",
-    'DefaultCancelConfir' => "Thanks aborted",
-    'DefaultConfirReceived' => "ok will do it",
+    'DefaultCancelConfirmation' => "Thanks aborted",
+    'DefaultConfirmationReceived' => "ok will do it",
     'timerSet'   => {
         '0' => 'Timer $label in room $room has been set to $seconds seconds',
         '1' => 'Timer $label in room $room has been set to $minutes minutes $seconds',
@@ -528,8 +528,8 @@ sub RHASSPY_Set {
             return RHASSPY_trainRhasspy($hash);
         }
         if ($values[0] eq 'slots_no_training') {
-            RHASSPY_updateSlots($hash);
-            return initialize_devicemap($hash);
+            initialize_devicemap($hash);
+            return RHASSPY_updateSlots($hash);
         }
         if ($values[0] eq 'all') {
             initialize_Language($hash, $hash->{LANGUAGE});
@@ -1007,7 +1007,7 @@ sub RHASSPY_confirm_timer {
     #cancellation Case
     if ( $mode == 1 ) {
         RemoveInternalTimer( $hash, \&RHASSPY_confirm_timer );
-        $response = $hash->{helper}{lng}->{responses}->{DefaultCancelConfir};
+        $response = $hash->{helper}{lng}->{responses}->{DefaultCancelConfirmation};
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
         return $hash->{NAME};
@@ -1016,7 +1016,7 @@ sub RHASSPY_confirm_timer {
         RemoveInternalTimer( $hash, \&RHASSPY_confirm_timer );
         $hash->{helper}{'.delayed'} = $data;
         #$response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};
-        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirReceived} if $response eq 'default';
+        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
         
         #InternalTimer(time + $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout}, \&RHASSPY_confirm_timer, $hash, 0);
         InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
@@ -2432,7 +2432,7 @@ sub RHASSPY_handleIntentSetNumericGroup {
         
     for my $device (@devlist) {
         my $tempdata = $data;
-        $tempdata->{Device} = $device;
+        $tempdata->{'.DevName'} = $device;
         $tempdata->{'.inBulk'} = 1;
         
         # execute Cmd
@@ -2460,13 +2460,14 @@ sub RHASSPY_handleIntentSetNumericGroup {
 sub RHASSPY_handleIntentSetNumeric {
     my $hash = shift // return;
     my $data = shift // return;
-    my $device;
+    my $device = $data->{'.DevName'};
     #my $mapping;
     my $response;
 
     Log3($hash->{NAME}, 5, "handleIntentSetNumeric called");
 
-    if (!isValidData($data)) {
+    if (!defined $device || !isValidData($data)) {
+        return if defined $data->{'.inBulk'};
         return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData'));
         #nnnnn
     }
@@ -2482,25 +2483,29 @@ sub RHASSPY_handleIntentSetNumeric {
 
 
     # Gerät über Name suchen, oder falls über Lautstärke ohne Device getriggert wurde das ActiveMediaDevice suchen
-    if ( exists $data->{Device} ) {
+    if (!defined $device && exists $data->{Device} ) {
         $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
     } elsif ( defined $type && ( $type eq 'volume' || $type eq 'Lautstärke' ) ) {
         $device = 
             RHASSPY_getActiveDeviceForIntentAndType($hash, $room, 'SetNumeric', $type) 
-                                                                          
             // return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoActiveMediaDevice'));
     }
 
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound')) if !defined $device;
 
-
-    my $mapping = 
-        RHASSPY_getMapping($hash, $device, 'SetNumeric', $type, defined $hash->{helper}{devicemap}, 0)
-        // return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
+    my $mapping = RHASSPY_getMapping($hash, $device, 'SetNumeric', $type, defined $hash->{helper}{devicemap}, 0);
+    
+    if (!defined $mapping) {
+        if ( defined $data->{'.inBulk'} ) {
+            #Beta-User: long forms to later add options to check upper/lower limits for pure on/off devices
+            return;
+        } else { 
+            RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
+        }
+    }
 
     # Mapping and device found -> execute command
-                                                        
-    my $cmd     = $mapping->{cmd} // return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
+    my $cmd     = $mapping->{cmd} // return defined $data->{'.inBulk'} ? undef : RHASSPY_respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
     my $part    = $mapping->{part};
     my $minVal  = $mapping->{minVal};
     my $maxVal  = $mapping->{maxVal};
@@ -2567,7 +2572,7 @@ sub RHASSPY_handleIntentSetNumeric {
     }
 
     if (!defined $newVal) {
-        return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoNewValDerived'));
+        return defined $data->{'.inBulk'} ? undef : RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoNewValDerived'));
     }
 
     # limit to min/max  (if set)
@@ -2584,7 +2589,7 @@ sub RHASSPY_handleIntentSetNumeric {
 
     # send response
     $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
-    RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{'.inBulk'};
     return $device;
 }
 
