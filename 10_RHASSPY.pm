@@ -85,6 +85,7 @@ my $languagevars = {
     'DefaultConfirmationTimeout' => "Sorry too late to confirm",
     'DefaultCancelConfirmation' => "Thanks aborted",
     'DefaultConfirmationReceived' => "ok will do it",
+    'DefaultConfirmationNoOutstanding' => "no command is awaiting confirmation",
     'timerSet'   => {
         '0' => 'Timer $label in room $room has been set to $seconds seconds',
         '1' => 'Timer $label in room $room has been set to $minutes minutes $seconds',
@@ -3018,6 +3019,8 @@ sub RHASSPY_handleIntentConfirmAction {
     
     #confirmed case
     my $data_old = $hash->{helper}{'.delayed'};
+    
+    return RHASSPY_respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
     delete $hash->{helper}{'.delayed'};
     
     $data_old->{siteId} = $data->{siteId};
