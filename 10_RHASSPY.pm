@@ -51,6 +51,7 @@ my %gets = (
 my %sets = (
     speak        => [],
     play         => [],
+    customSlot   => [],
 #    updateSlots  => [qw(noArg)],
     textCommand  => [],
     trainRhasspy => [qw(noArg)],
@@ -536,6 +537,13 @@ sub RHASSPY_Set {
             RHASSPY_updateSlots($hash);
             return RHASSPY_trainRhasspy($hash);
         }
+    }
+    if ($command eq 'customSlot') {
+        my $slotname = $h->{slotname}  // shift @values;
+        my $slotdata = $h->{slotdata}  // shift @values;
+        my $overwr   = $h->{overwrite} // shift @values;
+        my $training = $h->{training}  // shift @values;
+        return RHASSPY_updateSingleSlot($hash, $slotname, $slotdata, $overwr, $training);
     }
     return;
 }
@@ -2039,6 +2047,33 @@ sub RHASSPY_updateSlots {
     return;
 }
 
+# Send all devices, rooms, etc. to Rhasspy HTTP-API to update the slots
+sub RHASSPY_updateSingleSlot {
+    my $hash     = shift // return;
+    my $slotname = shift // return;
+    my $slotdata = shift // return;
+    my $overwr   = shift // q{true};
+    my $training = shift;
+    $overwr = q{false} if $overwr ne 'true';
+    my @data = split m{,}xms, $slotdata;
+    my $language = $hash->{LANGUAGE};
+    my $fhemId   = $hash->{fhemId};
+    my $method   = q{POST};
+    
+    my $url = qq{/api/slots?overwrite_all=$overwr};
+
+    my $deviceData->{qq(${language}.${fhemId}.$slotname)} = \@data;
+
+    my $json = eval { toJSON($deviceData) };
+
+    Log3($hash->{NAME}, 5, "Updating Rhasspy single slot with data ($language): $json");
+
+    RHASSPY_sendToApi($hash, $url, $method, $json);
+    return RHASSPY_trainRhasspy($hash) if $training;
+
+    return;
+}
+
 # Use the HTTP-API to instruct Rhasspy to re-train it's data
 sub RHASSPY_trainRhasspy {
     my $hash = shift // return;
@@ -2490,7 +2525,6 @@ sub RHASSPY_handleIntentSetNumeric {
     if (!defined $device || !isValidData($data)) {
         return if defined $data->{'.inBulk'};
         return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData'));
-        #nnnnn
     }
     
     my $unit   = $data->{Unit};
@@ -3375,6 +3409,16 @@ attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionSt
     Example: <code>set &lt;rhasspyDevice&gt; updateSlots</code><br>
     Do not forget to train Rhasspy afterwards!</s> (deprecated)
   </li>
+    <li>
+    <b><a id="RHASSPY-set-customSlot">customSlot</a></b><br>
+    Provide slotname, slotdata and (optional) info, if existing data shall be overwritten and training shall be initialized immediately afterwards. 
+    First two arguments are required, third and fourth are optional!<br>
+    <i>overwrite</i> defaults to <i>true</i>, setting any other value than <i>true</i> will keep existing Rhasspy slot data.<br>
+    Examples: <code>set &lt;rhasspyDevice&gt; customSlot mySlot a,b,c overwrite training </code> or 
+    <code>set &lt;rhasspyDevice&gt; customSlot slotname=mySlot slotdata=a,b,c overwrite=false</code>
+  </li>
+
+  
 </ul>
 <a id="RHASSPY-attr"></a>
 <p><b>Attributes</b></p>
@@ -3395,12 +3439,12 @@ attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionSt
     configFile also allows combining e.g. a default set of German sentences with some few own modifications by using "defaults" subtree for the defaults and "user" subtree for your modified versions. This feature might be helpfull in case the base language structure has to be changed in the future.
   </li>
   <li>
-    <s><b>response</b><br>
+    <b>response</b><br>
     Optionally define alternative default answers. Available keywords are <code>DefaultError</code>, <code>NoActiveMediaDevice</code> and <code>DefaultConfirmation</code>.<br>
     Example:
     <pre><code>DefaultError=
-DefaultConfirmation=Klaro, mach ich</code></pre></s><p>
-    Beta-User: Was never part of the code? Use configFile instead!
+DefaultConfirmation=Klaro, mach ich</code></pre><p>
+    Note: Kept for compability reasons. Consider using configFile instead!
   </li>
   <li>
     <a id="RHASSPY-attr-rhasspyIntents"></a><b>rhasspyIntents</b><br>
