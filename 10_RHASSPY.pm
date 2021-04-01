@@ -354,15 +354,13 @@ sub firstInit {
     my $IODev = AttrVal($hash->{NAME},'IODev',undef);
 
     return if !$init_done || !defined $IODev;
-
     RemoveInternalTimer($hash);
-    
+
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
-    
+
     RHASSPY_fetchSiteIds($hash) if !ReadingsVal( $hash->{NAME}, 'siteIds', 0 );
-    
     initialize_rhasspyTweaks($hash);
-    
+    initialize_DialogManager($hash);
     initialize_devicemap($hash); # if defined $hash->{useHash};
 
     return;
@@ -634,6 +632,30 @@ sub initialize_rhasspyTweaks {
     return;
 }
 
+sub initialize_DialogManager {
+    my $hash    = shift // return;
+    my $language = $hash->{LANGUAGE};
+    my $fhemId   = $hash->{fhemId};
+    
+=pod    disable some intents by default https://rhasspy.readthedocs.io/en/latest/reference/#dialogue-manager
+hermes/dialogueManager/configure (JSON)
+
+    Sets the default intent filter for all subsequent dialogue sessions
+    intents: [object] - Intents to enable/disable (empty for all intents)
+        intentId: string - Name of intent
+        enable: bool - true if intent should be eligible for recognition
+    siteId: string = "default" - Hermes site ID
+=cut
+    my $sendData =  {
+        siteId  => $fhemId,
+        intents => [{intentId => "${language}.${fhemId}.ConfirmAction", enable => "false"}]
+    };
+
+    my $json = toJSON($sendData);
+
+    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure $json});
+    return;
+}
 
 sub RHASSPY_init_custom_intents {
     my $hash    = shift // return;
@@ -1022,28 +1044,17 @@ sub RHASSPY_confirm_timer {
         #InternalTimer(time + $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout}, \&RHASSPY_confirm_timer, $hash, 0);
         InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
 
-        RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+        #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
+        my $reaction = { text => $response, intentFilter => [qw(ConfirmAction)]
+            };
+
+        RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
 
         return $hash->{NAME};
     }
     
     return $hash->{NAME};
 }
-
-=pod
-(Old Version, Shortcuts only)
-sub RHASSPY_handleIntentConfirmation {
-    my $hash = shift // return;
-    my $data = shift // return;
-    
-    RemoveInternalTimer($hash);
-    my $data2 = $hash->{helper}{'.delayed'};
-    delete $hash->{helper}{'.delayed'};
-    
-    #Beta-User: most likely we will have to change some fields in $data2 to content from $data
-    return RHASSPY_handleIntentShortcuts($hash,$data2,1);
-}
-=cut
 
 
 #from https://stackoverflow.com/a/43873983, modified...
@@ -1882,11 +1893,22 @@ sub RHASSPY_respond {
     my $siteId    = shift // return;
     my $response  = shift // return;
 
+    my $topic = q{endSession};
+
     my $sendData =  {
         sessionId => $sessionId,
-        siteId    => $siteId,
-        text      => $response
+        siteId    => $siteId
     };
+
+    if (ref $response eq 'HASH') {
+        #intentFilter
+        $topic = q{continueSession};
+        for my $key (keys %{$response}) {
+            $sendData->{$key} = $response->{$key};
+        }
+    } else {
+        $sendData->{text} = $response
+    }
 
     my $json = toJSON($sendData);
 
@@ -1896,7 +1918,7 @@ sub RHASSPY_respond {
       : readingsBulkUpdate($hash, 'textResponse', $response);
     readingsBulkUpdate($hash, 'responseType', $type);
     readingsEndUpdate($hash,1);
-    IOWrite($hash, 'publish', qq{hermes/dialogueManager/endSession $json});
+    IOWrite($hash, 'publish', qq{hermes/dialogueManager/$topic $json});
     return;
 }
 
@@ -2107,7 +2129,7 @@ sub RHASSPY_handleCustomIntent {
     my $data       = shift;
    
     if (!defined $hash->{helper}{custom} || !defined $hash->{helper}{custom}{$intentName}) {
-        Log3($hash->{NAME}, 2, "handleIntentShortcuts called with invalid $intentName key");
+        Log3($hash->{NAME}, 2, "handleIntentCustomIntent called with invalid $intentName key");
         return;
     }
     my $custom = $hash->{helper}{custom}{$intentName};
@@ -2138,9 +2160,7 @@ sub RHASSPY_handleCustomIntent {
         my $args = join q{","}, @rets;
         my $cmd = qq{ $subName( "$args" ) };
 =pod
-attr rhasspy rhasspyIntents GetAllOff=GetAllOff(Room,Type)\
-SetAllOff=SetAllOff(Room,Type)\
-SetAllOn=SetAllOn(Room,Type)
+attr rhasspy rhasspyIntents SetAllOn=SetAllOn(Room,Type)
 
 sub SetAllOn($$){
 my ($Raum,$Typ) = @_;
