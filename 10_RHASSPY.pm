@@ -320,7 +320,7 @@ sub RHASSPY_Define {
 
     my $name = shift @{$anon};
     my $type = shift @{$anon};
-    my $Rhasspy  = $h->{IP_Port} // shift @{$anon} // q{localhost:12101};
+    my $Rhasspy  = $h->{IP_Port} // shift @{$anon} // q{http://localhost:12101};
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
     $hash->{MODULE_VERSION} = "0.4.7a";
