@@ -52,7 +52,6 @@ my %sets = (
     speak        => [],
     play         => [],
     customSlot   => [],
-#    updateSlots  => [qw(noArg)],
     textCommand  => [],
     trainRhasspy => [qw(noArg)],
     fetchSiteIds => [qw(noArg)],
@@ -321,9 +320,11 @@ sub RHASSPY_Define {
 
     my $name = shift @{$anon};
     my $type = shift @{$anon};
+    my $Rhasspy  = $h->{IP_Port} // shift @{$anon} // q{localhost:12101};
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
-    $hash->{MODULE_VERSION} = "0.4.6a";
+    $hash->{MODULE_VERSION} = "0.4.7a";
+    $hash->{IP_Port} = $Rhasspy;
     $hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -372,12 +373,12 @@ sub initialize_Language {
     my $lang = shift // return;
     my $cfg  = shift // AttrVal($hash->{NAME},'configFile',undef);
     
-    #my $cp = $hash->{encoding} // q{UTF-8};
+                                            
     my $cp = q{UTF-8};
-    my $lngvars = $languagevars;
+                                
     
     #default to english first
-    $hash->{helper}{lng} = $lngvars if !$init_done || !defined $hash->{helper}{lng};
+    $hash->{helper}->{lng} = $languagevars if !defined $hash->{helper}->{lng} || !$init_done;
 
     my ($ret, $content) = RHASSPY_readLanguageFromFile($hash, $cfg);
     return $ret if $ret;
@@ -395,7 +396,10 @@ sub initialize_Language {
     }
 
     #$hash->{helper}{lng} = $decoded;
-    $hash->{helper}{lng} = _combineHashes( $lngvars, $decoded);
+    #my $lng = $hash->{helper}->{lng};
+    #my $lngvars = _combineHashes( $lng, $decoded);
+    $hash->{helper}->{lng} = _combineHashes( $hash->{helper}->{lng}, $decoded);
+
     return;
 }
 
@@ -762,7 +766,7 @@ sub _analyze_rhassypAttr {
     my $device = shift // return;
 
     my $prefix = $hash->{prefix};
-    
+
     return if !defined AttrVal($device,"${prefix}Room",undef) 
            && !defined AttrVal($device,"${prefix}Name",undef)
            && !defined AttrVal($device,"${prefix}Channels",undef) 
@@ -774,6 +778,7 @@ sub _analyze_rhassypAttr {
     my @rooms;
     my $attrv = AttrVal($device,"${prefix}Room",undef);
     @rooms = split m{,}x, $attrv if defined $attrv;
+    for (@rooms) { $_ = lc };
     @rooms = @{$hash->{helper}{devicemap}{devices}{$device}->{rooms}} if !@rooms && defined $hash->{helper}{devicemap}{devices}{$device}->{rooms};
     if (!@rooms) {
         $rooms[0] = $hash->{helper}{defaultRoom};
@@ -783,6 +788,7 @@ sub _analyze_rhassypAttr {
     my @names;
     $attrv = AttrVal($device,"${prefix}Name",undef);
     push @names, split m{,}x, $attrv if $attrv;
+    for (@names) { $_ = lc };
     
     for my $dn (@names) {
        for (@rooms) {
@@ -860,32 +866,40 @@ sub _analyze_genDevType {
     my $hash   = shift // return;
     my $device = shift // return;
 
+    my $prefix = $hash->{prefix};
+
     #prerequesite: gdt has to be set!
     my $gdt = AttrVal($device, 'genericDeviceType', undef) // return; 
 
     my @names;
+    my $attrv;
     #additional names?
-    my $attrv = AttrVal($device,'alexaName', undef);
-    push @names, split m{;}x, $attrv if $attrv;
+    if (!defined AttrVal($device,"${prefix}Name", undef)) {
 
-    $attrv = AttrVal($device,'siriName',undef);
-    push @names, split m{,}x, $attrv if $attrv;
+        $attrv = AttrVal($device,'alexaName', undef);
+        push @names, split m{;}x, $attrv if $attrv;
 
-    my $alias = AttrVal($device,'alias',undef);
-    $names[0] = $alias if !@names && $alias;
-    $names[0] = $device if !@names;
+        $attrv = AttrVal($device,'siriName',undef);
+        push @names, split m{,}x, $attrv if $attrv;
+
+        my $alias = AttrVal($device,'alias',undef);
+        $names[0] = $alias if !@names && $alias;
+        $names[0] = $device if !@names;
+    }
 
     #convert to lower case
     for (@names) { $_ = lc; }
     @names = get_unique(\@names);
 
     my @rooms;
-    $attrv = AttrVal($device,'alexaRoom', undef);
-    push @rooms, split m{,}x, $attrv if $attrv;
+    if (!defined AttrVal($device,"${prefix}Room", undef)) {
+        $attrv = AttrVal($device,'alexaRoom', undef);
+        push @rooms, split m{,}x, $attrv if $attrv;
 
-    $attrv = AttrVal($device,'room',undef);
-    push @rooms, split m{,}x, $attrv if $attrv;
-    $rooms[0] = $hash->{helper}{defaultRoom} if !@rooms;
+        $attrv = AttrVal($device,'room',undef);
+        push @rooms, split m{,}x, $attrv if $attrv;
+        $rooms[0] = $hash->{helper}{defaultRoom} if !@rooms;
+    }
 
     #convert to lower case
     for (@rooms) { $_ = lc }
@@ -964,7 +978,7 @@ sub _analyze_genDevType {
             SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}},
             GetNumeric => { 'volume' => {currentVal => 'volume', type => 'volume' }},
             SetNumeric => {'volume' => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 'channel' => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}}, 
-            MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'}};
+            MediaControls => { MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'} } };
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
@@ -1112,18 +1126,23 @@ sub _replace {
 #Beta-User: might be usefull in case we want to allow some kind of default + user-diff logic, especially in language...
 sub _combineHashes {
     my ($hash1, $hash2, $parent) = @_;
-
+    my $hash3 = {};
+   
     for my $key (keys %{$hash1}) {
+        $hash3->{$key} = $hash1->{$key};
         if (!exists $hash2->{$key}) {
             next;
         }
-        if ( ref $hash1->{$key} eq 'HASH' and ref $hash2->{$key} eq 'HASH' ) {
-            _combineHashes($hash1->{$key}, $hash2->{$key}, $key);
-        } elsif ( !ref $hash1->{$key} && !ref $hash2->{$key} ) { 
-            $hash1->{$key} = $hash2->{$key};
+        if ( ref $hash3->{$key} eq 'HASH' and ref $hash2->{$key} eq 'HASH' ) {
+            $hash3->{$key} = _combineHashes($hash3->{$key}, $hash2->{$key}, $key);
+        } elsif ( !ref $hash3->{$key} && !ref $hash2->{$key} ) {
+            $hash3->{$key} = $hash2->{$key};
         }
     }
-    return $hash1;
+    for (qw(commaconversion mutated_vowels)) {
+        $hash3->{$_} = $hash2->{$_} if defined $hash2->{$_};
+    }
+    return $hash3;
 }
     
 # derived from structureRHASSPY_asyncQueue
@@ -1294,10 +1313,9 @@ sub RHASSPY_getDevicesByIntentAndType {
     my $room   = shift;
     my $intent = shift;
     my $type   = shift; #Beta-User: any necessary parameters...?
-    
+
     my @matchesInRoom; my @matchesOutsideRoom;
-    my $prefix = $hash->{prefix};
-    
+
     return if !defined $hash->{helper}{devicemap};
     for my $devs (keys %{$hash->{helper}{devicemap}{devices}}) {
         my $mapping = RHASSPY_getMapping($hash, $devs, $intent, $type, 1, 1) // next;
@@ -2101,7 +2119,7 @@ sub RHASSPY_sendToApi {
     my $url    = shift;
     my $method = shift;
     my $data   = shift;
-    my $base   = AttrVal($hash->{NAME}, 'rhasspyMaster', undef) // return;
+    my $base   = $hash->{IP_Port}; #AttrVal($hash->{NAME}, 'rhasspyMaster', undef) // return;
 
     #Retrieve URL of Rhasspy-Master from attribute
     $url = $base.$url;
@@ -2129,7 +2147,7 @@ sub RHASSPY_ParseHttpResponse {
     my $url   = lc($param->{url});
 
     my $name  = $hash->{NAME};
-    my $base  = AttrVal($name, 'rhasspyMaster', undef) // return;
+    my $base  = $hash->{IP_Port}; #AttrVal($name, 'rhasspyMaster', undef) // return;
     my $cp    = $hash->{encoding} // q{UTF-8};
     
     readingsBeginUpdate($hash);
@@ -2143,16 +2161,19 @@ sub RHASSPY_ParseHttpResponse {
         readingsBulkUpdate($hash, $urls->{$url}, $data);
     }
     elsif ( $url =~ m{api/profile}ix ) {
-        my $ref = decode_json($data);
+        my $ref; 
+        if ( !eval { $ref = decode_json($data) ; 1 } ) {
+            readingsEndUpdate($hash, 1);
+            return Log3($hash->{NAME}, 1, "JSON decoding error: $@");
+        }
+        #my $ref = decode_json($data);
         my $siteIds = encode($cp,$ref->{dialogue}{satellite_site_ids});
         readingsBulkUpdate($hash, 'siteIds', $siteIds);
     }
     else {
         Log3($name, 3, qq(error while requesting $param->{url} - $data));
     }
-    
     readingsEndUpdate($hash, 1);
-    
     return;
 }
 
@@ -2184,16 +2205,18 @@ sub RHASSPY_handleCustomIntent {
     if (defined $subName) { #might not be necessary...
         for (@rets) {
             if ($_ eq 'NAME') {
-                $_ = $hash->{NAME};
+                $_ = qq{"$hash->{NAME}"};
             } elsif ($_ eq 'DATA') {
                 $_ = $data;
             } elsif (defined $data->{$_}) {
-                $_ = $data->{$_};
+                $_ = qq{"$data->{$_}"};
+            } else {
+                $_ = "undef";
             }
         }
 
-        my $args = join q{","}, @rets;
-        my $cmd = qq{ $subName( "$args" ) };
+        my $args = join q{,}, @rets;
+        my $cmd = qq{ $subName( $args ) };
 =pod
 attr rhasspy rhasspyIntents SetAllOn=SetAllOn(Room,Type)
 
@@ -2522,7 +2545,7 @@ sub RHASSPY_handleIntentSetNumeric {
 
     Log3($hash->{NAME}, 5, "handleIntentSetNumeric called");
 
-    if (!defined $device || !isValidData($data)) {
+    if (!defined $device && !isValidData($data)) {
         return if defined $data->{'.inBulk'};
         return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData'));
     }
@@ -3022,7 +3045,7 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         #my $cmd = qq(defmod $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";;setreading $name $roomReading 0);
 
         #RHASSPY_runCmd($hash,'',$cmd);
-        CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";;setreading $name $roomReading 0");
+        CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";setreading $name $roomReading 0");
 
         readingsSingleUpdate($hash, $roomReading, 1, 1);
 
@@ -3391,7 +3414,7 @@ attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionSt
   <li>
     <i><b>trainRhasspy</b><br>
     Sends a train-command to the HTTP-API of the Rhasspy master.<br>
-    The attribute <i>rhasspyMaster</i> has to be defined to work.<br>
+    As prerequisite, <i>Rhasspy</i> (in define) has to point to correct IP and Port.<br>
     Example: <code>set &lt;rhasspyDevice&gt; trainRhasspy</code><br>
     *) Might be removed in the future in favor of the update features</i>
   </li>
