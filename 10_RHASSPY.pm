@@ -777,26 +777,27 @@ sub _analyze_rhassypAttr {
     #rhasspyRooms ermitteln
     my @rooms;
     my $attrv = AttrVal($device,"${prefix}Room",undef);
-    @rooms = split m{,}x, $attrv if defined $attrv;
-    for (@rooms) { $_ = lc };
+    @rooms = split m{,}x, lc $attrv if defined $attrv;
+    #for (@rooms) { $_ = lc };
     @rooms = @{$hash->{helper}{devicemap}{devices}{$device}->{rooms}} if !@rooms && defined $hash->{helper}{devicemap}{devices}{$device}->{rooms};
     if (!@rooms) {
         $rooms[0] = $hash->{helper}{defaultRoom};
     }
-    
+    @{$hash->{helper}{devicemap}{devices}{$device}{rooms}} = @rooms;
+
     #rhasspyNames ermitteln
     my @names;
     $attrv = AttrVal($device,"${prefix}Name",undef);
-    push @names, split m{,}x, $attrv if $attrv;
-    for (@names) { $_ = lc };
+    push @names, split m{,}x, lc $attrv if $attrv;
+    #for (@names) { $_ = lc };
+    $hash->{helper}{devicemap}{devices}{$device}->{alias} = $names[0] if $attrv;
     
     for my $dn (@names) {
        for (@rooms) {
            $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
        }
     }
-    @{$hash->{helper}{devicemap}{devices}{$device}{rooms}} = @rooms;
-    
+
     for my $item ('Channels', 'Colors') {
         my @rows = split m{\n}x, AttrVal($device, "${prefix}${item}", q{});
 
@@ -847,16 +848,17 @@ sub _analyze_rhassypAttr {
         $hash->{helper}{devicemap}{devices}{$device}{intents}{$key}->{$currentMapping{type}} = \%currentMapping;
     }
 
-    my $allrooms = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
-    for (@rooms) {
-        push @{$allrooms}, $_ if !grep { m{\A$_\z}ix } @{$allrooms};
-    }
+    #my $allrooms = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
+    #for (@rooms) {
+        #push @{$allrooms}, $_ if !grep { m{\A$_\z}ix } @{$allrooms};
+    #    push @{$allrooms}, $_ if !grep { m{\A$_\z}ix } @{$allrooms};
+    #}
 
     my @groups;
     $attrv = AttrVal($device,"${prefix}Group", undef);
     $attrv = $attrv // AttrVal($device,'group', undef);
-    $attrv = lc $attrv if $attrv;
-    @{$hash->{helper}{devicemap}{devices}{$device}{groups}} = split m{,}x, $attrv if $attrv;
+    #$attrv = lc $attrv if $attrv;
+    @{$hash->{helper}{devicemap}{devices}{$device}{groups}} = split m{,}x, lc $attrv if $attrv;
 
     return;
 }
@@ -886,6 +888,7 @@ sub _analyze_genDevType {
         $names[0] = $alias if !@names && $alias;
         $names[0] = $device if !@names;
     }
+    $hash->{helper}{devicemap}{devices}{$device}->{alias} = $names[0] if $names[0];
 
     #convert to lower case
     for (@names) { $_ = lc; }
@@ -912,8 +915,8 @@ sub _analyze_genDevType {
     }
     push @{$hash->{helper}{devicemap}{devices}{$device}{rooms}}, @rooms;
     
-    $attrv = lc AttrVal($device,'group', undef);
-    @{$hash->{helper}{devicemap}{devices}{$device}{groups}} = split m{,}x, $attrv if $attrv;
+    $attrv = AttrVal($device,'group', undef);
+    @{$hash->{helper}{devicemap}{devices}{$device}{groups}} = split m{,}x, lc $attrv if $attrv;
 
     my $hbmap  = AttrVal($device, 'homeBridgeMapping', q{}); 
     my $allset = getAllSets($device);
@@ -1320,18 +1323,16 @@ sub RHASSPY_getDevicesByIntentAndType {
     for my $devs (keys %{$hash->{helper}{devicemap}{devices}}) {
         my $mapping = RHASSPY_getMapping($hash, $devs, $intent, $type, 1, 1) // next;
         my $mappingType = $mapping->{type};
-        my @rooms = $hash->{helper}{devicemap}{devices}{$devs}{rooms};
+        my $rooms = join q{,}, $hash->{helper}{devicemap}{devices}{$devs}->{rooms};
 
         # Geräte sammeln
         if ( !defined $type ) {
-            #any { m{\A$room\z}ix } @rooms
-            any { $_ eq $room } @rooms
-                ? push @matchesInRoom, $devs 
-                : push @matchesOutsideRoom, $devs;
+            $rooms =~ m{\b$room\b}ix
+            ? push @matchesInRoom, $devs 
+            : push @matchesOutsideRoom, $devs;
         }
         elsif ( defined $type && $mappingType && $type =~ m{\A$mappingType\z}ix ) {
-            #any { m{\A$room\z}ix } @rooms
-            any { $_ eq $room } @rooms
+            $rooms =~ m{\b$room\b}ix
             ? push @matchesInRoom, $devs
             : push @matchesOutsideRoom, $devs;
         }
@@ -1351,7 +1352,8 @@ sub RHASSPY_getDeviceByIntentAndType {
 
     # Devices sammeln
     my ($matchesInRoom, $matchesOutsideRoom) = RHASSPY_getDevicesByIntentAndType($hash, $room, $intent, $type);
-
+    Log3($hash->{NAME}, 5, "matches in room: @{$matchesInRoom}, matches outside: @{$matchesOutsideRoom}");
+    
     # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
     $device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
 
@@ -2721,7 +2723,13 @@ sub RHASSPY_handleIntentGetNumeric {
     # Punkt durch Komma ersetzen in Dezimalzahlen
     $value =~ s{\.}{\,}gx if $hash->{helper}{lng}->{commaconversion};
 
-    my $location = $data->{Device} // $data->{Room};
+    my $location = $data->{Device};
+
+    if ( !defined $location ) {
+        my $rooms = join q{,}, $hash->{helper}{devicemap}{devices}{$device}->{rooms};
+        $location = $data->{Room} if $rooms =~ m{\b$data->{Room}\b}ix;
+        $location = ${$hash->{helper}{devicemap}{devices}{$device}->{rooms}}[0] if !defined $location;
+    }
 
     # Antwort falls Custom Response definiert ist
     if ( defined $mapping->{response} ) { 
@@ -2753,6 +2761,7 @@ sub RHASSPY_handleIntentGetNumeric {
             ? $responses->{knownType} 
             : $responses->{unknownType};
     }
+    my $deviceName = $hash->{helper}{devicemap}{devices}{$device}->{alias} // $device;
 
     # Variablen ersetzen?
     $response =~ s{(\$\w+)}{$1}eegx;
