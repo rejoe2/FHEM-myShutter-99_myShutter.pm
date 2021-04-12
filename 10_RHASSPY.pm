@@ -122,6 +122,7 @@ my $languagevars = {
         '0' => 'temperature in $location is $value',
         '1' => 'temperature in $location is $value degrees',
       },
+      'tempTarget'   => 'target temperature for $device is set to $value degrees',
       'volume'  => '$device set to $value',
       'waterLevel'   => 'water level in $location is $value percent',
       'knownType'    => '$mappingType in $location is $value percent',
@@ -993,7 +994,7 @@ sub _analyze_genDevType {
         my $desTemp = $allset =~ m{\b(desiredTemp)[\b:\s]}xms ? $1 : 'desired-temp';
         my $measTemp = InternalVal($device, 'TYPE', 'unknown') eq 'CUL_HM' ? 'measured-temp' : 'temperature';
         $currentMapping = 
-            { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'temperature'},
+            { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'tempTarget'},
             temperature => {currentVal => $measTemp, type => 'temperature'}}, 
             SetNumeric => {'desired-temp' => { cmd => $desTemp, currentVal => $desTemp, maxVal => '28', minVal => '10', step => '0.5', type => 'temperature'}}
             };
