@@ -26,9 +26,14 @@
 # You should have received a copy of the GNU General Public License
 # along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-        
- 
 ###########################################################################
+
+###########################################################################
+# ToDo:
+#
+# Find a better way to delay training of Rhasspy after updating slots
+###########################################################################
+
 package MQTT::RHASSPY; ##no critic qw(Package)
 use strict;
 use warnings;
@@ -84,6 +89,7 @@ my $languagevars = {
     'DefaultConfirmation' => "OK",
     'DefaultConfirmationTimeout' => "Sorry too late to confirm",
     'DefaultCancelConfirmation' => "Thanks aborted",
+    'SilentCancelConfirmation' => "",
     'DefaultConfirmationReceived' => "ok will do it",
     'DefaultConfirmationNoOutstanding' => "no command is awaiting confirmation",
     'timerSet'   => {
@@ -320,11 +326,11 @@ sub RHASSPY_Define {
 
     my $name = shift @{$anon};
     my $type = shift @{$anon};
-    my $Rhasspy  = $h->{WebIF} // shift @{$anon} // q{http://127.0.0.1:12101};
+    my $Rhasspy  = $h->{baseUrl} // shift @{$anon} // q{http://127.0.0.1:12101};
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     my $language = $h->{language} // shift @{$anon} // lc(AttrVal('global','language','en'));
-    $hash->{MODULE_VERSION} = "0.4.7c";
-    $hash->{WebIF} = $Rhasspy;
+    $hash->{MODULE_VERSION} = "0.4.7d";
+    $hash->{baseUrl} = $Rhasspy;
     $hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -333,7 +339,7 @@ sub RHASSPY_Define {
     initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
     $hash->{encoding} = $h->{encoding};
-    $hash->{useGenericAttrs} = $h->{useGenericAttrs};
+    $hash->{useGenericAttrs} = $h->{useGenericAttrs} // 1;
     $hash->{'.asyncQueue'} = [];
     #Beta-User: Für's Ändern von defaultRoom oder prefix vielleicht (!?!) hilfreich: https://forum.fhem.de/index.php/topic,119150.msg1135838.html#msg1135838 (Rudi zu resolveAttrRename) 
 
@@ -514,7 +520,7 @@ sub RHASSPY_Set {
     my $params = join q{ }, @values; #error case: playWav => PERL WARNING: Use of uninitialized value within @values in join or string
     $params = $h if defined $h->{text} || defined $h->{path} || defined $h->{volume};
     return $dispatch->{$command}->($hash, $params) if ref $dispatch->{$command} eq 'CODE';
-    
+
     if ($command eq 'update') {
         if ($values[0] eq 'language') {
             return initialize_Language($hash, $hash->{LANGUAGE});
@@ -542,6 +548,40 @@ sub RHASSPY_Set {
             return RHASSPY_trainRhasspy($hash);
         }
     }
+    
+=pod
+    # Could happen, that training start before all slots are written to Rhasspy
+    # Therfore we included a delay
+    # Unhappy with fixed 10s. Should find a better way to do this.
+    if ($command eq 'update') {
+        if ($values[0] eq 'language') {
+            return initialize_Language($hash, $hash->{LANGUAGE});
+        }
+        if ($values[0] eq 'devicemap') {
+            initialize_devicemap($hash);
+            RHASSPY_updateSlots($hash);
+            return InternalTimer(time + 10,\&RHASSPY_trainRhasspy,$hash,0);
+        }
+        if ($values[0] eq 'devicemap_only') {
+            return initialize_devicemap($hash);
+        }
+        if ($values[0] eq 'slots') {
+            RHASSPY_updateSlots($hash);
+            return InternalTimer(time + 10,\&RHASSPY_trainRhasspy,$hash,0);
+        }
+        if ($values[0] eq 'slots_no_training') {
+            initialize_devicemap($hash);
+            return RHASSPY_updateSlots($hash);
+        }
+        if ($values[0] eq 'all') {
+            initialize_Language($hash, $hash->{LANGUAGE});
+            initialize_devicemap($hash);
+            RHASSPY_updateSlots($hash);
+            return InternalTimer(time + 10,\&RHASSPY_trainRhasspy,$hash,0);
+        }
+    }
+=cut
+
     if ($command eq 'customSlot') {
         my $slotname = $h->{slotname}  // shift @values;
         my $slotdata = $h->{slotdata}  // shift @values;
@@ -718,7 +758,7 @@ sub initialize_devicemap {
     my @devices = devspec2array($devspec);
 
     # when called with just one keyword, devspec2array may return the keyword, even if the device doesn't exist...
-    return if (@devices == 1 && $devices[0] eq $devspec);
+    return if !@devices;
     
     for (@devices) {
         _analyze_genDevType($hash, $_) if $hash->{useGenericAttrs};
@@ -1060,7 +1100,7 @@ sub RHASSPY_confirm_timer {
     #cancellation Case
     if ( $mode == 1 ) {
         RemoveInternalTimer( $hash, \&RHASSPY_confirm_timer );
-        $response = $hash->{helper}{lng}->{responses}->{DefaultCancelConfirmation};
+        $response = $hash->{helper}{lng}->{responses}->{ defined $hash->{helper}{'.delayed'} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
         return $hash->{NAME};
@@ -1256,7 +1296,7 @@ sub RHASSPY_allRhasspyGroups {
     my @groups;
     
     for my $device (keys %{$hash->{helper}{devicemap}{devices}}) {
-        my $devgroups = $hash->{helper}{devicemap}{devices}{$device}->{groups};
+        my $devgroups = $hash->{helper}{devicemap}{devices}{$device}->{groups} // q{};;
         #for (@{$devgroups}) {
         for (split m{,}xi, $devgroups ) {
             push @groups, $_;
@@ -1278,8 +1318,10 @@ sub RHASSPY_roomName {
     #Beat-User: This might be the right place to check, if there's additional logic implemented...
     
     my $rreading = makeReadingName("siteId2room_$data->{siteId}");
-    $room = ReadingsVal($hash->{NAME}, $rreading, $data->{siteId});
-    $room = $hash->{helper}{defaultRoom} if ($room eq 'default' || !(length $room));
+    #$room = ReadingsVal($hash->{NAME}, $rreading, $data->{siteId});
+    my @fromSiteId = split m{\.}x, lc $data->{siteId};
+    $room = ReadingsVal($hash->{NAME}, $rreading, $fromSiteId[0]);
+    $room = $hash->{helper}{defaultRoom} if $room eq 'default' || !(length $room);
 
     return $room;
 }
@@ -1322,12 +1364,13 @@ sub RHASSPY_getDevicesByIntentAndType {
     my $room   = shift;
     my $intent = shift;
     my $type   = shift; #Beta-User: any necessary parameters...?
+    my $subType = shift // $type;
 
     my @matchesInRoom; my @matchesOutsideRoom;
 
     return if !defined $hash->{helper}{devicemap};
     for my $devs (keys %{$hash->{helper}{devicemap}{devices}}) {
-        my $mapping = RHASSPY_getMapping($hash, $devs, $intent, $type, 1, 1) // next;
+        my $mapping = RHASSPY_getMapping($hash, $devs, $intent, { type => $type, subType => $subType }, 1, 1) // next;
         my $mappingType = $mapping->{type};
         #my $rooms = join q{,}, $hash->{helper}{devicemap}{devices}{$devs}->{rooms};
         my $rooms = $hash->{helper}{devicemap}{devices}{$devs}->{rooms};
@@ -1458,13 +1501,12 @@ sub RHASSPY_getDevicesByGroup {
         my $allgroups = $hash->{helper}{devicemap}{devices}{$dev}->{groups};
         #next if !grep { m{\A$group\z}ix } @{$allgroups};
         #next if !any { $_ eq $group } @{$allgroups};
-        next if $allgroups =~ m{\b$group\b}x;
+        next if $allgroups !~ m{\b$group\b}x;
         my $specials = $hash->{helper}{devicemap}{devices}{$dev}{group_specials};
         my $label = $specials->{partOf} // $dev;
         next if defined $devices->{$label};
         my $delay = $specials->{async_delay} // 0;
         my $prio  = $specials->{prio} // 0;
-
         $devices->{$label} = { delay => $delay, prio => $prio };
     }
     return $devices;
@@ -1519,10 +1561,16 @@ sub RHASSPY_getMapping { #($$$$;$)
     my $fromHash   = shift // 0;
     my $disableLog = shift // 0;
     
+    my $subType = $type;
+    if (ref $type eq 'HASH') {
+        $subType = $type->{subType};
+        $type = $type->{type};
+    }
+    
     my $matchedMapping;
 
     if ($fromHash) {
-        $matchedMapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{type};
+        $matchedMapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType};
         return $matchedMapping if $matchedMapping;
         
         for (sort keys %{$hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}}) {
@@ -2111,7 +2159,8 @@ sub RHASSPY_trainRhasspy {
     my $url         = q{/api/train};
     my $method      = q{POST};
     my $contenttype = q{application/json};
-    
+
+    Log3($hash->{NAME}, 5, "Starting training on Rhasspy");
     return RHASSPY_sendToApi($hash, $url, $method, undef);
 }
 
@@ -2125,6 +2174,18 @@ sub RHASSPY_fetchSiteIds {
     return RHASSPY_sendToApi($hash, $url, $method, undef);
 }
     
+=pod
+# Check connection to HTTP-API
+# Seems useless, because fetchSiteIds is called after DEF
+sub RHASSPY_checkHttpApi {
+    my $hash   = shift // return;
+    my $url    = q{/api/unknown-words};
+    my $method = q{GET};
+
+    Log3($hash->{NAME}, 5, "check connection to Rhasspy HTTP-API");
+    return RHASSPY_sendToApi($hash, $url, $method, undef);
+}
+=cut
 
 # Send request to HTTP-API of Rhasspy
 sub RHASSPY_sendToApi {
@@ -2132,7 +2193,7 @@ sub RHASSPY_sendToApi {
     my $url    = shift;
     my $method = shift;
     my $data   = shift;
-    my $base   = $hash->{WebIF}; #AttrVal($hash->{NAME}, 'rhasspyMaster', undef) // return;
+    my $base   = $hash->{baseUrl}; #AttrVal($hash->{NAME}, 'rhasspyMaster', undef) // return;
 
     #Retrieve URL of Rhasspy-Master from attribute
     $url = $base.$url;
@@ -2160,10 +2221,18 @@ sub RHASSPY_ParseHttpResponse {
     my $url   = lc($param->{url});
 
     my $name  = $hash->{NAME};
-    my $base  = $hash->{WebIF}; #AttrVal($name, 'rhasspyMaster', undef) // return;
+    my $base  = $hash->{baseUrl}; #AttrVal($name, 'rhasspyMaster', undef) // return;
     my $cp    = $hash->{encoding} // q{UTF-8};
-    
+
     readingsBeginUpdate($hash);
+
+    if ($err) {
+        readingsBulkUpdate($hash, 'state', $err);
+        readingsEndUpdate($hash, 1);
+        Log3($hash->{NAME}, 1, "Connection to Rhasspy base failed: $err");
+        return;
+    }
+
     my $urls = { 
         $base.'/api/train'                      => 'training',
         $base.'/api/sentences'                  => 'updateSentences',
@@ -2186,6 +2255,7 @@ sub RHASSPY_ParseHttpResponse {
     else {
         Log3($name, 3, qq(error while requesting $param->{url} - $data));
     }
+    readingsBulkUpdate($hash, 'state', "online");
     readingsEndUpdate($hash, 1);
     return;
 }
@@ -2741,8 +2811,8 @@ sub RHASSPY_handleIntentGetNumeric {
     my $deviceName = $hash->{helper}{devicemap}{devices}{$device}->{alias} // $device;
 
     # Antwort falls Custom Response definiert ist
-    if ( defined $mapping->{response} ) { 
-        return RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $location);
+    if ( defined $mapping->{response} ) {
+        return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getValue($hash, $device, $mapping->{response}, $value, $location));
     }
     my $responses = $hash->{helper}{lng}->{responses}->{Change};
     #elsif ($mappingType =~ m/^(Helligkeit|Lautstärke|Sollwert)$/i) { $response = $data->{Device} . " ist auf $value gestellt."; }
@@ -3109,7 +3179,7 @@ sub RHASSPY_handleIntentConfirmAction {
     Log3($hash->{NAME}, 5, 'RHASSPY_handleIntentConfirmAction called');
     
     #cancellation case
-    return RHASSPY_confirm_timer($hash, 1) if $data->{Mode} ne 'OK';
+    return RHASSPY_confirm_timer($hash, 1, $data) if $data->{Mode} ne 'OK';
     
     #confirmed case
     my $data_old = $hash->{helper}{'.delayed'};
@@ -3341,12 +3411,12 @@ https://forum.fhem.de/index.php/topic,113180.msg1130754.html#msg1130754
 </p>
 <a id="RHASSPY-define"></a>
 <p><b>Define</b></p>
-<p><code>define &lt;name&gt; RHASSPY &lt;WebIF&gt; &lt;devspec&gt; &lt;defaultRoom&gt; &lt;language&gt; &lt;fhemId&gt; &lt;prefix&gt; &lt;useGenericAttrs&gt; &lt;encoding&gt;</code></p>
+<p><code>define &lt;name&gt; RHASSPY &lt;baseUrl&gt; &lt;devspec&gt; &lt;defaultRoom&gt; &lt;language&gt; &lt;fhemId&gt; &lt;prefix&gt; &lt;useGenericAttrs&gt; &lt;encoding&gt;</code></p>
     <a id="RHASSPY-parseParams"></a><b>General Remark:</b> RHASSPY uses <a href="https://wiki.fhem.de/wiki/DevelopmentModuleAPI#parseParams"><b>parseParams</b></a> at quite a lot places, not only in define, but also to parse attribute values. <p>
     So all parameters in define should be provided in the <i><b>key=value</i></b> form. In other places you may have to start e.g. a single line in an attribute with <code>option:key="value xy shall be z"</code> or <code>identifier:yourCode={fhem("set device off")} anotherOption=blabla</code> form. <br>
     <b>All parameters in define are optional, but changing them later might lead to confusing results*)!</b>
 <ul>
-  <li><b>WebIF</b>: http-address of the Rhasspy service web-interface. Optional. Default is <code>WebIF=http://127.0.0.1:12101</code>.<br>Make sure, this is set to correct values (IP and Port!</li>
+  <li><b>baseUrl</b>: http-address of the Rhasspy service web-interface. Optional. Default is <code>baseUrl=http://127.0.0.1:12101</code>.<br>Make sure, this is set to correct values (IP and Port!</li>
   <li><b>devspec</b>: A description of devices that should be controlled by Rhasspy. Optional. Default is <code>devspec=room=Rhasspy</code>, see <a href="#devspec"> as a reference</a>, how to e.g. use a comma-separated list of devices or combinations like <code>devspec=room=livingroom,room=bathroom,bedroomlamp</code>.</li>
   <li><b>defaultRoom</b>: Default room name. Used to speak commands without a room name (e.g. &quot;turn lights on&quot; to turn on the lights in the &quot;default room&quot;). Optional. Default is <code>defaultRoom=default</code>.<br>
   <a id="RHASSPY-genericDeviceType"></a>Note: Additionaly, either one of the "special" attributes provided by RHASSPY or a known <i>genericDeviceType</i> (atm: switch, light, thermostat, blind and *)media are supported).</li>
