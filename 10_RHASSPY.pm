@@ -1094,6 +1094,7 @@ sub RHASSPY_confirm_timer {
         #Beta-User: we may need to start a new session first?
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
+        initialize_DialogManager($hash);
         return;
     }
 
@@ -1103,6 +1104,7 @@ sub RHASSPY_confirm_timer {
         $response = $hash->{helper}{lng}->{responses}->{ defined $hash->{helper}{'.delayed'} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
+        initialize_DialogManager($hash);
         return $hash->{NAME};
     }
     if ( $mode == 2 ) {
@@ -1115,10 +1117,12 @@ sub RHASSPY_confirm_timer {
         InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
 
         #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
-        my $reaction = { text => $response, intentFilter => [qw(ConfirmAction)]
-            };
+        my $ca_string = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
+        my $reaction = { text         => $response, 
+                         intentFilter => ["$ca_string"] };
 
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
+        initialize_DialogManager($hash);
 
         return $hash->{NAME};
     }
