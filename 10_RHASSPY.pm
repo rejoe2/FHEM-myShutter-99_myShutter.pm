@@ -32,25 +32,18 @@
 # ToDo:
 #
 # Find a better way to delay training of Rhasspy after updating slots
-# rhasspyGroup - FHEM UI - use textField instead textField-long #Beta-User: done?
-# getOnOff - use "State" instead of "Status" #Beta-User: done?
-# rename intent "Status" to "GetState" #Beta-User: done?
-# Shortcuts: #Beta-User: done?
-#    rename "n" to "d" (device)
-#    c always runs into timeout
-#    when using c, first response is a Hash and shouldn't be written to reading "voiceResponse"
-#    Perl-command results in warning after reboot: PERL WARNING: Use of uninitialized value $ret in pattern match (m//) at ./FHEM/10_RHASSPY.pm line 2377. (Beta-User: also solved?)
+# Shortcuts: 
 #    Perl-command: "Longpoll" not working (still open?)
 # MediaChannels:
 #    Respond with "channel not found" instead of "da ist etwas schiefgegangen" if channel is not found #Beta-User: done?
 # GetNumeric:
 #    Two devices with temperature mapping. If spoken "wie warm ist es draußen", I get the temp from living room
 # Timer:
-#    Timer im Wohnzimer auf 10:15 -> correctly set but response is "Timer in Raum Wohnzimmer gesetzt auf 57 Sekunden"
+#    Timer im Wohnzimer auf 10:15 -> correctly set but response is "Timer in Raum Wohnzimmer gesetzt auf 57 Sekunden" (works as designed)
 # 
 ###########################################################################
 
-package MQTT::RHASSPY; ##no critic qw(Package)
+package RHASSPY; ##no critic qw(Package)
 use strict;
 use warnings;
 use Carp qw(carp);
@@ -3176,17 +3169,18 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         Log3($name, 5, "Created timer: $roomReading at $readingTime");
 
         my ($range, $minutes, $hours, $minutetext);
+        my @timerlimits = $hash->{helper}->{timerLimits} // [101, 9*MINUTESECONDS, HOURSECONDS, 3 * HOURSECONDS];
         @time = localtime($value);
-        if ( $seconds < 101 ) { 
+        if ( $seconds < $timerlimits[0] ) { 
             $range = 0;
-        } elsif ( $seconds < HOURSECONDS ) {
+        } elsif ( $seconds < $timerlimits[2] ) {
             $minutes = int ($seconds/MINUTESECONDS);
-            $range = $seconds < 9*MINUTESECONDS ? 1 : 2;
+            $range = $seconds < $timerlimits[1] ? 1 : 2;
             $seconds = $seconds % MINUTESECONDS;
             $range = 2 if !$seconds;
             $minutetext =  $hash->{helper}{lng}->{units}->{unitMinutes}->{$minutes > 1 ? 0 : 1};
             $minutetext = qq{$minutes $minutetext} if $minutes > 1;
-        } elsif ( $seconds < 3 * HOURSECONDS ) {
+        } elsif ( $seconds < $timerlimits[3] ) {
             $hours = int ($seconds/HOURSECONDS);
             $seconds = $seconds % HOURSECONDS;
             $minutes = int ($seconds/MINUTESECONDS);
