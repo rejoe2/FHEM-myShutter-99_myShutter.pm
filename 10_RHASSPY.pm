@@ -32,17 +32,17 @@
 # ToDo:
 #
 # Find a better way to delay training of Rhasspy after updating slots
-# rhasspyGroup - FHEM UI - use textField instead textField-long
-# getOnOff - use "State" instead of "Status"
-# rename intent "Status" to "GetState"
-# Shortcuts:
+# rhasspyGroup - FHEM UI - use textField instead textField-long #Beta-User: done?
+# getOnOff - use "State" instead of "Status" #Beta-User: done?
+# rename intent "Status" to "GetState" #Beta-User: done?
+# Shortcuts: #Beta-User: done?
 #    rename "n" to "d" (device)
 #    c always runs into timeout
 #    when using c, first response is a Hash and shouldn't be written to reading "voiceResponse"
-#    Perl-command results in warning after reboot: PERL WARNING: Use of uninitialized value $ret in pattern match (m//) at ./FHEM/10_RHASSPY.pm line 2377.
-#    Perl-command: "Longpoll" not working
+#    Perl-command results in warning after reboot: PERL WARNING: Use of uninitialized value $ret in pattern match (m//) at ./FHEM/10_RHASSPY.pm line 2377. (Beta-User: also solved?)
+#    Perl-command: "Longpoll" not working (still open?)
 # MediaChannels:
-#    Respond with "channel not found" instead of "da ist etwas schiefgegangen" if channel is not found
+#    Respond with "channel not found" instead of "da ist etwas schiefgegangen" if channel is not found #Beta-User: done?
 # GetNumeric:
 #    Two devices with temperature mapping. If spoken "wie warm ist es draußen", I get the temp from living room
 # Timer:
@@ -102,6 +102,7 @@ my $languagevars = {
     'NoMappingFound' => "Sorry but I could not find a suitable mapping",
     'NoNewValDerived' => "Sorry but I could not calculate a new value to set",
     'NoActiveMediaDevice' => "Sorry no active playback device",
+    'NoMediaChannelFound' => "Sorry but requested channel seems not to exist",
     'DefaultConfirmation' => "OK",
     'DefaultConfirmationTimeout' => "Sorry too late to confirm",
     'DefaultCancelConfirmation' => "Thanks aborted",
@@ -438,7 +439,7 @@ sub initialize_prefix {
     addToAttrList("${prefix}Mapping:textField-long");
     addToAttrList("${prefix}Channels:textField-long");
     addToAttrList("${prefix}Colors:textField-long");
-    addToAttrList("${prefix}Group:textField-long");
+    addToAttrList("${prefix}Group:textField");
     addToAttrList("${prefix}Specials:textField-long");
 
     return;
@@ -577,15 +578,17 @@ sub RHASSPY_Set {
         }
         if ($values[0] eq 'devicemap') {
             initialize_devicemap($hash);
-            RHASSPY_updateSlots($hash);
-            return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
+            $hash->{'.needTraining'} = 1;
+            return RHASSPY_updateSlots($hash);
+            #return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
         }
         if ($values[0] eq 'devicemap_only') {
             return initialize_devicemap($hash);
         }
         if ($values[0] eq 'slots') {
-            RHASSPY_updateSlots($hash);
-            return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
+            $hash->{'.needTraining'} = 1;
+            return RHASSPY_updateSlots($hash);
+            #return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
         }
         if ($values[0] eq 'slots_no_training') {
             initialize_devicemap($hash);
@@ -594,8 +597,9 @@ sub RHASSPY_Set {
         if ($values[0] eq 'all') {
             initialize_Language($hash, $hash->{LANGUAGE});
             initialize_devicemap($hash);
-            RHASSPY_updateSlots($hash);
-            return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
+            $hash->{'.needTraining'} = 1;
+            return RHASSPY_updateSlots($hash);
+            #return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
         }
     }
 
@@ -681,7 +685,7 @@ sub RHASSPY_init_shortcuts {
         } elsif ($init_done) {
             return "Either a fhem or perl command have to be provided!";
         }
-        $hash->{helper}{shortcuts}{$intent}{NAME} = $named->{n} if defined $named->{n};
+        $hash->{helper}{shortcuts}{$intent}{NAME} = $named->{d} if defined $named->{d};
         $hash->{helper}{shortcuts}{$intent}{response} = $named->{r} if defined $named->{r};
         if ( defined $named->{c} ) {
             $hash->{helper}{shortcuts}{$intent}{conf_req} = !looks_like_number($named->{c}) ? $named->{c} : 'default';
@@ -1887,7 +1891,7 @@ my $dispatchFns = {
     SetNumeric      => \&RHASSPY_handleIntentSetNumeric,
     SetNumericGroup => \&RHASSPY_handleIntentSetNumericGroup,
     GetNumeric      => \&RHASSPY_handleIntentGetNumeric,
-    Status          => \&RHASSPY_handleIntentStatus,
+    GetState        => \&RHASSPY_handleIntentGetState,
     MediaControls   => \&RHASSPY_handleIntentMediaControls,
     MediaChannels   => \&RHASSPY_handleIntentMediaChannels,
     SetColor        => \&RHASSPY_handleIntentSetColor,
@@ -2263,6 +2267,10 @@ sub RHASSPY_ParseHttpResponse {
 
     if ( defined $urls->{$url} ) {
         readingsBulkUpdate($hash, $urls->{$url}, $data);
+        if ($urls->{$url} eq 'updateSlots' && $hash->{'.needTraining'}) {
+            RHASSPY_trainRhasspy($hash);
+            delete $hash->{'.needTraining'};
+        }
     }
     elsif ( $url =~ m{api/profile}ix ) {
         my $ref; 
@@ -2395,7 +2403,7 @@ sub RHASSPY_handleIntentShortcuts {
         $cmd = qq({$cmd}) if ($cmd !~ m{\A\{.*\}\z}x); 
 
         $ret = RHASSPY_runCmd($hash, undef, $cmd, undef, $data->{siteId});
-        $device = $ret if $ret !~ m{Please.define.*first}x;
+        $device = $ret if $ret && $ret !~ m{Please.define.*first}x;
 
         $response = $ret // _replace($hash, $response, \%specials);
     } else {
@@ -2526,13 +2534,13 @@ sub RHASSPY_handleIntentGetOnOff {
     Log3($hash->{NAME}, 5, "handleIntentGetOnOff called");
 
     # Device AND Status must exist
-    if (exists($data->{Device}) && exists($data->{Status})) {
+    if (exists($data->{Device}) && exists($data->{State})) {
         my $room = RHASSPY_roomName($hash, $data);
         $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
         my $deviceName = $data->{Device};
         my $mapping;
         $mapping = RHASSPY_getMapping($hash, $device, 'GetOnOff', undef, defined $hash->{helper}{devicemap}, 0) if defined $device;
-        my $status = $data->{Status};
+        my $status = $data->{State};
 
         # Mapping found?
         if (defined $mapping) {
@@ -2829,6 +2837,8 @@ sub RHASSPY_handleIntentGetNumeric {
         #my $rooms = join q{,}, $hash->{helper}{devicemap}{devices}{$device}->{rooms};
         my $rooms = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
         $location = $data->{Room} if $rooms =~ m{\b$data->{Room}\b}ix;
+
+        #Beta-User: this might be the place to implement the "no device in room" branch
         ($location, my $nn) = split m{,}, $rooms if !defined $location;
     }
     my $deviceName = $hash->{helper}{devicemap}{devices}{$device}->{alias} // $device;
@@ -2872,19 +2882,19 @@ sub RHASSPY_handleIntentGetNumeric {
 
 
 # Eingehende "Status" Intents bearbeiten
-sub RHASSPY_handleIntentStatus {
+sub RHASSPY_handleIntentGetState {
     my $hash = shift // return;
     my $data = shift // return;
     my $device = $data->{Device} // return;
     my $response; # = RHASSPY_getResponse($hash, 'DefaultError');
 
-    Log3($hash->{NAME}, 5, "handleIntentStatus called");
+    Log3($hash->{NAME}, 5, "handleIntentGetState called");
 
     # Mindestens Device muss existieren
     if (exists $data->{Device}) {
         my $room = RHASSPY_roomName($hash, $data);
         $device = RHASSPY_getDeviceByName($hash, $room, $device);
-        my $mapping = RHASSPY_getMapping($hash, $device, 'Status', undef, defined $hash->{helper}{devicemap}, 0);
+        my $mapping = RHASSPY_getMapping($hash, $device, 'GetState', undef, defined $hash->{helper}{devicemap}, 0);
 
         if ( defined $mapping->{response} ) {
             $response = RHASSPY_getValue($hash, $device, $mapping->{response}, undef, $room);
@@ -3025,7 +3035,7 @@ sub RHASSPY_handleIntentMediaChannels {
     }
 
     # Antwort senden
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
+    $response = $response // RHASSPY_getResponse($hash, 'NoMediaChannelFound');
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $device;
 }
@@ -3391,8 +3401,6 @@ Denkbare Verwendung:
 - Ansteuerung von Lamellenpositionen (auch an anderem Device?)
 - Bestätigungs-Mapping
 
-# "rhasspyGroup" als weiteres Attribut?
-Beta-User: Tendenziell fehlt zwischen Einzeldevice und Room noch ein optionales  Unterscheidungsmerkmal Die Auswertung des (allg.) group-Attributs ist vorbereitet... 
 
 =end ToDo
 
@@ -3623,7 +3631,7 @@ i="mute off" p={fhem ("set $NAME mute off")} n=amplifier2 c="Please confirm!"
     <li>p => Perl command<br>
     Syntax as usual in FHEMWEB command field, enclosed in {}; this has priority to "f=".
     </li>
-    <li>n => device name(s, comma separated) that shall be handed over to fhem.pl as updated. Needed for triggering further actions and longpoll! If not set, the return value of the called function will be used. </li>
+    <li>d => device name(s, comma separated) that shall be handed over to fhem.pl as updated. Needed for triggering further actions and longpoll! If not set, the return value of the called function will be used. </li>
     <li>r => Response to be set to the caller. If not set, the return value of the called function will be used.</li>
     You may ask for confirmation as well using the following (optional) shorts:
     <li>c => either numeric or text. If numeric: Timeout to wait for automatic cancellation. If text: response to send to ask for confirmation.</li>
@@ -3681,7 +3689,7 @@ hermes/dialogueManager/sessionEnded</code></pre></p>
 GetOnOff:currentVal=state,valueOff=off
 GetNumeric:currentVal=pct,type=brightness
 SetNumeric:currentVal=brightness,minVal=0,maxVal=255,map=percent,cmd=brightness,step=1,type=brightness
-Status:response=The temperature in the kitchen is at [lamp:temparature] degrees
+GetState:response=The temperature in the kitchen is at [lamp:temparature] degrees
 MediaControls:cmdPlay=play,cmdPause=pause,cmdStop=stop,cmdBack=previous,cmdFwd=next</pre></code>
     </li>
     
@@ -3732,7 +3740,7 @@ yellow=rgb 00F000</pre></code><br>
     <li>GetOnOff</li>
     <li>SetNumeric</li>
     <li>GetNumeric</li>
-    <li>Status</li>
+    <li>GetState</li>
     <li>MediaControls</li>
     <li>MediaChannels</li>
     <li>SetColor</li>
