@@ -32,6 +32,22 @@
 # ToDo:
 #
 # Find a better way to delay training of Rhasspy after updating slots
+# rhasspyGroup - FHEM UI - use textField instead textField-long
+# getOnOff - use "State" instead of "Status"
+# rename intent "Status" to "GetState"
+# Shortcuts:
+#    rename "n" to "d" (device)
+#    c always runs into timeout
+#    when using c, first response is a Hash and shouldn't be written to reading "voiceResponse"
+#    Perl-command results in warning after reboot: PERL WARNING: Use of uninitialized value $ret in pattern match (m//) at ./FHEM/10_RHASSPY.pm line 2377.
+#    Perl-command: "Longpoll" not working
+# MediaChannels:
+#    Respond with "channel not found" instead of "da ist etwas schiefgegangen" if channel is not found
+# GetNumeric:
+#    Two devices with temperature mapping. If spoken "wie warm ist es draußen", I get the temp from living room
+# Timer:
+#    Timer im Wohnzimer auf 10:15 -> correctly set but response is "Timer in Raum Wohnzimmer gesetzt auf 57 Sekunden"
+# 
 ###########################################################################
 
 package MQTT::RHASSPY; ##no critic qw(Package)
@@ -93,18 +109,18 @@ my $languagevars = {
     'DefaultConfirmationReceived' => "ok will do it",
     'DefaultConfirmationNoOutstanding' => "no command is awaiting confirmation",
     'timerSet'   => {
-        '0' => 'Timer $label in room $room has been set to $seconds seconds',
-        '1' => 'Timer $label in room $room has been set to $minutes minutes $seconds',
-        '2' => 'Timer $label in room $room has been set to $minutes minutes',
-        '3' => 'Timer $label in room $room has been set to $hours hours $minutetext',
-        '4' => 'Timer $label in room $room has been set to $hour o clock $minutes',
-        '5' => 'Timer $label in room $room has been set to tomorrow $hour o clock $minutes'
+        '0' => '$label in room $room has been set to $seconds seconds',
+        '1' => '$label in room $room has been set to $minutes minutes $seconds',
+        '2' => '$label in room $room has been set to $minutes minutes',
+        '3' => '$label in room $room has been set to $hours hours $minutetext',
+        '4' => '$label in room $room has been set to $hour o clock $minutes',
+        '5' => '$label in room $room has been set to tomorrow $hour o clock $minutes'
     },
     'timerEnd'   => {
-        '0' => 'Timer $label expired',
-        '1' =>  'Timer $label in room $room expired'
+        '0' => '$label expired',
+        '1' =>  '$label in room $room expired'
     },
-    'timerCancellation' => 'timer $label for $room deleted',
+    'timerCancellation' => '$label for $room deleted',
     'timeRequest' => 'it is $hour o clock $min minutes',
     'weekdayRequest' => 'today it is $weekDay',
     'duration_not_understood'   => "Sorry I could not understand the desired duration",
@@ -122,8 +138,8 @@ my $languagevars = {
         '0' => 'temperature in $location is $value',
         '1' => 'temperature in $location is $value degrees',
       },
-      'tempTarget'   => 'target temperature for $device is set to $value degrees',
-      'volume'  => '$device set to $value',
+      'desired-temp' => 'target temperature for $location is set to $value degrees',
+      'volume'       => '$device set to $value',
       'waterLevel'   => 'water level in $location is $value percent',
       'knownType'    => '$mappingType in $location is $value percent',
       'unknownType'  => 'value in $location is $value percent'
@@ -247,6 +263,7 @@ BEGIN {
     readingsBeginUpdate
     readingsBulkUpdate
     readingsEndUpdate
+    readingsDelete
     Log3
     defs
     attr
@@ -522,6 +539,7 @@ sub RHASSPY_Set {
     $params = $h if defined $h->{text} || defined $h->{path} || defined $h->{volume};
     return $dispatch->{$command}->($hash, $params) if ref $dispatch->{$command} eq 'CODE';
 
+=pod
     if ($command eq 'update') {
         if ($values[0] eq 'language') {
             return initialize_Language($hash, $hash->{LANGUAGE});
@@ -549,8 +567,7 @@ sub RHASSPY_Set {
             return RHASSPY_trainRhasspy($hash);
         }
     }
-    
-=pod
+=cut
     # Could happen, that training start before all slots are written to Rhasspy
     # Therfore we included a delay
     # Unhappy with fixed 10s. Should find a better way to do this.
@@ -561,14 +578,14 @@ sub RHASSPY_Set {
         if ($values[0] eq 'devicemap') {
             initialize_devicemap($hash);
             RHASSPY_updateSlots($hash);
-            return InternalTimer(time + 10,\&RHASSPY_trainRhasspy,$hash,0);
+            return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
         }
         if ($values[0] eq 'devicemap_only') {
             return initialize_devicemap($hash);
         }
         if ($values[0] eq 'slots') {
             RHASSPY_updateSlots($hash);
-            return InternalTimer(time + 10,\&RHASSPY_trainRhasspy,$hash,0);
+            return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
         }
         if ($values[0] eq 'slots_no_training') {
             initialize_devicemap($hash);
@@ -578,10 +595,9 @@ sub RHASSPY_Set {
             initialize_Language($hash, $hash->{LANGUAGE});
             initialize_devicemap($hash);
             RHASSPY_updateSlots($hash);
-            return InternalTimer(time + 10,\&RHASSPY_trainRhasspy,$hash,0);
+            return InternalTimer(time + 3,\&RHASSPY_trainRhasspy,$hash,0);
         }
     }
-=cut
 
     if ($command eq 'customSlot') {
         my $slotname = $h->{slotname}  // shift @values;
@@ -994,7 +1010,7 @@ sub _analyze_genDevType {
         my $desTemp = $allset =~ m{\b(desiredTemp)[\b:\s]}xms ? $1 : 'desired-temp';
         my $measTemp = InternalVal($device, 'TYPE', 'unknown') eq 'CUL_HM' ? 'measured-temp' : 'temperature';
         $currentMapping = 
-            { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'tempTarget'},
+            { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'desired-temp'},
             temperature => {currentVal => $measTemp, type => 'temperature'}}, 
             SetNumeric => {'desired-temp' => { cmd => $desTemp, currentVal => $desTemp, maxVal => '28', minVal => '10', step => '0.5', type => 'temperature'}}
             };
@@ -1565,13 +1581,13 @@ sub RHASSPY_getMapping { #($$$$;$)
     my $type       = shift // $intent; #Beta-User: seems first three parameters are obligatory...?
     my $fromHash   = shift // 0;
     my $disableLog = shift // 0;
-    
+
     my $subType = $type;
     if (ref $type eq 'HASH') {
         $subType = $type->{subType};
         $type = $type->{type};
     }
-    
+
     my $matchedMapping;
 
     if ($fromHash) {
@@ -1948,8 +1964,7 @@ sub RHASSPY_onmessage {
     }
 
     my $command = $data->{input};
-    $type = $message =~ m{${fhemId}
-.textCommand}x ? 'text' : 'voice';
+    $type = $message =~ m{${fhemId}.textCommand}x ? 'text' : 'voice';
     $data->{requestType} = $type;
     my $intent = $data->{intent};
 
@@ -1966,8 +1981,9 @@ sub RHASSPY_onmessage {
     #Beta-User: In welchem Fall kam es dazu, den folgenden Code-Teil anzufahren?
     #else {RHASSPY_respond ($hash, $data->{'requestType'}, $data->{sessionId}, $data->{siteId}, " ");}
     #Beta-User: return value should be reviewed. If there's an option to return the name of the devices triggered by Rhasspy, then this could be a better option than just RHASSPY's own name.
-    
-    $device = $device // $hash->{NAME};
+    my $name = $hash->{NAME};
+    $device = $device // $name;
+    $device .= ",$name" if $device !~ m{$name}x;
     my @candidates = split m{,}x, $device;
     for (@candidates) {
         push @updatedList, $_ if $defs{$_}; 
@@ -2011,6 +2027,7 @@ sub RHASSPY_respond {
     readingsBulkUpdate($hash, 'responseType', $type);
     readingsEndUpdate($hash,1);
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/$topic $json});
+    Log3($hash->{NAME}, 5, "Response is: $response");
     return;
 }
 
@@ -2359,7 +2376,7 @@ sub RHASSPY_handleIntentShortcuts {
     }
     $response = $shortcut->{response} // RHASSPY_getResponse($hash, 'DefaultConfirmation');
     my $ret;
-    my $device = $shortcut->{NAME};;
+    my $device = $shortcut->{NAME};
     my $cmd    = $shortcut->{perl};
 
     my $self   = $hash->{NAME};
@@ -2771,6 +2788,7 @@ sub RHASSPY_handleIntentGetNumeric {
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'DefaultError')) if !exists $data->{Type} && !exists $data->{Device};
 
     my $type = $data->{Type};
+    my $subType = $data->{subType} // $type;
     my $room = RHASSPY_roomName($hash, $data);
 
     # Passendes Gerät suchen
@@ -2784,7 +2802,7 @@ sub RHASSPY_handleIntentGetNumeric {
         : RHASSPY_getDeviceByIntentAndType($hash, $room, 'GetNumeric', $type)
         // return RHASSPY_respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound'));
 
-    my $mapping = RHASSPY_getMapping($hash, $device, 'GetNumeric', $type, defined $hash->{helper}{devicemap}, 0) 
+    my $mapping = RHASSPY_getMapping($hash, $device, 'GetNumeric', { type => $type, subType => $subType }, defined $hash->{helper}{devicemap}, 0)
         // return RHASSPY_respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
 
     # Mapping gefunden
@@ -3073,25 +3091,25 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
     Log3($name, 5, 'handleIntentSetTimer called');
 
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $hash->{helper}{lng}->{responses}->{duration_not_understood}) 
-    if !defined $data->{hourabs} && !defined $data->{hour} && !defined $data->{min} && !defined $data->{sec} && !defined $data->{Cancel};
+    if !defined $data->{Hourabs} && !defined $data->{Hour} && !defined $data->{Min} && !defined $data->{Sec} && !defined $data->{CancelTimer};
 
-    my $room = RHASSPY_roomName($hash, $data); #$data->{Room} // $siteId
+    my $room = RHASSPY_roomName($hash, $data);
 
     my $hour = 0;
     my $value = time;
     my $now = $value;
     my @time = localtime($now);
-    if ( defined $data->{hourabs} ) {
-        $hour  = $data->{hourabs};
+    if ( defined $data->{Hourabs} ) {
+        $hour  = $data->{Hourabs};
         $value = $value - ($time[2] * HOURSECONDS) - ($time[1] * MINUTESECONDS) - $time[0]; #last midnight
     }
-    elsif ($data->{hour}) {
-        $hour = $data->{hour};
+    elsif ($data->{Hour}) {
+        $hour = $data->{Hour};
     }
     $value += HOURSECONDS * $hour;
-    $value += MINUTESECONDS * $data->{min} if $data->{min};
-    $value += $data->{sec} if $data->{sec};
-    
+    $value += MINUTESECONDS * $data->{Min} if $data->{Min};
+    $value += $data->{Sec} if $data->{Sec};
+
     my $tomorrow = 0;
     if ( $value < $now ) {
         $tomorrow = 1;
@@ -3111,12 +3129,13 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
     }
     
     my $roomReading = "timer_".makeReadingName($room);
-    my $label = $data->{label} // q{};
+    my $label = $data->{Label} // q{};
     $roomReading .= "_$label" if $label ne ''; 
 
-    if (defined $data->{Cancel}) {
+    if (defined $data->{CancelTimer}) {
         CommandDelete($hash, $roomReading);
-        readingsSingleUpdate( $hash,$roomReading, 0, 1 );
+        #readingsSingleUpdate( $hash,$roomReading, 0, 1 );
+        readingsDelete($hash, $roomReading);
         Log3($name, 5, "deleted timer: $roomReading");
         $response = RHASSPY_getResponse($hash, 'timerCancellation');
         $response =~ s{(\$\w+)}{$1}eegx;
@@ -3124,24 +3143,27 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         return $name;
     }
 
-
     if( $value && $timerRoom ) {
-        my $seconds = $value - $now; 
+        my $seconds = $value - $now;
         my $diff = $seconds;
         my $attime = strftime('%H', gmtime $diff);
         $attime += 24 if $tomorrow;
         $attime .= strftime(':%M:%S', gmtime $diff);
+        my $readingTime = strftime "%T", localtime (time + $seconds);
 
         $responseEnd =~ s{(\$\w+)}{$1}eegx;
 
         #my $cmd = qq(defmod $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";;setreading $name $roomReading 0);
 
         #RHASSPY_runCmd($hash,'',$cmd);
-        CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";setreading $name $roomReading 0");
+        #CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";setreading $name $roomReading 0");
+        CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";deletereading $name $roomReading");
 
-        readingsSingleUpdate($hash, $roomReading, 1, 1);
+        #readingsSingleUpdate($hash, $roomReading, 1, 1);
+        readingsSingleUpdate($hash, $roomReading, $readingTime, 1);
 
-        Log3($name, 5, "Created timer: $roomReading at +$attime");
+        #Log3($name, 5, "Created timer: $roomReading at +$attime");
+        Log3($name, 5, "Created timer: $roomReading at $readingTime");
 
         my ($range, $minutes, $hours, $minutetext);
         @time = localtime($value);
@@ -3198,7 +3220,7 @@ sub RHASSPY_handleIntentConfirmAction {
     $data_old->{Confirmation} = 1;
     
     my $intent = $data_old->{intent};
-    my $device;
+    my $device = $hash->{NAME};
 
     # Passenden Intent-Handler aufrufen
     if (ref $dispatchFns->{$intent} eq 'CODE') {
