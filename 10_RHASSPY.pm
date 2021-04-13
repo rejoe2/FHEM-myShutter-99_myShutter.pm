@@ -3169,18 +3169,18 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         Log3($name, 5, "Created timer: $roomReading at $readingTime");
 
         my ($range, $minutes, $hours, $minutetext);
-        my @timerlimits = $hash->{helper}->{timerLimits} // (101, 9*MINUTESECONDS, HOURSECONDS, 3*HOURSECONDS);
+        my @timerlimits = $hash->{helper}->{timerLimits} // (101, 9*MINUTESECONDS, HOURSECONDS, 3*HOURSECONDS,3*HOURSECONDS );
         @time = localtime($value);
-        if ( $seconds < $timerlimits[0] ) { 
+        if ( $seconds < $timerlimits[0] || defined $data->{Hourabs} && $seconds < $timerlimits[4] ) { 
             $range = 0;
-        } elsif ( $seconds < $timerlimits[2] ) {
+        } elsif ( $seconds < $timerlimits[2] || defined $data->{Hourabs} && $seconds < $timerlimits[4]  ) {
             $minutes = int ($seconds/MINUTESECONDS);
             $range = $seconds < $timerlimits[1] ? 1 : 2;
             $seconds = $seconds % MINUTESECONDS;
             $range = 2 if !$seconds;
             $minutetext =  $hash->{helper}{lng}->{units}->{unitMinutes}->{$minutes > 1 ? 0 : 1};
             $minutetext = qq{$minutes $minutetext} if $minutes > 1;
-        } elsif ( $seconds < $timerlimits[3] ) {
+        } elsif ( $seconds < $timerlimits[3] || defined $data->{Hourabs} && $seconds < $timerlimits[4]  ) {
             $hours = int ($seconds/HOURSECONDS);
             $seconds = $seconds % HOURSECONDS;
             $minutes = int ($seconds/MINUTESECONDS);
