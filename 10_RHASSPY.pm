@@ -3169,7 +3169,7 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         Log3($name, 5, "Created timer: $roomReading at $readingTime");
 
         my ($range, $minutes, $hours, $minutetext);
-        my @timerlimits = $hash->{helper}->{timerLimits} // [101, 9*MINUTESECONDS, HOURSECONDS, 3 * HOURSECONDS];
+        my @timerlimits = $hash->{helper}->{timerLimits} // (101, 9*MINUTESECONDS, HOURSECONDS, 3*HOURSECONDS);
         @time = localtime($value);
         if ( $seconds < $timerlimits[0] ) { 
             $range = 0;
