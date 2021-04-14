@@ -379,7 +379,7 @@ sub firstInit {
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
 
     RHASSPY_fetchSiteIds($hash) if !ReadingsVal( $hash->{NAME}, 'siteIds', 0 );
-    initialize_rhasspyTweaks($hash);
+    initialize_rhasspyTweaks($hash, AttrVal($hash->{NAME},'rhasspyTweaks', undef ));
     initialize_DialogManager($hash);
     initialize_devicemap($hash); # if defined $hash->{useHash};
 
@@ -636,7 +636,15 @@ sub RHASSPY_Attr {
             return RHASSPY_init_custom_intents($hash, $value); 
         } 
     }
-    
+
+    if ( $attribute eq 'rhasspyTweaks' ) {
+        for ( keys %{ $hash->{helper}{tweaks} } ) {
+            delete $hash->{helper}{tweaks}{$_};
+        }
+        if ($command eq 'set') {
+            return initialize_rhasspyTweaks($hash, $value); 
+        } 
+    }    
     if ( $attribute eq 'configFile' ) {
         if ($command ne 'set') {
             delete $hash->{CONFIGFILE};
@@ -694,7 +702,21 @@ sub RHASSPY_init_shortcuts {
 
 sub initialize_rhasspyTweaks {
     my $hash    = shift // return;
+    my $attrVal = shift // return;
     
+    my ($tweak, $values, $device, $err );
+    for my $line (split m{\n}x, $attrVal) {
+        next if !length $line;
+        if ($line =~ m{\A[\s]*timerLimits=}x) {
+            ($tweak, $values) = split m{=}x, $line, 2;
+            return "$err in $line, 5 comma separated values have to be provided" if !length $values && $init_done;
+            my @test = split m{,}x, $values;
+            return "$err in $line, 5 comma separated values have to be provided" if @test != 5 && $init_done;
+            #$values = qq{($values)} if $values !~ m{\A([^()]*)\z}x;
+            $hash->{helper}{tweaks}{$tweak} = [@test];
+            next;
+        }
+    }
     return;
 }
 
@@ -1563,7 +1585,7 @@ sub RHASSPY_splitMappingString {
     push @tokens, $token if length $token;
 
     # Tokens in Keys/Values trennen
-    %parsedMapping = map {split m{=}x, $_, 2} @tokens;
+    %parsedMapping = map {split m{=}x, $_, 2} @tokens; #Beta-User: Odd number of elements in hash assignment
 
     return %parsedMapping;
 }
@@ -3169,18 +3191,18 @@ Die ganze Logik würde sich dann erweitern, indem erst geschaut wird, ob eines d
         Log3($name, 5, "Created timer: $roomReading at $readingTime");
 
         my ($range, $minutes, $hours, $minutetext);
-        my @timerlimits = $hash->{helper}->{timerLimits} // (101, 9*MINUTESECONDS, HOURSECONDS, 3*HOURSECONDS,3*HOURSECONDS );
+        my @timerlimits = $hash->{helper}->{tweaks}->{timerLimits} // (101, 9*MINUTESECONDS, HOURSECONDS, 3*HOURSECONDS,3*HOURSECONDS );
         @time = localtime($value);
-        if ( $seconds < $timerlimits[0] || defined $data->{Hourabs} && $seconds < $timerlimits[4] ) { 
+        if ( $seconds < $timerlimits[0] && ( !defined $data->{Hourabs} || defined $data->{Hourabs} && $seconds < $timerlimits[4] ) ) { 
             $range = 0;
-        } elsif ( $seconds < $timerlimits[2] || defined $data->{Hourabs} && $seconds < $timerlimits[4]  ) {
+        } elsif (  $seconds < $timerlimits[2] && ( !defined $data->{Hourabs} || defined $data->{Hourabs} && $seconds < $timerlimits[4] ) ) {
             $minutes = int ($seconds/MINUTESECONDS);
             $range = $seconds < $timerlimits[1] ? 1 : 2;
             $seconds = $seconds % MINUTESECONDS;
             $range = 2 if !$seconds;
             $minutetext =  $hash->{helper}{lng}->{units}->{unitMinutes}->{$minutes > 1 ? 0 : 1};
             $minutetext = qq{$minutes $minutetext} if $minutes > 1;
-        } elsif ( $seconds < $timerlimits[3] || defined $data->{Hourabs} && $seconds < $timerlimits[4]  ) {
+        } elsif (  $seconds < $timerlimits[3] && ( !defined $data->{Hourabs} || defined $data->{Hourabs} && $seconds < $timerlimits[4] ) ) {
             $hours = int ($seconds/HOURSECONDS);
             $seconds = $seconds % HOURSECONDS;
             $minutes = int ($seconds/MINUTESECONDS);
@@ -3383,11 +3405,6 @@ __END__
 =pod
 
 =begin ToDo
-
-# Timer:
-- Sollte als Wecker ergänzt werden, so dass man auch absolute Uhrzeiten angeben kann.
-- Die Antwort sollte sich danach richten, wann der Timer abläuft, z.B. bis 100 Sekunden => "auf ... Sekunden gestellt", bis 15/20 Minuten => "auf ... Minuten gestellt", sonst: "auf [morgen] ... Uhr ... (Sekunden) gestellt" 
-- "Benannten Timer" als Option ergänzen
 
 # "rhasspySpecials" als weiteres Attribut?
 Denkbare Verwendung:
@@ -3635,6 +3652,9 @@ i="mute off" p={fhem ("set $NAME mute off")} n=amplifier2 c="Please confirm!"
   <li>
   <a id="RHASSPY-attr-rhasspyTweaks"></a><b>rhasspyTweaks</b><br>
     *) placeholder...<br>
+    Atm, timerLimits may be set here:<br>
+    <code>timerLimits=90,300,3000,2*HOURSECONDS,50</code><br>
+    5 values have to be set, corresponding with the limits to <i>timerSet</i> responses. so above example will lead to seconds response for less then 90 seconds, minute+seconds response for less than 300 seconds etc.. Last value is the limit in seconds, if timer is set in time of day format.<br
     Might be the place to configure additional things like additional siteId2room info or code links, allowed commands, duration of SetTimer sounds, confirmation requests etc.     
   </li>
   <li>
