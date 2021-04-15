@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 23779 2021-02-20 11:23:21Z Beta-User $
+# $Id: 98_WeekdayTimer.pm 24174 2021-04-07 + Test ext. delay Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -773,8 +773,9 @@ sub WeekdayTimer_SetTimerForMidnightUpdate {
 sub WeekdayTimer_SetTimerOfDay {
   my $fnHash = shift // return;
   my $hash = $fnHash->{HASH} // $fnHash;
-  return if (!defined($hash));
+  return if !defined $hash;
   
+$hash->{startTime} = time;
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
   my $secSinceMidnight = 3600*$hour + 60*$min + $sec;
 
@@ -893,7 +894,7 @@ sub WeekdayTimer_SetTimer {
     #$tipHash    = $hash if !defined $tipHash;
     $modules{WeekdayTimer}{timerInThePastHash} = $tipHash;
 
-    resetRegisteredInternalTimer('delayed', time + 5, \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
+    resetRegisteredInternalTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0),, \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
 
   return;
 }
@@ -1014,13 +1015,12 @@ sub WeekdayTimer_Update {
   my $dieGanzeWoche = $hash->{helper}{WEDAYS}{0} ? [7]:[8];
 
   my ($activeTimer, $activeTimerState);
-  #if (defined $myHash->{forceSwitch}) {
   if (defined $fnHash->{forceSwitch}) {
       
     $activeTimer      = isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
-    resetRegisteredInternalTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
+    resetRegisteredInternalTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ( $timToSwitch > $now || AttrVal($name, 'WDT_sendDelay',0) > $now - $hash->{startTime}) && ( $activeTimerState || $activeTimer );
   } else {
     $activeTimer = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     $activeTimerState = $activeTimer;
@@ -1041,7 +1041,7 @@ sub WeekdayTimer_Update {
   readingsBeginUpdate($hash);
   readingsBulkUpdate ($hash, 'nextUpdate', FmtDateTime($nextTime));
   readingsBulkUpdate ($hash, 'nextValue',  $nextParameter);
-  readingsBulkUpdate ($hash, 'currValue',  $aktParameter); # HB
+  readingsBulkUpdate ($hash, 'currValue',  $aktParameter);
   readingsBulkUpdate ($hash, 'state',      $newParam ) if $activeTimerState;
   readingsEndUpdate  ($hash, 1);
 
