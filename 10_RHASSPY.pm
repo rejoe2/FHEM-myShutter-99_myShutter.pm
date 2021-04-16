@@ -2206,30 +2206,41 @@ sub RHASSPY_handleCustomIntent {
     }
 
     my $subName = $custom->{function};
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'DefaultError')) if !defined $subName;
+
     my $params = $custom->{args};
     my @rets = @{$params};
 
-    if ( defined $subName ) { #might not be necessary...
-        for (@rets) {
-            if ($_ eq 'NAME') {
-                $_ = qq{"$hash->{NAME}"};
-            } elsif ($_ eq 'DATA') {
-                my $json = toJSON($data);
-                $_ = qq{'$json'};
-         } elsif (defined $data->{$_}) {
-                $_ = qq{"$data->{$_}"};
-            } else {
-                $_ = "undef";
-            }
+    for (@rets) {
+        if ($_ eq 'NAME') {
+            $_ = qq{"$hash->{NAME}"};
+        } elsif ($_ eq 'DATA') {
+            my $json = toJSON($data);
+            $_ = qq{'$json'};
+        } elsif (defined $data->{$_}) {
+            $_ = qq{"$data->{$_}"};
+        } else {
+            $_ = "undef";
         }
+    }
 
-        my $args = join q{,}, @rets;
-        my $cmd = qq{ $subName( $args ) };
-        Log3($hash->{NAME}, 5, "Calling sub: $cmd" );
-        my $error = AnalyzePerlCommand($hash, $cmd);
-        #my $error = AnalyzePerlCommand($hash, {$subName(@rets)} );
+    my $args = join q{,}, @rets;
+    my $cmd = qq{ $subName( $args ) };
+    Log3($hash->{NAME}, 5, "Calling sub: $cmd" );
+    my $error = AnalyzePerlCommand($hash, $cmd);
+    if ( ref $error eq 'ARRAY' ) {
+        $response = ${$error}[0] // RHASSPY_getResponse($hash, 'DefaultConfirmation');
+        if ( ref ${$error}[0] eq 'HASH') {
+            my $timeout = ${$error}[2];
+            $timeout = defined $timeout && looks_like_number($timeout) ? $timeout : 20;
+            InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
+        }
+        RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+        return ${$error}[1]; #comma separated list of devices to trigger
+    } else {
         $response = $error; # if $error && $error !~ m{Please.define.*first}x;
     }
+
     $response = $response // RHASSPY_getResponse($hash, 'DefaultConfirmation');
 
     # Antwort senden
