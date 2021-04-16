@@ -1002,15 +1002,46 @@ sub _analyze_genDevType {
         $currentMapping = { 
             GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}},
             SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}},
-            GetNumeric => { 'volume' => {currentVal => 'volume', type => 'volume' }},
-            SetNumeric => {'volume' => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 'channel' => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}}, 
-            MediaControls => { MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'} } };
+            GetNumeric => { 'volume' => {currentVal => 'volume', type => 'volume' }}#,
+            #SetNumeric => {'volume' => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 'channel' => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}}, 
+            #MediaControls => { MediaControls => {'cmdPlay' => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown'} } 
+            };
+
+        $currentMapping = _analyze_genDevType_setter( $allset, $currentMapping );
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
     return;
 }
 
+sub _analyze_genDevType_setter {
+    my $setter = shift;
+    my $mapping = shift // {};
+
+    my $allValMappings = {
+        MediaControls => { 
+        cmdPlay => 'play', cmdPause => 'pause' ,cmdStop => 'stop', cmdBack => 'previous', cmdFwd => 'next', chanUp => 'channelUp', chanDown => 'channelDown' }
+        };
+    for my $okey ( keys %{$allValMappings} ) {
+        my $ikey = $allValMappings->{$okey};
+        for ( keys %{$ikey} ) {
+            my $val = $ikey->{$_};
+            $mapping->{$okey}->{$okey}->{$_} = $val if $setter =~ m{\b$val[\b:\s]}xms;
+        }
+    }
+    my $allKeyMappings = {
+        SetNumeric => { volume => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 
+        channel => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}
+            }
+        };
+        for my $okey ( keys %{$allKeyMappings} ) {
+        my $ikey = $allKeyMappings->{$okey};
+        for ( keys %{$ikey} ) {
+            $mapping->{$okey}->{$okey}->{$_} = $ikey->{$_} if $setter =~ m{\b$_[\b:\s]}xms;
+        }
+    }
+    return $mapping;
+}
 
 sub RHASSPY_execute {
     my $hash   = shift // return;
