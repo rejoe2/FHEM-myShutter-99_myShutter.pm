@@ -102,8 +102,7 @@ sub DialogueTest{
     my $reaction = { text         => $response, 
                      intentFilter => ["$ca_string"] };
 
-    $rets[0] = join q{,}, @devices;
-    $rets[1] = $reaction;
+    $rets[0] = $reaction;
     $rets[2] = 30; #timeout to replace default timeout
 
     return \@rets;
@@ -120,15 +119,15 @@ __END__
 <h3>RHASSPY_Demo_Utils</h3>
 <ul>
   <b>Routines to demonstrate how to handle function calls from within Custom intents in RHASSPY context</b><br> 
-  <ul><li>BasicTest</li>
-  This is to demonstrate how to get single elements from the message hash just by their name.<\p>
-  Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents SetCustomIntentsBasicTest=RHASSPY::Demo::BasicTest(siteId,Type)</code>
-  <ul><li>DataTest</li>
-  This is to demonstrate how to get NAME and entire message hash and return a list of devices that may have been triggered. This is just a showcase to extended options and might be a good starting point for developing own complex Custom Intent functions.<\p>
-  Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents SetCustomIntentsDataTest=RHASSPY::Demo::DataTest(NAME,DATA)</code>
-<ul><li>DialogueTest</li>
-  This is to demonstrate how to keep dialogue open for some time and dynamically fill a slot for possible answer values to the dialoge. This is not working jet and might somwhen in time be good starting point for developing own complex Custom Intent functions including dialogues.<\p>
-  Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents SetCustomIntentsDialogueTest=RHASSPY::Demo::DialogueTest(NAME,DATA)</code>
+  <li>BasicTest</li>
+  This is to demonstrate how to get single elements from the message hash just by their name.</p>
+  Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents SetCustomIntentsBasicTest=RHASSPY::Demo::BasicTest(siteId,Type)</code></p>
+  <li>DataTest</li>
+  This is to demonstrate how to get NAME and entire message hash and return a list of devices that may have been triggered. This is just a showcase to extended options and might be a good starting point for developing own complex Custom Intent functions.</p>
+  Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents SetCustomIntentsDataTest=RHASSPY::Demo::DataTest(NAME,DATA)</code></p>
+  <li>DialogueTest</li>
+  This is to demonstrate how to keep dialogue open for some time and dynamically fill a slot for possible answer values to the dialoge. This is not fully tested jet and might somewhen in time be a good starting point for developing own complex Custom Intent functions including dialogues.</p>
+  Example: <code>attr &lt;rhasspyDevice&gt; rhasspyIntents SetCustomIntentsDialogueTest=RHASSPY::Demo::DialogueTest(NAME,DATA)</code></p>
 </ul>
 =end html
 =cut
