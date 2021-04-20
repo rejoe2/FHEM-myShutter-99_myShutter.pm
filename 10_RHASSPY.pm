@@ -36,7 +36,7 @@ use GPUtils qw(:all);
 use JSON;
 use Encode;
 use HttpUtils;
-use List::Util 1.45 qw(max min any uniq);
+use List::Util 1.45 qw(max min uniq);
 use Data::Dumper;
 
 sub ::RHASSPY_Initialize { goto &RHASSPY_Initialize }
@@ -2244,9 +2244,10 @@ sub RHASSPY_handleCustomIntent {
     if ( ref $error eq 'ARRAY' ) {
         $response = ${$error}[0] // RHASSPY_getResponse($hash, 'DefaultConfirmation');
         if ( ref ${$error}[0] eq 'HASH') {
-            my $timeout = ${$error}[2];
+            my $timeout = ${$error}[1];
             $timeout = defined $timeout && looks_like_number($timeout) ? $timeout : 20;
             InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
+            return RHASSPY_confirm_timer($hash, 2, $data, $timeout, ${$error}[0]);
         }
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         return ${$error}[1]; #comma separated list of devices to trigger
@@ -3486,7 +3487,7 @@ DefaultConfirmation=Klaro, mach ich</code></pre><p>
     <li>siteId, Device etc. => any element out of the JSON-$data.</li>
     </ul>
     If a simple text is returned, this will be considered as response.<br>
-    For more advanced use of this feature, you may return an array. First element of the array will be interpreted as comma-separated list of devices that may have been modified (otherwise, these devices will not cast any events! See also the "d" parameter in <i>shotcuts</i>). Second element then is regarded as resopnse and may either be simple text or HASH-type data. This will keep the dialogue open to allow interactive data exchange with <i>Rhasspy</i>. An open dialogue will be closed after some time, default is 20 seconds, you may alternatively hand over other numeric values as third element of the array.
+    For more advanced use of this feature, you may return an array. First element of the array will be interpreted as response, second as comma-separated list of devices that may have been modified (otherwise, these devices will not cast any events! See also the "d" parameter in <i>shotcuts</i>). If response is HASH-type data, dialogue will be keept open to allow interactive data exchange with <i>Rhasspy</i>. An open dialogue will be closed after some time, default is 20 seconds, you may alternatively hand over other numeric values as second element of the array. Atm triggering device while dialogue is kept open is not possible.
   </li>
   <li>
     <a id="RHASSPY-attr-shortcuts"></a><b>shortcuts</b><br>
