@@ -1000,7 +1000,7 @@ sub _analyze_genDevType_setter {
     }
     my $allKeyMappings = {
         SetNumeric => { 
-            volume => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'}, 
+            volume => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'},
             channel => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'},
             hue => { cmd => 'hue', currentVal => 'hue', type => 'hue'},
             color => { cmd => 'color', currentVal => 'color', type => 'color'},
@@ -1008,15 +1008,15 @@ sub _analyze_genDevType_setter {
             ct => { cmd => 'ct', currentVal => 'ct', type => 'ct'}
             }
         };
-        for my $okey ( keys %{$allKeyMappings} ) {
+    for my $okey ( keys %{$allKeyMappings} ) {
         my $ikey = $allKeyMappings->{$okey};
         for ( keys %{$ikey} ) {
             $mapping->{$okey}->{$_} = $ikey->{$_} if $setter =~ m{\b$_[\b:\s]}xms;
             for my $col (qw(ct hue color sat)) {
-                if ($setter =~ m{\b$col:[^\s\d]+,(?<min>[0-9.]+),(?<step>[0-9.]+),(?<max>[0-9.]+)\b}xms) {
-                    $mapping->{$okey}->{$_} = $ikey->{$_}->{maxVal} = $+{max};
-                    $mapping->{$okey}->{$_} = $ikey->{$_}->{minVal} = $+{min};
-                    $mapping->{$okey}->{$_} = $ikey->{$_}->{step} = $+{step};
+                if ($setter =~ m{\b${col}:[^\s\d]+,(?<min>[0-9.]+),(?<step>[0-9.]+),(?<max>[0-9.]+)\b}xms) {
+                    $mapping->{$okey}->{$col}->{maxVal} = $+{max};
+                    $mapping->{$okey}->{$col}->{minVal} = $+{min};
+                    $mapping->{$okey}->{$col}->{step} = $+{step};
                 }
             }
         }
