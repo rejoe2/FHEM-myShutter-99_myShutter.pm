@@ -2041,6 +2041,7 @@ sub RHASSPY_updateSlots {
         $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
     }
 
+    my @allKeywords = (@groups, @rooms, @devices);
 
     $deviceData->{qq(${language}.${fhemId}.Device)}        = \@devices if @devices;
     $deviceData->{qq(${language}.${fhemId}.Room)}          = \@rooms if @rooms;
@@ -2048,6 +2049,7 @@ sub RHASSPY_updateSlots {
     $deviceData->{qq(${language}.${fhemId}.Color)}         = \@colors if @colors;
     $deviceData->{qq(${language}.${fhemId}.NumericType)}   = \@types if @types;
     $deviceData->{qq(${language}.${fhemId}.Group)}         = \@groups if @groups;
+    $deviceData->{qq(${language}.${fhemId}.AllKeywords)}   = \@allKeywords if @allKeywords;
 
     $json = eval { toJSON($deviceData) };
 
