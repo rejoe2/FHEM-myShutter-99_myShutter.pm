@@ -322,10 +322,11 @@ sub RHASSPY_Define {
     my $type = shift @{$anon};
     my $Rhasspy  = $h->{baseUrl} // shift @{$anon} // q{http://127.0.0.1:12101};
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
+    $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
     $hash->{MODULE_VERSION} = '0.4.9';
     $hash->{baseUrl} = $Rhasspy;
-    $hash->{helper}{defaultRoom} = $defaultRoom;
+    #$hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
     $hash->{devspec} = $h->{devspec} // q{room=Rhasspy};
@@ -782,16 +783,16 @@ sub _analyze_rhassypAttr {
     @rooms = split m{,}x, lc $attrv if defined $attrv;
     @rooms = split m{,}xi, $hash->{helper}{devicemap}{devices}{$device}->{rooms} if !@rooms && defined $hash->{helper}{devicemap}{devices}{$device}->{rooms};
     if (!@rooms) {
-        $rooms[0] = $hash->{helper}{defaultRoom};
+        $rooms[0] = $hash->{defaultRoom};
     }
     $hash->{helper}{devicemap}{devices}{$device}->{rooms} = join q{,}, @rooms;
 
     #rhasspyNames ermitteln
     my @names;
-    $attrv = AttrVal($device,"${prefix}Name",undef);
-    push @names, split m{,}x, lc $attrv if $attrv;
-    $hash->{helper}{devicemap}{devices}{$device}->{alias} = $names[0] if $attrv;
-    
+    $attrv = AttrVal($device,"${prefix}Name",AttrVal($device,'alias',$device));
+    push @names, split m{,}x, lc $attrv;
+    $hash->{helper}{devicemap}{devices}{$device}->{alias} = $names[0];
+
     for my $dn (@names) {
        for (@rooms) {
            $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
@@ -876,28 +877,24 @@ sub _analyze_genDevType {
         $attrv = AttrVal($device,'siriName',undef);
         push @names, split m{,}x, lc $attrv if $attrv;
 
-        my $alias = lc AttrVal($device,'alias',undef);
-        $names[0] = $alias if !@names && $alias;
-        $names[0] = $device if !@names;
+        my $alias = lc AttrVal($device,'alias',$device);
+        $names[0] = $alias if !@names;
     }
     $hash->{helper}{devicemap}{devices}{$device}->{alias} = $names[0] if $names[0];
 
-    #convert to lower case
-    #for (@names) { $_ = lc; }
     @names = get_unique(\@names);
+    $hash->{helper}{devicemap}{devices}{$device}->{names} = join q{,}, @names if $names[0];
 
     my @rooms;
     if (!defined AttrVal($device,"${prefix}Room", undef)) {
         $attrv = AttrVal($device,'alexaRoom', undef);
-        push @rooms, split m{,}x, $attrv if $attrv;
+        push @rooms, split m{,}x, lc $attrv if $attrv;
 
         $attrv = AttrVal($device,'room',undef);
-        push @rooms, split m{,}x, $attrv if $attrv;
-        $rooms[0] = $hash->{helper}{defaultRoom} if !@rooms;
+        push @rooms, split m{,}x, lc $attrv if $attrv;
+        $rooms[0] = $hash->{defaultRoom} if !@rooms;
     }
 
-    #convert to lower case
-    for (@rooms) { $_ = lc }
     @rooms = get_unique(\@rooms);
 
     for my $dn (@names) {
@@ -906,7 +903,6 @@ sub _analyze_genDevType {
        }
     }
     $hash->{helper}{devicemap}{devices}{$device}->{rooms} = join q{,}, @rooms;
-    $hash->{helper}{devicemap}{devices}{$device}->{names} = join q{,}, @names if @names;
 
     $attrv = AttrVal($device,'group', undef);
     $hash->{helper}{devicemap}{devices}{$device}{groups} = lc $attrv if $attrv;
@@ -1020,8 +1016,8 @@ sub RHASSPY_execute {
     my $device = shift;
     my $cmd    = shift;
     my $value  = shift;
-    my $siteId = shift // $hash->{helper}{defaultRoom};
-    $siteId = $hash->{helper}{defaultRoom} if $siteId eq 'default';
+    my $siteId = shift // $hash->{defaultRoom};
+    $siteId = $hash->{defaultRoom} if $siteId eq 'default';
 
     # Nutzervariablen setzen
     my %specials = (
@@ -1265,7 +1261,7 @@ sub RHASSPY_roomName {
     my $rreading = makeReadingName("siteId2room_$data->{siteId}");
     my @fromSiteId = split m{\.}x, lc $data->{siteId};
     $room = ReadingsVal($hash->{NAME}, $rreading, $fromSiteId[0]);
-    $room = $hash->{helper}{defaultRoom} if $room eq 'default' || !(length $room);
+    $room = $hash->{defaultRoom} if $room eq 'default' || !(length $room);
 
     return $room;
 }
@@ -1574,10 +1570,10 @@ sub RHASSPY_runCmd {
     my $device = shift;
     my $cmd    = shift;
     my $val    = shift; 
-    my $siteId = shift // $hash->{helper}{defaultRoom};
+    my $siteId = shift // $hash->{defaultRoom};
     my $error;
     my $returnVal;
-    $siteId = $hash->{helper}{defaultRoom} if $siteId eq 'default';
+    $siteId = $hash->{defaultRoom} if $siteId eq 'default';
 
     Log3($hash->{NAME}, 5, "runCmd called with command: $cmd");
 
@@ -2034,13 +2030,12 @@ sub RHASSPY_updateSlots {
     $deviceData = {};
     my $url = q{/api/slots?overwrite_all=true};
 
-    
-    for my $gdt ('media', 'blind', 'thermostat', 'switch', 'light') {
+    my @gdts = (qw(switch light media blind thermostat));
+    for my $gdt (@gdts) {
         my @names = ();
         my @devs = devspec2array("$hash->{devspec}");
         for my $device (@devs) {
-            next if AttrVal($device, 'genericDeviceType', undef) ne $gdt;
-            push @names, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{names};
+            push @names, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{names} if AttrVal($device, 'genericDeviceType', '') eq $gdt;;
         }
         @names = get_unique(\@names);
         $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
