@@ -2249,12 +2249,13 @@ sub RHASSPY_handleCustomIntent {
         if ( ref ${$error}[0] eq 'HASH') {
             my $timeout = ${$error}[1];
             $timeout = defined $timeout && looks_like_number($timeout) ? $timeout : 20;
-            InternalTimer(time + $timeout, \&RHASSPY_confirm_timer, $hash, 0);
             $hash->{'.toTrigger'} = ${$error}[1] if defined ${$error}[1];
             return RHASSPY_confirm_timer($hash, 2, $data, $timeout, ${$error}[0]);
         }
         RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         return ${$error}[1]; #comma separated list of devices to trigger
+    } elsif ( ref $error eq 'HASH' ) {
+        return RHASSPY_confirm_timer($hash, 2, $data, 20, $error);
     } else {
         $response = $error; # if $error && $error !~ m{Please.define.*first}x;
     }
@@ -3491,7 +3492,8 @@ DefaultConfirmation=Klaro, mach ich</code></pre><p>
     <li>siteId, Device etc. => any element out of the JSON-$data.</li>
     </ul>
     If a simple text is returned, this will be considered as response.<br>
-    For more advanced use of this feature, you may return an array. First element of the array will be interpreted as response, second as comma-separated list of devices that may have been modified (otherwise, these devices will not cast any events! See also the "d" parameter in <i>shotcuts</i>). If response is HASH-type data, dialogue will be keept open to allow interactive data exchange with <i>Rhasspy</i>. An open dialogue will be closed after some time, default is 20 seconds, you may alternatively hand over other numeric values as third element of the array.
+    For more advanced use of this feature, you may return an array or a hash. 
+    First element of an array will be interpreted as response, second as comma-separated list of devices that may have been modified (otherwise, these devices will not cast any events! See also the "d" parameter in <i>shotcuts</i>). If response is HASH-type data (no matter if only hash is returnd or as first element of an array), dialogue will be keept open to allow interactive data exchange with <i>Rhasspy</i>. An open dialogue will be closed after some time, default is 20 seconds, you may alternatively hand over other numeric values as third element of the array.
   </li>
   <li>
     <a id="RHASSPY-attr-shortcuts"></a><b>shortcuts</b><br>
