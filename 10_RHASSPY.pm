@@ -797,6 +797,7 @@ sub _analyze_rhassypAttr {
            $hash->{helper}{devicemap}{rhasspyRooms}{$_}{$dn} = $device;
        }
     }
+    $hash->{helper}{devicemap}{devices}{$device}->{names} = join q{,}, @names;
 
     for my $item ('Channels', 'Colors') {
         my @rows = split m{\n}x, AttrVal($device, "${prefix}${item}", q{});
@@ -882,7 +883,7 @@ sub _analyze_genDevType {
     $hash->{helper}{devicemap}{devices}{$device}->{alias} = $names[0] if $names[0];
 
     #convert to lower case
-    for (@names) { $_ = lc; }
+    #for (@names) { $_ = lc; }
     @names = get_unique(\@names);
 
     my @rooms;
@@ -905,7 +906,8 @@ sub _analyze_genDevType {
        }
     }
     $hash->{helper}{devicemap}{devices}{$device}->{rooms} = join q{,}, @rooms;
-    
+    $hash->{helper}{devicemap}{devices}{$device}->{names} = join q{,}, @names if @names;
+
     $attrv = AttrVal($device,'group', undef);
     $hash->{helper}{devicemap}{devices}{$device}{groups} = lc $attrv if $attrv;
 
@@ -2032,15 +2034,16 @@ sub RHASSPY_updateSlots {
     $deviceData = {};
     my $url = q{/api/slots?overwrite_all=true};
 
-    for my $gdt (qw (media blind thermostat switch light)) {
-        my @names = [];
-        my @groupnames = [];
-        for my $device (devspec2array("$hash->{devspec}:FILTER=genericDeviceType=$gdt")) {
-            #@names = (@names,split m{,}, 
-            #@groupnames = 
+    
+    for my $gdt ('media', 'blind', 'thermostat', 'switch', 'light') {
+        my @names = ();
+        my @devs = devspec2array("$hash->{devspec}");
+        for my $device (@devs) {
+            next if AttrVal($device, 'genericDeviceType', undef) ne $gdt;
+            push @names, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{names};
         }
+        @names = get_unique(\@names);
         $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
-        $deviceData->{qq(${language}.${fhemId}.Group-${gdt})} = \@groupnames if @groupnames;
     }
 
 
