@@ -666,6 +666,7 @@ sub initialize_rhasspyTweaks {
             next;
         }
 
+=pod
         if ($line =~ m{\A[\s]*timerTrigger[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
@@ -675,6 +676,7 @@ sub initialize_rhasspyTweaks {
             $hash->{helper}{tweaks}{$tweak} = join q{,}, @{$unnamedParams};
             next;
         }
+=cut
     }
     return;
 }
@@ -3070,11 +3072,12 @@ sub RHASSPY_handleIntentSetTimer {
         $responseEnd =~ s{(\$\w+)}{$1}eegx;
 
         my $soundoption = $hash->{helper}{tweaks}{timerSounds}->{$label} // $hash->{helper}{tweaks}{timerSounds}->{default};
-        my $timerTrigger = $hash->{helper}{tweaks}->{timerTrigger};
+        #my $timerTrigger = $hash->{helper}{tweaks}->{timerTrigger};
         #my $addtrigger = defined $timerTrigger  && ( $timerTrigger eq 'default' || $timerTrigger =~ m{\b$label\b}x ) ? 
-        my $addtrigger = defined $timerTrigger && $label ne '' && $timerTrigger =~ m{\bdefault|$label\b}x ? 
-            qq{; trigger $name timerEnd $siteId $room $label}
-            : q{};
+        #my $addtrigger = defined $timerTrigger && $label ne '' && $timerTrigger =~ m{\bdefault|$label\b}x ? 
+        my $addtrigger =    qq{; trigger $name timerEnd $siteId $room};
+        $addtrigger .= " $label" if defined $label;
+        #    : q{};
 
         if ( !defined $soundoption ) {
             CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";deletereading $name ${roomReading}$addtrigger");
@@ -3549,11 +3552,6 @@ i="mute off" p={fhem ("set $NAME mute off")} n=amplifier2 c="Please confirm!"</p
       <li><b>timerSounds</b><br>
       <code>timerSounds= default=./yourfile1.wav eggs=3:20:./yourfile2.wav potatoes=5:./yourfile3.wav</code><br>
       Above keys are some examples and neet to match "Label" values provided by Rhasspy. "default" is optional. If set, this file will be used for all labeled timer without match to other keywords. Numbers are optional, first is numer of repeats, second is waiting time between two repeats. 5 <i>repeats</i> defaults to 5, <i>wait</i> to 15. If only one number is set, this will be taken as <i>repeats</i>.
-      </li>
-      <li><b>timerTrigger</b><br>
-      <code>timerTrigger= default</code> or <code>timerTrigger= eggs potatoes</code><br>
-      Above keys are some examples and neet to match "Label" values provided by Rhasspy. "default" is optional. If set, all labeled timers will cause your RHASSPY device to issue a trigger command at timer end time. Trigger event is 
-      <code>&lt;rhasspyDevice&gt; timerEnd &lt;siteId&gt; &lt;room&gt; &lt;label&gt;</code>
       </li>
       </ul>
       *) <i>rhasspyTweaks</i> in the future might be the place to configure additional things like additional siteId2room info or code links, allowed commands, confirmation requests etc.     
