@@ -1001,18 +1001,22 @@ sub _analyze_genDevType_setter {
     my $allKeyMappings = {
         SetNumeric => { 
             volume => { cmd => 'volume', currentVal => 'volume', maxVal => '100', minVal => '0', step => '2', type => 'volume'},
-            channel => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'},
-            hue => { cmd => 'hue', currentVal => 'hue', type => 'hue'},
-            color => { cmd => 'color', currentVal => 'color', type => 'color'},
-            sat => { cmd => 'sat', currentVal => 'sat', type => 'sat'},
-            ct => { cmd => 'ct', currentVal => 'ct', type => 'ct'}
+            channel => { cmd => 'channel', currentVal => 'channel', step => '1', type => 'channel'}
+            },
+        SetColorParms => { hue => { cmd => 'hue', currentVal => 'hue', type => 'hue', map => 'percent'},
+            color => { cmd => 'color', currentVal => 'color', type => 'color', map => 'percent'},
+            sat => { cmd => 'sat', currentVal => 'sat', type => 'sat', map => 'percent'},
+            ct => { cmd => 'ct', currentVal => 'ct', type => 'ct', map => 'percent'},
+            rgb => { cmd => 'rgb', currentVal => 'rgb', type => 'rgb'}
             }
         };
     for my $okey ( keys %{$allKeyMappings} ) {
         my $ikey = $allKeyMappings->{$okey};
         for ( keys %{$ikey} ) {
             $mapping->{$okey}->{$_} = $ikey->{$_} if $setter =~ m{\b$_[\b:\s]}xms;
-            for my $col (qw(ct hue color sat)) {
+            #for my $col (qw(ct hue color sat)) {
+            if ( $_ =~ m{(ct|hue|color|sat)}xms ) {
+                my $col = $1;
                 if ($setter =~ m{\b${col}:[^\s\d]+,(?<min>[0-9.]+),(?<step>[0-9.]+),(?<max>[0-9.]+)\b}xms) {
                     $mapping->{$okey}->{$col}->{maxVal} = $+{max};
                     $mapping->{$okey}->{$col}->{minVal} = $+{min};
