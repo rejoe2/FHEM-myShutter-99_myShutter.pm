@@ -1455,7 +1455,7 @@ sub RHASSPY_getDevicesByGroup {
         my $allrooms = $hash->{helper}{devicemap}{devices}{$dev}->{rooms};
         next if $room ne 'global' && $allrooms !~ m{\b$room\b}x;
 
-        my $allgroups = $hash->{helper}{devicemap}{devices}{$dev}->{groups};
+        my $allgroups = $hash->{helper}{devicemap}{devices}{$dev}->{groups} // next;
         next if $allgroups !~ m{\b$group\b}x;
 
         my $specials = $hash->{helper}{devicemap}{devices}{$dev}{group_specials};
