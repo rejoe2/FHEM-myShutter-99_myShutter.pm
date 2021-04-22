@@ -303,7 +303,7 @@ sub RHASSPY_Initialize {
     $hash->{DeleteFn}    = \&RHASSPY_Delete;
     $hash->{SetFn}       = \&RHASSPY_Set;
     $hash->{AttrFn}      = \&RHASSPY_Attr;
-    $hash->{AttrList}    = "IODev rhasspyIntents:textField-long rhasspyShortcuts:textField-long rhasspyTweaks:textField-long response:textField-long forceNEXT:0,1 disable:0,1 disabledForIntervals configFile " . $readingFnAttributes;
+    $hash->{AttrList}    = "IODev rhasspyIntents:textField-long rhasspyShortcuts:textField-long rhasspyTweaks:textField-long response:textField-long forceNEXT:0,1 disable:0,1 disabledForIntervals languageFile " . $readingFnAttributes;
     $hash->{Match}       = q{.*};
     $hash->{ParseFn}     = \&RHASSPY_Parse;
     $hash->{parseParams} = 1;
@@ -324,7 +324,7 @@ sub RHASSPY_Define {
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.10';
+    $hash->{MODULE_VERSION} = '0.4.11';
     $hash->{baseUrl} = $Rhasspy;
     #$hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
@@ -369,7 +369,7 @@ sub firstInit {
 sub initialize_Language {
     my $hash = shift // return;
     my $lang = shift // return;
-    my $cfg  = shift // AttrVal($hash->{NAME},'configFile',undef);
+    my $cfg  = shift // AttrVal($hash->{NAME},'languageFile',undef);
 
     my $cp = q{UTF-8};
 
@@ -583,10 +583,10 @@ sub RHASSPY_Attr {
         } 
     }
 
-    if ( $attribute eq 'configFile' ) {
+    if ( $attribute eq 'languageFile' ) {
         if ($command ne 'set') {
             delete $hash->{CONFIGFILE};
-            delete $attr{$name}{configFile}; 
+            delete $attr{$name}{languageFile}; 
             delete $hash->{helper}{lng};
             $value = undef;
         }
@@ -666,7 +666,7 @@ sub initialize_rhasspyTweaks {
             next;
         }
 
-        if ($line =~ m{\A[\s]*genericDeviceType[\s]*=}x) {
+        if ($line =~ m{\A[\s]*useGenericAttrs[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
             return "Error in $line! No content provided!" if !length $values && $init_done;
@@ -1818,6 +1818,7 @@ my $dispatchFns = {
     MediaControls   => \&RHASSPY_handleIntentMediaControls,
     MediaChannels   => \&RHASSPY_handleIntentMediaChannels,
     SetColor        => \&RHASSPY_handleIntentSetColor,
+    SetColorGroup   => \&RHASSPY_handleIntentSetColorGroup,
     GetTime         => \&RHASSPY_handleIntentGetTime,
     GetWeekday      => \&RHASSPY_handleIntentGetWeekday,
     SetTimer        => \&RHASSPY_handleIntentSetTimer,
@@ -2019,7 +2020,9 @@ sub RHASSPY_updateSlots {
     my $fhemId   = $hash->{fhemId};
     my $method   = q{POST};
     
-    initialize_devicemap($hash);# if defined $hash->{useHash} && $hash->{useHash};
+    initialize_devicemap($hash);
+    my $tweaks = $hash->{helper}{tweaks}->{updateSlots};
+    my $noEmpty = !defined $tweaks || defined $tweaks->{noEmptySlots} && $tweaks->{noEmptySlots} != 1 ? 1 : 0;
 
     # Collect everything and store it in arrays
     my @devices   = RHASSPY_allRhasspyNames($hash);
@@ -2029,6 +2032,17 @@ sub RHASSPY_updateSlots {
     my @types     = RHASSPY_allRhasspyTypes($hash);
     my @groups    = RHASSPY_allRhasspyGroups($hash);
     my @shortcuts = keys %{$hash->{helper}{shortcuts}};
+
+    if ($noEmpty) { 
+        @devices    =  ('') if !@devices;
+        @rooms     = ('') if !@rooms;
+        @channels  = ('') if !@channels;
+        @colors    = ('') if !@colors;
+        @types     = ('') if !@types;
+        @groups    = ('') if !@groups;
+        @shortcuts = ('') if !@shortcuts;
+    }
+
 
     my $deviceData;
 
@@ -2049,24 +2063,24 @@ sub RHASSPY_updateSlots {
 
     my $json;
     $deviceData = {};
-    my $url = q{/api/slots?overwrite_all=true};
+    my $overwrite = defined $tweaks && defined $tweaks->{overwrite_all} ? $tweaks->{useGenericAttrs}->{overwrite_all} : 'true';
+    my $url = qq{/api/slots?overwrite_all=$overwrite};
+    
 
     my @gdts = (qw(switch light media blind thermostat));
     for my $gdt (@gdts) {
+        last if !$hash->{useGenericAttrs};
         my @names = ();
         my @devs = devspec2array("$hash->{devspec}");
         for my $device (@devs) {
             push @names, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{names} if AttrVal($device, 'genericDeviceType', '') eq $gdt;;
         }
         @names = get_unique(\@names);
-        @names = ('') if !@names 
-                    && ( !defined $hash->{helper}{tweaks}->{genericDeviceType} 
-                    || defined $hash->{helper}{tweaks}->{genericDeviceType}->{noSlots} 
-                       && $hash->{helper}{tweaks}->{genericDeviceType}->{noSlots} == 1 );
+        @names = ('') if !@names && $noEmpty;
         $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
     }
 
-    my @allKeywords = (@groups, @rooms, @devices);
+    my @allKeywords = uniq(@groups, @rooms, @devices);
 
     $deviceData->{qq(${language}.${fhemId}.Device)}        = \@devices if @devices;
     $deviceData->{qq(${language}.${fhemId}.Room)}          = \@rooms if @rooms;
@@ -3394,7 +3408,7 @@ sub RHASSPY_getDataFile {
     my $filename = shift;
     my $name = $hash->{NAME};
     my $lang = $hash->{LANGUAGE};
-    $filename = $filename // AttrVal($name,'configFile',undef);
+    $filename = $filename // AttrVal($name,'languageFile',undef);
     my @t = localtime gettimeofday();
     $filename = ResolveDateWildcards($filename, @t);
     $hash->{CONFIGFILE} = $filename; # for configDB migration
@@ -3410,7 +3424,7 @@ sub RHASSPY_readLanguageFromFile {
     Log3($name, 5, "trying to read language from $filename");
     my ($ret, @content) = FileRead($filename);
     if ($ret) {
-        Log3($name, 1, "$name failed to read configFile $filename!") ;
+        Log3($name, 1, "$name failed to read languageFile $filename!") ;
         return $ret, undef;
     }
     my @cleaned = grep { $_ !~ m{\A\s*[#]}x } @content;
@@ -3500,7 +3514,7 @@ So all parameters in define should be provided in the <i>key=value</i> form. In 
 
 <p>RHASSPY needs a <a href="#MQTT2_CLIENT">MQTT2_CLIENT</a> device connected to the same MQTT-Server as the voice assistant (Rhasspy) service.</p>
 <p><b>Example for defining an MQTT2_CLIENT device and the Rhasspy device in FHEM:</b></p>
-<p><code>defmod rhasspyMQTT2 MQTT2_CLIENT rhasspy:12183<br>
+<p><code>defmod rhasspyMQTT2 MQTT2_CLIENT 192.168.1.122:12183<br>
 attr rhasspyMQTT2 clientOrder RHASSPY MQTT_GENERIC_BRIDGE MQTT2_DEVICE<br>
 attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionStarted hermes/dialogueManager/sessionEnded</code></p>
 <p><code>define Rhasspy RHASSPY devspec=room=Rhasspy defaultRoom=Livingroom language=en</code></p>
@@ -3621,12 +3635,12 @@ hermes/dialogueManager/sessionEnded</code></p>
 <p><b>RHASSPY itself</b> supports the following attributes:</p>
 <ul>
   <li>
-    <a id="RHASSPY-attr-configFile"></a><b>configFile</b><br>
+    <a id="RHASSPY-attr-languageFile"></a><b>languageFile</b><br>
     <p>Path to the language-config file. If this attribute isn't set, a default set of english responses is used for voice responses.<br>
-    The file itself must contain a JSON-encoded keyword-value structure (partly with sub-structures) following the given structure for the mentioned english defaults. As a reference, there's one available in german, or just make a dump of the English structure with e.g. (replace RHASSPY by your device's name): <code>{toJSON($defs{RHASSPY}->{helper}{lng})}</code>, edit the result e.g. using https://jsoneditoronline.org and place this in your own configFile version. There might be some variables to be used - these should also work in your sentences.<br>
-    configFile also allows combining e.g. a default set of german sentences with some few own modifications by using "defaults" subtree for the defaults and "user" subtree for your modified versions. This feature might be helpful in case the base language structure has to be changed in the future.</p>
+    The file itself must contain a JSON-encoded keyword-value structure (partly with sub-structures) following the given structure for the mentioned english defaults. As a reference, there's one available in german, or just make a dump of the English structure with e.g. (replace RHASSPY by your device's name): <code>{toJSON($defs{RHASSPY}->{helper}{lng})}</code>, edit the result e.g. using https://jsoneditoronline.org and place this in your own languageFile version. There might be some variables to be used - these should also work in your sentences.<br>
+    languageFile also allows combining e.g. a default set of german sentences with some few own modifications by using "defaults" subtree for the defaults and "user" subtree for your modified versions. This feature might be helpful in case the base language structure has to be changed in the future.</p>
     <p>Example (placed in the same dir fhem.pl is located):</p>
-    <p><code>attr &lt;rhasspyDevice&gt; configFile ./rhasspy-de.cfg</code></p>
+    <p><code>attr &lt;rhasspyDevice&gt; languageFile ./rhasspy-de.cfg</code></p>
   </li>
 
   <li>
@@ -3693,7 +3707,7 @@ i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code><
 
   <li>
     <a id="RHASSPY-attr-rhasspyTweaks"></a><b>rhasspyTweaks</b>
-    <p>Sets additional settings like siteId2room info or code links, allowed commands, confirmation requests etc.</p>
+    <p>Currently sets additional settings for timers. May contain further custom settings in future versions like siteId2room info or code links, allowed commands, confirmation requests etc.</p>
     <ul>
       <li><p><b>timerLimits</b><br>
         Used to determine when the timer should response with e.g. "set to 30 minutes" or with "set to 10:30"</p>
@@ -3708,6 +3722,13 @@ i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code><
         The two numbers are optional. The first one sets the number of repeats, the second is the waiting time between the repeats.<br>
         <i>repeats</i> defaults to 5, <i>wait</i> to 15<br>
         If only one number is set, this will be taken as <i>repeats</i>.</p>
+      </li>
+      <li><p><b>updateSlots</b><br>
+        Changes aspects on slot generation.</p>
+        <code>noEmptySlots=1</code><br>
+        <p>By default, RHASSPY will generate an additional slot for each of the genericDeviceType it recognizes, regardless, if there's any devices marked to belong to this type. If set to <i>1</i>, no empty slots will be generated.</p>
+        <code>overwrite_all=false</code><br>
+        <p>By default, RHASSPY will overwrite all generated slots. Setting this to <i>false</i> will change this.</p>
       </li>
     </ul>
   </li>
