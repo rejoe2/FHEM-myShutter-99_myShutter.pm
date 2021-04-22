@@ -666,17 +666,16 @@ sub initialize_rhasspyTweaks {
             next;
         }
 
-=pod
-        if ($line =~ m{\A[\s]*timerTrigger[\s]*=}x) {
+        if ($line =~ m{\A[\s]*genericDeviceType[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
             return "Error in $line! No content provided!" if !length $values && $init_done;
             my($unnamedParams, $namedParams) = parseParams($values);
-            return "Error in $line! Only unnamed parameters are allowed" if ( keys %{$namedParams} ) && $init_done;
-            $hash->{helper}{tweaks}{$tweak} = join q{,}, @{$unnamedParams};
+            return "Error in $line! Provide at least one key-value pair!" if ( @{$unnamedParams} || !keys %{$namedParams} ) && $init_done;
+            $hash->{helper}{tweaks}{$tweak} = $namedParams;
             next;
         }
-=cut
+
     }
     return;
 }
@@ -2060,6 +2059,10 @@ sub RHASSPY_updateSlots {
             push @names, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{names} if AttrVal($device, 'genericDeviceType', '') eq $gdt;;
         }
         @names = get_unique(\@names);
+        @names = ('') if !@names 
+                    && ( !defined $hash->{helper}{tweaks}->{genericDeviceType} 
+                    || defined $hash->{helper}{tweaks}->{genericDeviceType}->{noSlots} 
+                       && $hash->{helper}{tweaks}->{genericDeviceType}->{noSlots} == 1 );
         $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
     }
 
@@ -2551,7 +2554,7 @@ sub RHASSPY_handleIntentSetNumericGroup {
     my $updatedList;
 
     my $init_delay = 0;
-    my $needs_sorting = (@{$hash->{".asyncQueue"}});
+    my $needs_sorting = (@{$hash->{'.asyncQueue'}});
 
     for my $device (@devlist) {
         my $tempdata = $data;
@@ -2566,7 +2569,7 @@ sub RHASSPY_handleIntentSetNumericGroup {
             $updatedList = $updatedList ? "$updatedList,$device" : $device;
         } else {
             my $hlabel = $devices->{$device}->{delay};
-            push @{$hash->{".asyncQueue"}}, {device => $device, SetNumeric => $tempdata, prio => $devices->{$device}->{prio}, delay => $hlabel};
+            push @{$hash->{'.asyncQueue'}}, {device => $device, SetNumeric => $tempdata, prio => $devices->{$device}->{prio}, delay => $hlabel};
             InternalTimer(time+$delaysum,\&RHASSPY_asyncQueue,$hash,0) if !$init_delay;
             $init_delay = 1;
         }
@@ -2970,19 +2973,27 @@ sub RHASSPY_handleIntentSetColor {
     my $hash = shift // return;
     my $data = shift // return;
 
+    my $inBulk = $data->{'.inBulk'} // 0;
+    my $device = $data->{'.DevName'};
+
     Log3($hash->{NAME}, 5, "handleIntentSetColor called");
     my $response;
 
     # At least Device AND Color have to be received
-    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData')) if !exists $data->{Color} && !exists $data->{Saturation} && !exists $data->{Colortemp} && !exists $data->{Hue} || !exists $data->{Device};
+    if ( !exists $data->{Color} && !exists $data->{Rgb} &&!exists $data->{Saturation} && !exists $data->{Colortemp} && !exists $data->{Hue} || !exists $data->{Device} && !defined $device) {
+        return if $inBulk;
+        return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData')) ;
+    }
+
     #if (exists $data->{Color} && exists $data->{Device}) {
     my $room = RHASSPY_roomName($hash, $data);
     my $color = $data->{Color} // q{};
 
     # Search for matching device and command
-    my $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device});
+    $device = RHASSPY_getDeviceByName($hash, $room, $data->{Device}) if !defined $device;
     my $cmd = RHASSPY_getCmd($hash, $device, 'rhasspyColors', $color, undef);
 
+    return if $inBulk && !defined $device;
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound')) if !defined $device;
 
     if ( defined $cmd ) {
@@ -2990,11 +3001,11 @@ sub RHASSPY_handleIntentSetColor {
         # Execute Cmd
         RHASSPY_runCmd($hash, $device, $cmd);
     } else {
-        $response = RHASSPY_runSetColorCmd($hash, $device, $data);
+        $response = RHASSPY_runSetColorCmd($hash, $device, $data, $inBulk);
     }
     # Send voice response
     $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
-    RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !$inBulk;
     return $device;
 }
 
@@ -3002,10 +3013,11 @@ sub RHASSPY_runSetColorCmd {
     my $hash   = shift // return;
     my $device = shift // return;
     my $data   = shift // return;
+    my $inBulk = shift // 0;
 
     my $color  = $data->{Color};
     
-    my $mapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetColorParms} // return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
+    my $mapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetColorParms} // return $inBulk ?undef : RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoMappingFound'));
 
     my $error;
     my $success;
@@ -3017,6 +3029,7 @@ sub RHASSPY_runSetColorCmd {
         if ( defined $data->{$kw} && defined $mapping->{$_} ) {
             my $value = ($mapping->{$_}->{maxVal} - $mapping->{$_}->{minVal}) * $data->{$kw} / 100;
             $error = AnalyzeCommand($hash, "set $device $mapping->{$_}->{cmd} $value");
+            return if $inBulk;
             return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
             return RHASSPY_getResponse($hash, 'DefaultConfirmation');
         }
@@ -3025,7 +3038,8 @@ sub RHASSPY_runSetColorCmd {
     #shortcut: Rgb field is used or color is in HEX value and rgb is a possible command
     if ( ( defined $data->{Rgb} || $color =~ m{\A[[:xdigit:]]\z}x ) && defined $mapping->{rgb} ) {
         $color = $data->{Rgb} if defined $data->{Rgb};
-        $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $data->{Rgb}");
+        $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $color");
+        return if $inBulk;
         return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
         return RHASSPY_getResponse($hash, 'DefaultConfirmation');
     }
@@ -3040,8 +3054,61 @@ sub RHASSPY_runSetColorCmd {
     };
     #todo: Tabelle erweitern, ggf. aktuelle Helligkeit ermitteln
 
-    return "function not implemented yet"
+    return "function to convert between different colorspaces not implemented yet"
 }
+
+sub RHASSPY_handleIntentSetColorGroup {
+    my $hash = shift // return;
+    my $data = shift // return;
+
+    Log3($hash->{NAME}, 5, 'handleIntentSetColorGroup called');
+
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoValidData')) if !exists $data->{Color} && !exists $data->{Rgb} &&!exists $data->{Saturation} && !exists $data->{Colortemp} && !exists $data->{Hue};
+
+    my $devices = RHASSPY_getDevicesByGroup($hash, $data);
+
+    #see https://perlmaven.com/how-to-sort-a-hash-of-hashes-by-value for reference
+    my @devlist = sort {
+        $devices->{$a}{prio} <=> $devices->{$b}{prio}
+        or
+        $devices->{$a}{delay} <=> $devices->{$b}{delay}
+        }  keys %{$devices};
+
+    Log3($hash, 5, 'sorted devices list is: ' . join q{ }, @devlist);
+    return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'NoDeviceFound')) if !keys %{$devices}; 
+
+    my $delaysum = 0;
+    my $updatedList;
+    my $init_delay = 0;
+    my $needs_sorting = (@{$hash->{'.asyncQueue'}});
+
+    for my $device (@devlist) {
+        my $tempdata = $data;
+        $tempdata->{'.DevName'} = $device;
+        $tempdata->{'.inBulk'} = 1;
+
+        # execute Cmd
+        if ( !$delaysum ) {
+            RHASSPY_handleIntentSetColor($hash, $data);
+            Log3($hash->{NAME}, 5, "Running SetColor on device [$device]" );
+            $delaysum += $devices->{$device}->{delay};
+            $updatedList = $updatedList ? "$updatedList,$device" : $device;
+        } else {
+            my $hlabel = $devices->{$device}->{delay};
+            push @{$hash->{'.asyncQueue'}}, {device => $device, SetColor => $tempdata, prio => $devices->{$device}->{prio}, delay => $hlabel};
+            InternalTimer(time+$delaysum,\&RHASSPY_asyncQueue,$hash,0) if !$init_delay;
+            $init_delay = 1;
+        }
+    }
+
+    _sortAsyncQueue($hash) if $init_delay && $needs_sorting;
+
+    # Send response
+    RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, RHASSPY_getResponse($hash, 'DefaultConfirmation'));
+    return $updatedList;
+}
+
+
 
 # Handle incoming SetTimer intents
 sub RHASSPY_handleIntentSetTimer {
