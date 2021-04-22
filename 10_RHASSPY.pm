@@ -946,7 +946,20 @@ sub _analyze_genDevType {
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
-    if ( $gdt eq 'blind' ) {
+    elsif ( $gdt eq 'thermometer' ) {
+        my $r = $defs{$device}{READINGS};
+        if($r) {
+            for (sort keys %{$r}) {
+                if ( $_ =~ m{(temperature|humidity)} ) {
+                    $currentMapping->{GetNumeric} = 
+                    { $1 => {currentVal => $1, type => $1 } };
+                }
+            }
+        }
+        $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
+    }
+
+    elsif ( $gdt eq 'blind' ) {
         if ( $allset =~ m{\bdim[\b:\s]}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
             $currentMapping = 
@@ -1356,7 +1369,9 @@ sub RHASSPY_getDeviceByIntentAndType {
     my $room   = shift;
     my $intent = shift;
     my $type   = shift; #Beta-User: any necessary parameters...?
+    #my $inBulk = shift // 0;
 
+    #rem. Beta-User: atm function is only called by GetNumeric!
     my $device;
 
     # Devices sammeln
@@ -2067,7 +2082,7 @@ sub RHASSPY_updateSlots {
     my $url = qq{/api/slots?overwrite_all=$overwrite};
     
 
-    my @gdts = (qw(switch light media blind thermostat));
+    my @gdts = (qw(switch light media blind thermostat thermometer));
     for my $gdt (@gdts) {
         last if !$hash->{useGenericAttrs};
         my @names = ();
