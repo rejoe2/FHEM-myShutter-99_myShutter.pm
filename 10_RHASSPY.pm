@@ -3111,9 +3111,57 @@ sub RHASSPY_runSetColorCmd {
         return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
         return RHASSPY_getResponse($hash, 'DefaultConfirmation');
     }
-    
+
+    if ( defined $data->{Colortemp} && defined $mapping->{rgb} && looks_like_number($data->{Colortemp}) ) {
+        
+        my $ct = $data->{Colortemp}*50 + 2000; #FHEMWIKI indicates typical range from 2000 to 6500
+        my ($r, $g, $b) = ct2rgb($ct);
+        my $rgb = uc sprintf( "%2.2X%2.2X%2.2X", $r, $g, $b );
+
+        return "mapping problem in ct2rgb" if !defined $rgb;
+        $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $rgb");
+        return if $inBulk;
+        return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+        return RHASSPY_getResponse($hash, 'DefaultConfirmation');
+    }
+
     return "function to convert between different colorspaces not implemented yet"
 }
+
+#clone from Color.pm
+sub ct2rgb { 
+    my $ct = shift // return;
+
+    # calculation from http://www.tannerhelland.com/4435/convert-temperature-rgb-algorithm-code
+
+    # kelvin -> mired
+    $ct = 1000000/$ct if( $ct > 1000 );
+
+    # adjusted by 1000K
+    my $temp = (1000000/$ct)/100 + 10;
+
+    my $r = 255;
+    my $g = 0;
+    my $b = 255;
+
+    $r = 329.698727446 * ($temp - 60) ** -0.1332047592 if( $temp > 66 );
+    $r = max( 0, min ( $r , 255 ) );
+    $r = 255 if( $r > 255 );
+    
+    if ( $temp <= 66 ) {
+        $g = 99.4708025861 * log($temp) - 161.1195681661;
+    } else {
+        $g = 288.1221695283 * ($temp - 60) ** -0.0755148492;
+    }
+    $r = max( 0, min ( $g , 255 ) );
+
+    #$b = 0 if $temp <= 19;
+    $b = 138.5177312231 * log($temp-10) - 305.0447927307 if $temp < 66;
+    $r = max( 0, min ( $r , 255 ) );
+
+    return( $r, $g, $b );
+}
+
 
 sub RHASSPY_handleIntentSetColorGroup {
     my $hash = shift // return;
@@ -3879,6 +3927,7 @@ yellow=rgb F0F000</code></p>
   <li>MediaControls</li>
   <li>MediaChannels</li>
   <li>SetColor</li>
+  <li>SetColorGroup</li>
   <li>GetTime</li>
   <li>GetWeekday</li>
   <li>SetTimer</li>
