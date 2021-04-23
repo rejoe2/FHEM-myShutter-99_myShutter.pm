@@ -178,7 +178,6 @@ my $internal_mappings = {
       'Type' => 'setTarget',
       'up'  => '0'
     }
-                               
   },
   'regex' => {
     'upward' => '(higher|brighter|louder|rise|warmer)',
@@ -404,7 +403,7 @@ sub initialize_prefix {
     addToAttrList("${prefix}Room");
     addToAttrList("${prefix}Mapping:textField-long");
     addToAttrList("${prefix}Channels:textField-long");
-    addToAttrList("${prefix}Colors:textField-long");
+    #addToAttrList("${prefix}Colors:textField-long");
     addToAttrList("${prefix}Group:textField");
     addToAttrList("${prefix}Specials:textField-long");
 
@@ -912,23 +911,23 @@ sub _analyze_genDevType {
     my $allset = getAllSets($device);
     my $currentMapping;
 
-    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+[\b:\s]}xms ) {
+    if ( ($gdt eq 'switch' || $gdt eq 'light') && $allset =~ m{\bo[nf]+([\b:\s]|\Z)}xms ) {
         $currentMapping = 
             { GetOnOff => { GetOnOff => {currentVal => 'state', type => 'GetOnOff', valueOff => 'off'}}, 
               SetOnOff => { SetOnOff => {cmdOff => 'off', type => 'SetOnOff', cmdOn => 'on'}}
             };
-        if ( $gdt eq 'light' && $allset =~ m{\bdim[\b:\s]}xms ) {
+        if ( $gdt eq 'light' && $allset =~ m{\bdim([\b:\s]|\Z)}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'dim', currentVal => 'state', maxVal => $maxval, minVal => '0', step => '3', type => 'brightness'}};
         }
 
-        elsif ( $gdt eq 'light' && $allset =~ m{\bpct[\b:\s]}xms ) {
+        elsif ( $gdt eq 'light' && $allset =~ m{\bpct([\b:\s]|\Z)}xms ) {
             $currentMapping->{SetNumeric} = {
             brightness => { cmd => 'pct', currentVal => 'pct', maxVal => '100', minVal => '0', step => '5', type => 'brightness'}};
         }
 
-        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness[\b:\s]}xms ) {
+        elsif ( $gdt eq 'light' && $allset =~ m{\bbrightness([\b:\s]|\Z)}xms ) {
             $currentMapping->{SetNumeric} = {
                 brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', map => 'percent', type => 'brightness'}};
         }
@@ -936,7 +935,7 @@ sub _analyze_genDevType {
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
     elsif ( $gdt eq 'thermostat' ) {
-        my $desTemp = $allset =~ m{\b(desiredTemp)[\b:\s]}xms ? $1 : 'desired-temp';
+        my $desTemp = $allset =~ m{\b(desiredTemp)([\b:\s]|\Z)}xms ? $1 : 'desired-temp';
         my $measTemp = InternalVal($device, 'TYPE', 'unknown') eq 'CUL_HM' ? 'measured-temp' : 'temperature';
         $currentMapping = 
             { GetNumeric => { 'desired-temp' => {currentVal => $desTemp, type => 'desired-temp'},
@@ -950,9 +949,8 @@ sub _analyze_genDevType {
         my $r = $defs{$device}{READINGS};
         if($r) {
             for (sort keys %{$r}) {
-                if ( $_ =~ m{(temperature|humidity)} ) {
-                    $currentMapping->{GetNumeric} = 
-                    { $1 => {currentVal => $1, type => $1 } };
+                if ( $_ =~ m{\A(?<id>temperature|humidity)\z} ) {
+                    $currentMapping->{GetNumeric}->{$+{id}} = {currentVal => $+{id}, type => $+{id} };
                 }
             }
         }
@@ -960,7 +958,7 @@ sub _analyze_genDevType {
     }
 
     elsif ( $gdt eq 'blind' ) {
-        if ( $allset =~ m{\bdim[\b:\s]}xms ) {
+        if ( $allset =~ m{\bdim([\b:\s]|\Z)}xms ) {
             my $maxval = InternalVal($device, 'TYPE', 'unknown') eq 'ZWave' ? 99 : 100;
             $currentMapping = 
             { GetNumeric => { dim => {currentVal => 'state', type => 'setTarget' } },
@@ -970,7 +968,7 @@ sub _analyze_genDevType {
             };
         }
 
-        elsif ( $allset =~ m{\bpct[\b:\s]}xms ) {
+        elsif ( $allset =~ m{\bpct([\b:\s]|\Z)}xms ) {
             $currentMapping = { 
             GetNumeric => { 'pct' => {currentVal => 'pct', type => 'setTarget'} },
             GetOnOff => { GetOnOff => {currentVal=>'pct', valueOn=>'100' } },
@@ -1009,7 +1007,7 @@ sub _analyze_genDevType_setter {
         my $ikey = $allValMappings->{$okey};
         for ( keys %{$ikey} ) {
             my $val = $ikey->{$_};
-            $mapping->{$okey}->{$okey}->{$_} = $val if $setter =~ m{\b$val[\b:\s]}xms;
+            $mapping->{$okey}->{$okey}->{$_} = $val if $setter =~ m{\b$val([\b:\s]|\Z)}xms;
         }
     }
     my $allKeyMappings = {
@@ -1027,7 +1025,7 @@ sub _analyze_genDevType_setter {
     for my $okey ( keys %{$allKeyMappings} ) {
         my $ikey = $allKeyMappings->{$okey};
         for ( keys %{$ikey} ) {
-            $mapping->{$okey}->{$_} = $ikey->{$_} if $setter =~ m{\b$_[\b:\s]}xms;
+            $mapping->{$okey}->{$_} = $ikey->{$_} if $setter =~ m{\b$_([\b:\s]|\Z)}xms;
             #for my $col (qw(ct hue color sat)) {
             if ( $_ =~ m{(ct|hue|color|sat)}xms ) {
                 my $col = $1;
@@ -1287,15 +1285,17 @@ sub RHASSPY_roomName {
 
     # Slot "Room" in JSON? Otherwise use info from used satellite
     return $data->{Room} if exists($data->{Room});
-    
+
     my $room;
-    
-    #Beat-User: This might be the right place to check, if there's additional logic implemented...
-    
-    my $rreading = makeReadingName("siteId2room_$data->{siteId}");
-    my @fromSiteId = split m{\.}x, lc $data->{siteId};
-    $room = ReadingsVal($hash->{NAME}, $rreading, $fromSiteId[0]);
+
+    #Beta-User: This might be the right place to check, if there's additional logic implemented...
+
+    my $siteId = lc $data->{siteId};
+    my $rreading = makeReadingName("siteId2room_$siteId");
+    $siteId =~ s{\A([^.]+).*}{$1}xms;
+    $room = ReadingsVal($hash->{NAME}, $rreading, $siteId);
     $room = $hash->{defaultRoom} if $room eq 'default' || !(length $room);
+    Log3($hash->{NAME}, 5, "room is identified using siteId as $room");
 
     return $room;
 }
@@ -2311,7 +2311,7 @@ sub RHASSPY_handleCustomIntent {
         $response = $error; # if $error && $error !~ m{Please.define.*first}x;
     }
 
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultConfirmation');
+    $response = RHASSPY_getResponse($hash, 'DefaultConfirmation') if !defined $response;
 
     # Antwort senden
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
@@ -2525,7 +2525,7 @@ sub RHASSPY_handleIntentGetOnOff {
         }
     }
     # Send response
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
+    $response = RHASSPY_getResponse($hash, 'DefaultError')  if !defined $response;
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $device;
 }
@@ -2742,7 +2742,7 @@ sub RHASSPY_handleIntentSetNumeric {
         : $response = RHASSPY_getResponse($hash, 'DefaultConfirmation'); 
 
     # send response
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
+    $response = RHASSPY_getResponse($hash, 'DefaultError') if !defined $response;
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{'.inBulk'};
     return $device;
 }
@@ -2794,7 +2794,7 @@ sub RHASSPY_handleIntentGetNumeric {
     my $location = $data->{Device};
     if ( !defined $location ) {
         my $rooms = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
-        $location = $data->{Room} if $rooms =~ m{\b$data->{Room}\b}ix;
+        $location = $data->{Room} if defined $rooms && $rooms =~ m{\b$data->{Room}\b}ix;
 
         #Beta-User: this might be the place to implement the "no device in room" branch
         ($location, my $nn) = split m{,}x, $rooms if !defined $location;
@@ -2858,7 +2858,7 @@ sub RHASSPY_handleIntentGetState {
         }
     }
     # Antwort senden
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
+    $response = RHASSPY_getResponse($hash, 'DefaultError') if !defined $response;
     return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
 }
 
@@ -2991,7 +2991,7 @@ sub RHASSPY_handleIntentMediaChannels {
     }
 
     # Antwort senden
-    $response = $response // RHASSPY_getResponse($hash, 'NoMediaChannelFound');
+    $response = RHASSPY_getResponse($hash, 'NoMediaChannelFound') if !defined $response;
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $device;
 }
@@ -3033,7 +3033,7 @@ sub RHASSPY_handleIntentSetColor {
         $response = RHASSPY_runSetColorCmd($hash, $device, $data, $inBulk);
     }
     # Send voice response
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
+    $response = RHASSPY_getResponse($hash, 'DefaultError') if !defined $response;
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !$inBulk;
     return $device;
 }
@@ -3056,7 +3056,7 @@ sub RHASSPY_runSetColorCmd {
     for (keys %{$keywords}) {
         my $kw = $keywords->{$_};
         if ( defined $data->{$kw} && defined $mapping->{$_} ) {
-            my $value = ($mapping->{$_}->{maxVal} - $mapping->{$_}->{minVal}) * $data->{$kw} / 100;
+            my $value = ($mapping->{$_}->{maxVal} - $mapping->{$_}->{minVal}) * $data->{$kw} / 360;
             $error = AnalyzeCommand($hash, "set $device $mapping->{$_}->{cmd} $value");
             return if $inBulk;
             return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
@@ -3065,7 +3065,7 @@ sub RHASSPY_runSetColorCmd {
     }
 
     #shortcut: Rgb field is used or color is in HEX value and rgb is a possible command
-    if ( ( defined $data->{Rgb} || $color =~ m{\A[[:xdigit:]]\z}x ) && defined $mapping->{rgb} ) {
+    if ( ( defined $data->{Rgb} || defined $color && $color =~ m{\A[[:xdigit:]]\z}x ) && defined $mapping->{rgb} ) {
         $color = $data->{Rgb} if defined $data->{Rgb};
         $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $color");
         return if $inBulk;
@@ -3073,16 +3073,45 @@ sub RHASSPY_runSetColorCmd {
         return RHASSPY_getResponse($hash, 'DefaultConfirmation');
     }
 
-    my %word2rgb = {
-        white => {r => 255, g => 255, b => 255},
-        grey  => {r => 122, g => 122, b => 122},
-        darkgrey => {r => 10, g => 10, b => 10, f => 1}, #this includes brightness info!
-        red   => {r => 255, g => 0, b => 0},
-        green => {r => 0, g => 255, b => 0},
-        blue  => {r => 0, g => 0, b => 255}
-    };
-    #todo: Tabelle erweitern, ggf. aktuelle Helligkeit ermitteln
-
+    #only matches, if there's no native hue command 
+    if ( defined $data->{Hue} && defined $mapping->{rgb} ) {
+        my $angle = int($data->{Hue} / 24)*15;
+        my $angle2rgb = {
+            # from https://en.wikipedia.org/wiki/Hue#24_hues_of_HSL/HSV
+            # hue angle color code luminance
+            0 => {rgb => 'FF0000' , brightness => '30'}, 
+            15=> { rgb => 'FF4000', brightness => '45' },
+            30=> { rgb => 'FF8000', brightness => '59' },
+            45=> { rgb => 'FFBF00', brightness => '74' },
+            60=> { rgb => 'FFFF00', brightness => '89' },
+            75=> { rgb => 'BFFF00', brightness => '81' },
+            90=> { rgb => '80FF00', brightness => '74' },
+            105=> { rgb => '40FF00', brightness => '66' },
+            120=> { rgb => '00FF00', brightness => '59' },
+            135=> { rgb => '00FF40', brightness => '62' },
+            150=> { rgb => '00FF80', brightness => '64' },
+            165=> { rgb => '00FFBF', brightness => '67' },
+            180=> { rgb => '00FFFF', brightness => '70' },
+            195=> { rgb => '00BFFF', brightness => '55' },
+            210=> { rgb => '0080FF', brightness => '41' },
+            225=> { rgb => '0040FF', brightness => '26' },
+            240=> { rgb => '0000FF', brightness => '11' },
+            255=> { rgb => '4000FF', brightness => '19' },
+            270=> { rgb => '8000FF', brightness => '26' },
+            285=> { rgb => 'BF00FF', brightness => '34' },
+            300=> { rgb => 'FF00FF', brightness => '41' },
+            315=> { rgb => 'FF00BF', brightness => '38' },
+            330=> { rgb => 'FF0080', brightness => '36' },
+            345=> { rgb => 'FF0040', brightness => '33' }
+        };
+        my $rgb = $angle2rgb->{$angle}->{rgb};
+        return "mapping problem in Hue2rgb" if !defined $rgb;
+        $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $rgb");
+        return if $inBulk;
+        return RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+        return RHASSPY_getResponse($hash, 'DefaultConfirmation');
+    }
+    
     return "function to convert between different colorspaces not implemented yet"
 }
 
@@ -3264,7 +3293,7 @@ sub RHASSPY_handleIntentSetTimer {
         $response =~ s{(\$\w+)}{$1}eegx;
     }
 
-    $response = $response // RHASSPY_getResponse($hash, 'DefaultError');
+    $response = RHASSPY_getResponse($hash, 'DefaultError') if !defined $response;
 
     RHASSPY_respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
     return $name;
@@ -3813,6 +3842,7 @@ orf drei=channel 203<br>
 green=rgb 00FF00<br>
 blue=rgb 0000FF<br>
 yellow=rgb F0F000</code></p>
+    Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.
     </li>
     <li>
     <a id="RHASSPY-attr-rhasspySpecials"></a><b>rhasspySpecials</b>
