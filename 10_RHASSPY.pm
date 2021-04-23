@@ -36,6 +36,7 @@ use GPUtils qw(:all);
 use JSON;
 use Encode;
 use HttpUtils;
+use utf8;
 use List::Util 1.45 qw(max min uniq);
 use Data::Dumper;
 
