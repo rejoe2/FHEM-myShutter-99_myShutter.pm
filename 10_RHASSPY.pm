@@ -238,6 +238,7 @@ BEGIN {
   GP_Import(qw(
     addToAttrList
     delFromDevAttrList
+    delFromAttrList
     readingsSingleUpdate
     readingsBeginUpdate
     readingsBulkUpdate
@@ -255,6 +256,8 @@ BEGIN {
     InternalTimer
     RemoveInternalTimer
     AssignIoPort
+    CommandAttr
+    CommandDeleteAttr
     IOWrite
     readingFnAttributes
     IsDisabled
@@ -406,6 +409,7 @@ sub initialize_prefix {
     my $prefix =  shift // q{rhasspy};
     my $old_prefix = $hash->{prefix}; #Beta-User: Marker, evtl. müssen wir uns was für Umbenennungen überlegen...
     
+    return if $prefix eq $old_prefix;
     # provide attributes "rhasspyName" etc. for all devices
     addToAttrList("${prefix}Name");
     addToAttrList("${prefix}Room");
@@ -414,6 +418,19 @@ sub initialize_prefix {
     #addToAttrList("${prefix}Colors:textField-long");
     addToAttrList("${prefix}Group:textField");
     addToAttrList("${prefix}Specials:textField-long");
+    
+    return if !$init_done || !defined $old_prefix;
+    my @devs = devspec2array("$hash->{devspec}");
+    my @rhasspys = devspec2array("TYPE=RHASSPY:FILTER=prefix=$old_prefix");
+
+    for my $detail (qw( Name Room Mapping Group Specials)) { 
+        for my $device (@devs) {
+            my $aval = AttrVal($device, "${old_prefix}$detail", undef); 
+            CommandAttr($hash, "$device ${prefix}$detail $aval") if $aval;
+            CommandDeleteAttr($hash, "$device ${old_prefix}$detail") if @rhasspys < 2;
+        }
+        delFromAttrList("${old_prefix}$detail") if @rhasspys < 2;
+    }
 
     return;
 }
