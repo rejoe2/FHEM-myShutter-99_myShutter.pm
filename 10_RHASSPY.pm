@@ -1073,7 +1073,7 @@ sub perlExecute {
     return AnalyzePerlCommand( $hash, $cmd );
 }
 
-sub handleConfirmTimer {
+sub RHASSPY_Confirmation {
     my $hash     = shift // return;
     my $mode     = shift; #undef => timeout, 1 => cancellation, #2 => set timer
     my $data     = shift // $hash->{helper}{'.delayed'};
@@ -1082,7 +1082,7 @@ sub handleConfirmTimer {
 
     #timeout Case
     if (!defined $mode) {
-        RemoveInternalTimer( $hash, \&handleConfirmTimer );
+        RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
         #Beta-User: we may need to start a new session first?
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
@@ -1093,7 +1093,7 @@ sub handleConfirmTimer {
 
     #cancellation Case
     if ( $mode == 1 ) {
-        RemoveInternalTimer( $hash, \&handleConfirmTimer );
+        RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
         $response = $hash->{helper}{lng}->{responses}->{ defined $hash->{helper}{'.delayed'} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         delete $hash->{helper}{'.delayed'};
@@ -1101,11 +1101,11 @@ sub handleConfirmTimer {
         return $hash->{NAME};
     }
     if ( $mode == 2 ) {
-        RemoveInternalTimer( $hash, \&handleConfirmTimer );
+        RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
         $hash->{helper}{'.delayed'} = $data;
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
         
-        InternalTimer(time + $timeout, \&handleConfirmTimer, $hash, 0);
+        InternalTimer(time + $timeout, \&RHASSPY_Confirmation, $hash, 0);
 
         #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
         my $ca_string = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
@@ -1186,14 +1186,14 @@ sub _combineHashes {
 }
 
 # derived from structure_asyncQueue
-sub asyncQueue {
+sub RHASSPY_asyncQueue {
     my $hash = shift // return;
     my $next_cmd = shift @{$hash->{'.asyncQueue'}};
     if (defined $next_cmd) {
         analyzeAndRunCmd($hash, $next_cmd->{device}, $next_cmd->{cmd}) if defined $next_cmd->{cmd};
         handleIntentSetNumeric($hash, $next_cmd->{SetNumeric}) if defined $next_cmd->{SetNumeric};
         my $async_delay = $next_cmd->{delay} // 0;
-        InternalTimer(time+$async_delay,\&asyncQueue,$hash,0);
+        InternalTimer(time+$async_delay,\&RHASSPY_asyncQueue,$hash,0);
     }
     return;
 }
@@ -2211,7 +2211,7 @@ sub _sendToApi {
         method     => $method,
         data       => $data,
         header     => 'Content-Type: application/json',
-        callback   => \&ParseHttpResponse
+        callback   => \&RHASSPY_ParseHttpResponse
     };
 
     HttpUtils_NonblockingGet($apirequest);
@@ -2219,7 +2219,7 @@ sub _sendToApi {
 }
 
 # Parse the response of the request to the HTTP-API
-sub ParseHttpResponse {
+sub RHASSPY_ParseHttpResponse {
     my $param = shift // return;
     my $err   = shift;
     my $data  = shift;
@@ -2320,12 +2320,12 @@ sub handleCustomIntent {
             my $timeout = ${$error}[1];
             $timeout = defined $timeout && looks_like_number($timeout) ? $timeout : 20;
             $hash->{'.toTrigger'} = ${$error}[1] if defined ${$error}[1];
-            return handleConfirmTimer($hash, 2, $data, $timeout, ${$error}[0]);
+            return RHASSPY_Confirmation($hash, 2, $data, $timeout, ${$error}[0]);
         }
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         return ${$error}[1]; #comma separated list of devices to trigger
     } elsif ( ref $error eq 'HASH' ) {
-        return handleConfirmTimer($hash, 2, $data, 20, $error);
+        return RHASSPY_Confirmation($hash, 2, $data, 20, $error);
     } else {
         $response = $error; # if $error && $error !~ m{Please.define.*first}x;
     }
@@ -2366,7 +2366,7 @@ sub handleIntentShortcuts {
     my $response;
     if ( defined $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout} && !$data->{Confirmation} ) {
         my $timeout = $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout};
-        $response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};return handleConfirmTimer($hash, 2, $data, $timeout, $response);
+        $response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};return RHASSPY_Confirmation($hash, 2, $data, $timeout, $response);
     }
     $response = $shortcut->{response} // getResponse($hash, 'DefaultConfirmation');
     my $ret;
@@ -2497,7 +2497,7 @@ sub handleIntentSetOnOffGroup {
         } else {
             my $hlabel = $devices->{$device}->{delay};
             push @{$hash->{".asyncQueue"}}, {device => $device, cmd => $cmd, prio => $devices->{$device}->{prio}, delay => $hlabel};
-            InternalTimer(time+$delaysum,\&asyncQueue,$hash,0) if !$init_delay;
+            InternalTimer(time+$delaysum,\&RHASSPY_asyncQueue,$hash,0) if !$init_delay;
             $init_delay = 1;
         }
     }
@@ -2618,7 +2618,7 @@ sub handleIntentSetNumericGroup {
         } else {
             my $hlabel = $devices->{$device}->{delay};
             push @{$hash->{'.asyncQueue'}}, {device => $device, SetNumeric => $tempdata, prio => $devices->{$device}->{prio}, delay => $hlabel};
-            InternalTimer(time+$delaysum,\&asyncQueue,$hash,0) if !$init_delay;
+            InternalTimer(time+$delaysum,\&RHASSPY_asyncQueue,$hash,0) if !$init_delay;
             $init_delay = 1;
         }
     }
@@ -3223,7 +3223,7 @@ sub handleIntentSetColorGroup {
         } else {
             my $hlabel = $devices->{$device}->{delay};
             push @{$hash->{'.asyncQueue'}}, {device => $device, SetColor => $tempdata, prio => $devices->{$device}->{prio}, delay => $hlabel};
-            InternalTimer(time+$delaysum,\&asyncQueue,$hash,0) if !$init_delay;
+            InternalTimer(time+$delaysum,\&RHASSPY_asyncQueue,$hash,0) if !$init_delay;
             $init_delay = 1;
         }
     }
@@ -3375,7 +3375,7 @@ sub handleIntentConfirmAction {
     Log3($hash->{NAME}, 5, 'handleIntentConfirmAction called');
     
     #cancellation case
-    return handleConfirmTimer($hash, 1, $data) if $data->{Mode} ne 'OK';
+    return RHASSPY_Confirmation($hash, 1, $data) if $data->{Mode} ne 'OK';
     
     #confirmed case
     my $data_old = $hash->{helper}{'.delayed'};
