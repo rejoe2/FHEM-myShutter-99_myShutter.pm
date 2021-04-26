@@ -1336,6 +1336,12 @@ sub getRoomName {
     #Beta-User: This might be the right place to check, if there's additional logic implemented...
 
     my $siteId = lc $data->{siteId};
+    my $mutated_vowels = $hash->{helper}{lng}->{mutated_vowels};
+    if (defined $mutated_vowels) {
+        for (keys %{$mutated_vowels}) {
+            $siteId =~ s{$_}{$mutated_vowels->{$_}}gx;
+        }
+    }
     my $rreading = makeReadingName("siteId2room_$siteId");
     $siteId =~ s{\A([^.]+).*}{$1}xms;
     $room = ReadingsVal($hash->{NAME}, $rreading, $siteId);
