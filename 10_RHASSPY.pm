@@ -36,7 +36,7 @@ use GPUtils qw(:all);
 use JSON;
 use Encode;
 use HttpUtils;
-use utf8;
+#use utf8;
 use List::Util 1.45 qw(max min uniq);
 use Data::Dumper;
 
@@ -1342,8 +1342,9 @@ sub getRoomName {
     my $siteId = $data->{siteId};
     my $rreading = makeReadingName("siteId2room_$siteId");
     $siteId =~ s{\A([^.]+).*}{$1}xms;
-    use locale;
+    utf8::downgrade($siteId, 1);
     $room = ReadingsVal($hash->{NAME}, $rreading, lc $siteId);
+    #$room = ReadingsVal($hash->{NAME}, $rreading, $siteId);
     $room = $hash->{defaultRoom} if $room eq 'default' || !(length $room);
     Log3($hash->{NAME}, 5, "room is identified using siteId as $room");
 
@@ -3126,7 +3127,8 @@ sub _runSetColorCmd {
     for (keys %{$keywords}) {
         my $kw = $keywords->{$_};
 
-        next if $kw eq 'Hue' && $hash->{helper}{devicemap}{devices}{$device}{color_specials}->{forceHue2rgb} == 1;
+        my $forceRgb = $hash->{helper}{devicemap}{devices}{$device}{color_specials}->{forceHue2rgb} // 0;
+        next if defined $kw && $kw eq 'Hue' && $forceRgb == 1;
 
         my $specialmapping = $hash->{helper}{devicemap}{devices}{$device}{color_specials}{$kw};
         if (defined $data->{$kw} && defined $specialmapping && defined $specialmapping->{$data->{$kw}}) {
