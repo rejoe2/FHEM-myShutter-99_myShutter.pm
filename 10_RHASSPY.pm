@@ -860,7 +860,11 @@ sub _analyze_rhassypAttr {
         }
         if ($key eq 'colorCommandMap') {
             my($unnamed, $named) = parseParams($val);
-            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{CommandMap} = $named;
+            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{CommandMap} = $named if defined$named;
+        }
+        if ($key eq 'colorTempMap') {
+            my($unnamed, $named) = parseParams($val);
+            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{Colortemp} = $named if defined$named;
         }
         if ($key eq 'venetianBlind') {
             my($unnamed, $named) = parseParams($val);
@@ -1335,16 +1339,11 @@ sub getRoomName {
 
     #Beta-User: This might be the right place to check, if there's additional logic implemented...
 
-    my $siteId = lc $data->{siteId};
-    my $mutated_vowels = $hash->{helper}{lng}->{mutated_vowels};
-    if (defined $mutated_vowels) {
-        for (keys %{$mutated_vowels}) {
-            $siteId =~ s{$_}{$mutated_vowels->{$_}}gx;
-        }
-    }
+    my $siteId = $data->{siteId};
     my $rreading = makeReadingName("siteId2room_$siteId");
     $siteId =~ s{\A([^.]+).*}{$1}xms;
-    $room = ReadingsVal($hash->{NAME}, $rreading, $siteId);
+    use locale;
+    $room = ReadingsVal($hash->{NAME}, $rreading, lc $siteId);
     $room = $hash->{defaultRoom} if $room eq 'default' || !(length $room);
     Log3($hash->{NAME}, 5, "room is identified using siteId as $room");
 
@@ -3129,7 +3128,15 @@ sub _runSetColorCmd {
 
         next if $kw eq 'Hue' && $hash->{helper}{devicemap}{devices}{$device}{color_specials}->{forceHue2rgb} == 1;
 
-        if ( defined $data->{$kw} && defined $mapping->{$_} ) {
+        my $specialmapping = $hash->{helper}{devicemap}{devices}{$device}{color_specials}{$kw};
+        if (defined $data->{$kw} && defined $specialmapping && defined $specialmapping->{$data->{$kw}}) {
+            my $cmd = $specialmapping->{$data->{$kw}};
+            $error = AnalyzeCommand($hash, "set $device $cmd");
+            return if $inBulk;
+            Log3($hash->{NAME}, 5, "Setting $device to $cmd");
+            return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+            return getResponse($hash, 'DefaultConfirmation');
+        } elsif ( defined $data->{$kw} && defined $mapping->{$_} ) {
             my $value = round( ($mapping->{$_}->{maxVal} - $mapping->{$_}->{minVal}) * $data->{$kw} / ($kw eq 'Hue' ? 360 : 100) , 0);
             $value = min(max($mapping->{$_}->{minVal}, $value), $mapping->{$_}->{maxVal});
             $error = AnalyzeCommand($hash, "set $device $mapping->{$_}->{cmd} $value");
