@@ -1,4 +1,4 @@
-# $Id$
+# $Id: 10_RHASSPY.pm 24348 + more dialog specifics Beta-User $
 ###########################################################################
 #
 # FHEM RHASSPY modul  (https://github.com/rhasspy)
@@ -88,6 +88,9 @@ my $languagevars = {
     'SilentCancelConfirmation' => "",
     'DefaultConfirmationReceived' => "ok will do it",
     'DefaultConfirmationNoOutstanding' => "no command is awaiting confirmation",
+    'DefaultConfirmationRequest' => 'please confirm switching $device $wanted',
+    'RequestChoiceDevice' => 'there are several possibe devices, coose between $first_items and $last_item',
+    'RequestChoiceRoom' => 'more than one possible device, please choose one of the following rooms $first_items and $last_item',
     'timerSet'   => {
         '0' => '$label in room $room has been set to $seconds seconds',
         '1' => '$label in room $room has been set to $minutes minutes $seconds',
@@ -334,9 +337,10 @@ sub Define {
     $hash->{LANGUAGE} = $language;
     $hash->{devspec} = $h->{devspec} // q{room=Rhasspy};
     $hash->{fhemId} = $h->{fhemId} // q{fhem};
+    $hash->{baseId} = $h->{baseId} // q{default};
     initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
-    $hash->{encoding} = $h->{encoding} // q{utf8};
+    $hash->{encoding} = $h->{encoding} // q{UTF-8};
     $hash->{useGenericAttrs} = $h->{useGenericAttrs} // 1;
     $hash->{'.asyncQueue'} = [];
     #Beta-User: Für's Ändern von defaultRoom oder prefix vielleicht (!?!) hilfreich: https://forum.fhem.de/index.php/topic,119150.msg1135838.html#msg1135838 (Rudi zu resolveAttrRename) 
@@ -374,7 +378,7 @@ sub initialize_Language {
     my $lang = shift // return;
     my $cfg  = shift // AttrVal($hash->{NAME},'languageFile',undef);
 
-    my $cp = q{UTF-8};
+    my $cp = $hash->{encoding} // q{UTF-8};
 
     #default to english first
     $hash->{helper}->{lng} = $languagevars if !defined $hash->{helper}->{lng} || !$init_done;
@@ -387,7 +391,7 @@ sub initialize_Language {
         Log3($hash->{NAME}, 1, "JSON decoding error in languagefile $cfg:  $@");
         return "languagefile $cfg seems not to contain valid JSON!";
     }
-    
+                                   
     my $slots = $decoded->{slots}; 
 
     if ( defined $decoded->{default} ) {
@@ -409,7 +413,7 @@ sub initialize_prefix {
     my $prefix =  shift // q{rhasspy};
     my $old_prefix = $hash->{prefix}; #Beta-User: Marker, evtl. müssen wir uns was für Umbenennungen überlegen...
     
-    return if $prefix eq $old_prefix;
+    return if defined $old_prefix && $prefix eq $old_prefix;
     # provide attributes "rhasspyName" etc. for all devices
     addToAttrList("${prefix}Name");
     addToAttrList("${prefix}Room");
@@ -450,7 +454,8 @@ sub Delete {
     my $prefix = $hash->{prefix} // return;
     RemoveInternalTimer($hash);
 
-# DELETE POD AFTER TESTS ARE COMPLETED    
+# DELETE POD AFTER TESTS ARE COMPLETED
+#Beta-User: Most likely removing attributes isn't a good idea; additionally: if, then attributes should be removed from global
 =begin comment
     
     #Beta-User: globale Attribute löschen
@@ -475,9 +480,7 @@ sub Delete {
     for (devspec2array("${prefix}Group=.+")) {
         delFromDevAttrList($_,"${prefix}Group");
     }
-
 =end comment
-
 =cut
     return;
 }
@@ -706,10 +709,13 @@ sub initialize_rhasspyTweaks {
 }
 
 sub initialize_DialogManager {
-    my $hash    = shift // return;
+    my $hash      = shift // return;
+    my $baseId    = shift // $hash->{baseId};
+    my $toDisable = shift // qw(ConfirmAction ChoiceRoom ChoiceDevice);
+
     my $language = $hash->{LANGUAGE};
     my $fhemId   = $hash->{fhemId};
-    
+
 =pod    disable some intents by default https://rhasspy.readthedocs.io/en/latest/reference/#dialogue-manager
 hermes/dialogueManager/configure (JSON)
 
@@ -719,9 +725,14 @@ hermes/dialogueManager/configure (JSON)
         enable: bool - true if intent should be eligible for recognition
     siteId: string = "default" - Hermes site ID
 =cut
+
+    my @disabled;
+    for my $intents (@{$toDisable}) {
+        $disabled[$intents] = {intentId => "${language}.${fhemId}.${intents}", enable => "false"}
+    }
     my $sendData =  {
-        siteId  => $fhemId,
-        intents => [{intentId => "${language}.${fhemId}.ConfirmAction", enable => "false"}]
+        siteId  => $baseId,
+        intents => @disabled
     };
 
     my $json = toJSON($sendData);
@@ -745,11 +756,11 @@ sub init_custom_intents {
                 \(                  #opening bracket
                 (?<arg>.*)(\))\s*)  #everything up to the closing bracket, w/o ending whitespace
                 }xms; 
-        my $intent = trim($+{intent});
+        my $intent = trim(\g{'intent'});
         return "no intent found in $line!" if (!$intent || $intent eq q{}) && $init_done;
-        my $function = trim($+{function});
+        my $function = trim(\g{'function'});
         return "invalid function in line $line" if $function =~ m{\s+}x;
-        my $perlcommand = trim($+{perlcommand});
+        my $perlcommand = trim(\g{'perlcommand'});
         my $err = perlSyntaxCheck( $perlcommand );
         return "$err in $line" if $err && $init_done;
         
@@ -996,7 +1007,7 @@ sub _analyze_genDevType {
         my $r = $defs{$device}{READINGS};
         if($r) {
             for (sort keys %{$r}) {
-                if ( $_ =~ m{\A(?<id>temperature|humidity)\z} ) {
+                if ( $_ =~ m{\A(?<id>temperature|humidity)\z}x ) {
                     $currentMapping->{GetNumeric}->{$+{id}} = {currentVal => $+{id}, type => $+{id} };
                 }
             }
@@ -1141,16 +1152,20 @@ sub RHASSPY_Confirmation {
         RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
         $hash->{helper}{'.delayed'} = $data;
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
-        
+
         InternalTimer(time + $timeout, \&RHASSPY_Confirmation, $hash, 0);
 
         #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
         my $ca_string = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
-        my $reaction = { text         => $response, 
-                         intentFilter => ["$ca_string"] };
+        my $reaction = ref $response eq 'HASH' 
+            ? $response
+            : { text         => $response, 
+                intentFilter => ["$ca_string"],
+                custom_data => $data
+              };
 
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-        initialize_DialogManager($hash);
+        #initialize_DialogManager($hash);
 
         my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
         delete $hash->{'.toTrigger'};
@@ -1216,7 +1231,7 @@ sub _combineHashes {
             $hash3->{$key} = $hash2->{$key};
         }
     }
-    for (qw(commaconversion mutated_vowels)) {
+    for (qw(commaconversion mutated_vowels words)) {
         $hash3->{$_} = $hash2->{$_} if defined $hash2->{$_};
     }
     return $hash3;
@@ -1340,6 +1355,7 @@ sub getRoomName {
     #Beta-User: This might be the right place to check, if there's additional logic implemented...
 
     my $siteId = $data->{siteId};
+
     my $rreading = makeReadingName("siteId2room_$siteId");
     $siteId =~ s{\A([^.]+).*}{$1}xms;
     utf8::downgrade($siteId, 1);
@@ -1680,14 +1696,15 @@ sub analyzeAndRunCmd {
         Log3($hash->{NAME}, 5, "$cmd has quotes...");
 
         # Anführungszeichen entfernen
-        $cmd = $+{inner};
+        $cmd = $+{inner} // q{};
 
         # Variablen ersetzen?
         if ( !eval { $cmd =~ s{(\$\w+)}{$1}eegx; 1 } ) {
-            Log3($hash->{NAME}, 1, "$cmd returned Error: $@") 
-        };
+            Log3($hash->{NAME}, 1, "$cmd returned Error: $@");
+            return;
+        }
         # [DEVICE:READING] Einträge ersetzen
-        $returnVal =    ($hash, $cmd);
+        $returnVal = _ReplaceReadingsVal($hash, $cmd);
         # Escapte Kommas wieder durch normale ersetzen
         $returnVal =~ s{\\,}{,}x;
         Log3($hash->{NAME}, 5, "...and is now: $cmd ($returnVal)");
@@ -1788,11 +1805,14 @@ sub parseJSONPayload {
     # Standard-Keys auslesen
     ($data->{intent} = $decoded->{intent}{intentName}) =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName};
     $data->{probability} = $decoded->{intent}{confidenceScore}         if exists $decoded->{intent}{confidenceScore};
-    $data->{sessionId} = $decoded->{sessionId}                         if exists $decoded->{sessionId};
-    $data->{siteId} = $decoded->{siteId}                               if exists $decoded->{siteId};
-    $data->{input} = $decoded->{input}                                 if exists $decoded->{input};
-    $data->{rawInput} = $decoded->{rawInput}                           if exists $decoded->{rawInput};
-
+    for my $key (qw(sessionId siteId input rawInput custom_data)) {
+        $data->{$key} = $decoded->{$key} if exists $decoded->{$key};
+    }
+    #$data->{sessionId}   = $decoded->{sessionId}                       if exists $decoded->{sessionId};
+    #$data->{siteId}      = $decoded->{siteId}                          if exists $decoded->{siteId};
+    #$data->{input}       = $decoded->{input}                           if exists $decoded->{input};
+    #$data->{rawInput}    = $decoded->{rawInput}                        if exists $decoded->{rawInput};
+    #$data->{custom_data} = $decoded->{custom_data}                     if exists $decoded->{custom_data};
 
     # Überprüfen ob Slot Array existiert
     if (exists $decoded->{slots}) {
@@ -2131,26 +2151,37 @@ sub updateSlots {
     $deviceData = {};
     my $overwrite = defined $tweaks && defined $tweaks->{overwrite_all} ? $tweaks->{useGenericAttrs}->{overwrite_all} : 'true';
     my $url = qq{/api/slots?overwrite_all=$overwrite};
-    
 
     my @gdts = (qw(switch light media blind thermostat thermometer));
-    for my $gdt (@gdts) {
-        last if !$hash->{useGenericAttrs};
-        my @names = ();
-        my @groupnames = ();
-        my @devs = devspec2array("$hash->{devspec}");
-        for my $device (@devs) {
-            if (AttrVal($device, 'genericDeviceType', '') eq $gdt) {
-                push @names, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{names};
-                push @groupnames, split m{,}, $hash->{helper}{devicemap}{devices}{$device}->{groups};
+    my @aliases = ();
+    my @mainrooms = ();
+
+    if ($hash->{useGenericAttrs}) {
+        for my $gdt (@gdts) {
+            my @names = ();
+            my @groupnames = ();
+            my @devs = devspec2array("$hash->{devspec}");
+            for my $device (@devs) {
+                if (AttrVal($device, 'genericDeviceType', '') eq $gdt) {
+                    push @names, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{names};
+                    push @aliases, $hash->{helper}{devicemap}{devices}{$device}->{alias};
+                    push @groupnames, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{groups};
+                    push @mainrooms, (split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{rooms})[0];
+                }
             }
+            @names = get_unique(\@names);
+            @names = ('') if !@names && $noEmpty;
+            $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
+            @groupnames = get_unique(\@groupnames);
+            @groupnames = ('') if !@groupnames && $noEmpty;
+            $deviceData->{qq(${language}.${fhemId}.Group-${gdt})} = \@groupnames if @groupnames;
         }
-        @names = get_unique(\@names);
-        @names = ('') if !@names && $noEmpty;
-        $deviceData->{qq(${language}.${fhemId}.Device-${gdt})} = \@names if @names;
-        @groupnames = get_unique(\@groupnames);
-        @groupnames = ('') if !@groupnames && $noEmpty;
-        $deviceData->{qq(${language}.${fhemId}.Group-${gdt})} = \@groupnames if @groupnames;
+        @mainrooms = get_unique(\@mainrooms);
+        @mainrooms = ('') if !@mainrooms && $noEmpty;
+        $deviceData->{qq(${language}.${fhemId}.MainRooms)} = \@mainrooms if @mainrooms;
+        @aliases = get_unique(\@aliases);
+        @aliases = ('') if !@aliases && $noEmpty;
+        $deviceData->{qq(${language}.${fhemId}.Aliases)} = \@aliases if @aliases;
     }
 
     my @allKeywords = uniq(@groups, @rooms, @devices);
@@ -2801,7 +2832,7 @@ sub handleIntentSetNumeric {
         my $vendev = $specials->{device} // $device;
         analyzeAndRunCmd($hash, $vendev, defined $specials->{CustomCommand} ? $specials->{CustomCommand} :$vencmd , $newVal) if $device ne $vendev || $cmd ne $vencmd;
     }
-
+                                                 
     # get response 
     defined $mapping->{response} 
         ? $response = _getValue($hash, $device, $mapping->{response}, $newVal, $room) 
@@ -3120,7 +3151,6 @@ sub _runSetColorCmd {
     my $mapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetColorParms} // return $inBulk ?undef : respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
 
     my $error;
-    my $success;
 
     #shortcuts: hue, sat or CT are directly addressed and possible commands
     my $keywords = {hue => 'Hue', sat => 'Saturation', ct => 'Colortemp'};
@@ -3240,11 +3270,11 @@ sub _ct2rgb {
         : 288.1221695283 * ($temp - 60) ** -0.0755148492;
     $g = max( 0, min ( $g , 255 ) );
 
-    my $b = $temp <= 19 ? 0 : 255;
-    $b = 138.5177312231 * log($temp-10) - 305.0447927307 if $temp < 66;
-    $b = max( 0, min ( $b , 255 ) );
+    my $bl = $temp <= 19 ? 0 : 255;
+    $bl = 138.5177312231 * log($temp-10) - 305.0447927307 if $temp < 66;
+    $bl = max( 0, min ( $b , 255 ) );
 
-    return( $r, $g, $b );
+    return( $r, $g, $bl );
 }
 
 sub handleIntentSetColorGroup {
@@ -3617,9 +3647,18 @@ __END__
 
 =begin ToDo
 
+# Farben:
+  Warum die Abfrage nach rgb? <code>if ( defined $data->{Colortemp} && defined $mapping->{rgb} && looks_like_number($data->{Colortemp}) ) {</code>
+  Gibt auch Lampen, die können nur ct
+
+# PERL WARNING: Useless use of private variable in void context at ./FHEM/10_RHASSPY.pm line 1638, <$fh> line 310.
+        # [DEVICE:READING] Einträge ersetzen
+        $returnVal =    ($hash, $cmd);
+
 # Custom Intents
  - Bei Verwendung des Dialouges wenn man keine Antwort spricht, bricht Rhasspy ab. Die voice response "Tut mir leid, da hat etwas zu lange gedauert" wird
-   also gar nicht ausgegeben.
+   also gar nicht ausgegeben und:
+   PERL WARNING: Use of uninitialized value $cmd in pattern match (m//) at fhem.pl line 5868.
 
 # "rhasspySpecials" bzw. rhasspyTweaks als weitere Attribute
 Denkbare Verwendung:
@@ -3633,6 +3672,9 @@ Denkbare Verwendung:
 - Bestätigungsdialoge - weitere Anwendungsfelder
 - gDT: mehr und bessere mappings?
 - Farbe und Farbtemperatur (fast fertig?)
+- Hat man in einem Raum einen Satelliten aber kein Device mit der siteId/Raum, kann man den Satelliten bei z.B. dem Timer nicht ansprechen, weil der Raum nicht in den Slots ist.
+  Irgendwie müssen wir die neue siteId in den Slot Rooms bringen
+
 =end ToDo
 
 =begin ToClarify
@@ -3849,10 +3891,10 @@ DefaultConfirmation=Klaro, mach ich</code></p>
     The shortcuts are uploaded to Rhasspy when using the updateSlots set-command.<br>
     One shortcut per line, syntax is either a simple and an extended version.</p>
     <p>Examples:</p>
-    <p><code>mute on=set amplifier2 mute on
-lamp off={fhem("set lampe1 off")}
-i="you are so exciting" f="set $NAME speak siteId='livingroom' text='Thanks a lot, you are even more exciting!'"
-i="mute off" p={fhem ("set $NAME mute off")} n=amplifier2 c="Please confirm!"
+    <p><code>mute on=set amplifier2 mute on<br>
+lamp off={fhem("set lampe1 off")}<br>
+i="you are so exciting" f="set $NAME speak siteId='livingroom' text='Thanks a lot, you are even more exciting!'"<br>
+i="mute off" p={fhem ("set $NAME mute off")} n=amplifier2 c="Please confirm!"<br>
 i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code></p>
     <p>Abbreviations explanation:</p>
     <ul>
@@ -3863,7 +3905,7 @@ i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code><
       <li><b>p</b> => Perl command<br>
       Syntax as usual in FHEMWEB command field, enclosed in {}; this has priority to "f=".</li>
       <li><b>d</b> => device name(s, comma separated) that shall be handed over to fhem.pl as updated. Needed for triggering further actions and longpoll! If not set, the return value of the called function will be used. </li>
-      <li><b>r</b> => Response to be set to the caller. If not set, the return value of the called function will be used.<br>
+      <li><b>r</b> => Response to be send to the caller. If not set, the return value of the called function will be used.<br>
       Response sentence will be parsed to do "set magic"-like replacements, so also a line like <code>i="what's the time for sunrise" r="at [Astro:SunRise] o'clock"</code> is valid.<br>
       You may ask for confirmation as well using the following (optional) shorts:
       <ul>
@@ -3875,27 +3917,27 @@ i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code><
 
   <li>
     <a id="RHASSPY-attr-rhasspyTweaks"></a><b>rhasspyTweaks</b>
-    <p>Currently sets additional settings for timers. May contain further custom settings in future versions like siteId2room info or code links, allowed commands, confirmation requests etc.</p>
+    <p>Currently sets additional settings for timers and slot-updates to Rhasspy. May contain further custom settings in future versions like siteId2room info or code links, allowed commands, confirmation requests etc.</p>
     <ul>
-      <li><p><b>timerLimits</b><br>
-        Used to determine when the timer should response with e.g. "set to 30 minutes" or with "set to 10:30"</p>
-        <code>timerLimits=90,300,3000,2*HOURSECONDS,50</code>
+      <li><b>timerLimits</b>
+        <p>Used to determine when the timer should response with e.g. "set to 30 minutes" or with "set to 10:30"</p>
+        <p><code>timerLimits=90,300,3000,2*HOURSECONDS,50</code></p>
         <p>Five values have to be set, corresponding with the limits to <i>timerSet</i> responses. so above example will lead to seconds response for less then 90 seconds, minute+seconds response for less than 300 seconds etc.. Last value is the limit in seconds, if timer is set in time of day format.</p>
       </li>
-      <li><p><b>timerSounds</b><br>
-        Per default the timer responds with a voice command if it has elapsed. If you want to use a wav-file instead, you can set this here.</p>
-        <code>timerSounds= default=./yourfile1.wav eggs=3:20:./yourfile2.wav potatoes=5:./yourfile3.wav</code><br>
+      <li><b>timerSounds</b>
+        <p>Per default the timer responds with a voice command if it has elapsed. If you want to use a wav-file instead, you can set this here.</p>
+        <p><code>timerSounds= default=./yourfile1.wav eggs=3:20:./yourfile2.wav potatoes=5:./yourfile3.wav</code></p>
         <p>Above keys are some examples and need to match the "Label"-tags for the timer provided by the Rhasspy-sentences.<br>
         <i>default</i> is optional. If set, this file will be used for all labeled timer without match to other keywords.<br>
         The two numbers are optional. The first one sets the number of repeats, the second is the waiting time between the repeats.<br>
         <i>repeats</i> defaults to 5, <i>wait</i> to 15<br>
         If only one number is set, this will be taken as <i>repeats</i>.</p>
       </li>
-      <li><p><b>updateSlots</b><br>
-        Changes aspects on slot generation.</p>
-        <code>noEmptySlots=1</code><br>
+      <li><b>updateSlots</b>
+        <p>Changes aspects on slot generation and updates.</p>
+        <p><code>noEmptySlots=1</code></p>
         <p>By default, RHASSPY will generate an additional slot for each of the genericDeviceType it recognizes, regardless, if there's any devices marked to belong to this type. If set to <i>1</i>, no empty slots will be generated.</p>
-        <code>overwrite_all=false</code><br>
+        <p><code>overwrite_all=false</code></p>
         <p>By default, RHASSPY will overwrite all generated slots. Setting this to <i>false</i> will change this.</p>
       </li>
     </ul>
@@ -3956,7 +3998,7 @@ MediaControls:cmdPlay=play,cmdPause=pause,cmdStop=stop,cmdBack=previous,cmdFwd=n
 orf zwei=channel 202<br>
 orf drei=channel 203<br>
 </code></p>
-   Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.
+    <p>Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.</p>
   </li>
   <li>
     <a id="RHASSPY-attr-rhasspyColors"></a><b>rhasspyColors</b>
@@ -3964,44 +4006,48 @@ orf drei=channel 203<br>
     <i>key=value</i> line by line arguments mapping keys to setter strings on the same device.</p>
     <p>Example:</p>
     <p><code>attr lamp1 rhasspyColors red=rgb FF0000<br>
-green=rgb 00FF00<br>
+green=rgb 008000<br>
 blue=rgb 0000FF<br>
-yellow=rgb F0F000</code></p>
-    Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.
-    </li>
-    <li>
+yellow=rgb FFFF00</code></p>
+    <p>Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.</p>
+  </li>
+  <li>
     <a id="RHASSPY-attr-rhasspySpecials"></a><b>rhasspySpecials</b>
-    <p><i>key:value</i> line by line arguments similar to <a href="#RHASSPY-attr-rhasspyTweaks">rhasspyTweaks</a>.</p>
-    <p>Example:</p>
-    <p><code>attr lamp1 rhasspySpecials group:async_delay=100 prio=1 group=lights</code></p>
     <p>Currently some colour light options besides group and venetian blind related stuff is implemented, this could be the place to hold additional options, e.g. for confirmation requests. You may use several of the following lines.</p>
-    <p>Explanation on the above group line. All arguments are optional:</p>
+    <p><i>key:value</i> line by line arguments similar to <a href="#RHASSPY-attr-rhasspyTweaks">rhasspyTweaks</a>.</p>
     <ul>
-      <li>group<br>
-        If set, the device will not be directly addressed, but the mentioned group - typically a FHEM <a href="#structure">structure</a> device or a HUEDevice-type group. This has the advantage of saving RF ressources and/or already implemented logics.<br>
-        Note: all addressed devices will be switched, even if they are not member of the rhasspyGroup. Each group should only be addressed once, but it's recommended to put this info in all devices under RHASSPY control in the same external group logic.</li>
-      <li>async_delay<br>
-        Float nummeric value, just as async_delay in structure; the delay will be obeyed prior to the next sending command.</li> 
-      <li>prio<br>
-        Numeric value, defaults to "0". <i>prio</i> and <i>async_delay</i> will be used to determine the sending order as follows: first devices will be those with lowest prio arg, second sort argument is <i>async_delay</i> with lowest value first </li>
-    </ul>
-    <ul>
-      <li>venetianBlind<br>
-      <p><code>attr blind1 rhasspySpecials venetianBlind:setter=dim device=blind1_slats</code></p>
-      <p>Explanation (one of the two arguments is mandatory):
-      <ul>
-        <li><i>setter</i> is the set command to control slat angle, e.g. <i>positionSlat</i> for CUL_HM or older ZWave type devices</li></p>
-        <li><i>device</i> is needed if the slat command has to be issued towards a different device (applies e.g. to newer ZWave type devices).</li></p>
-        <p>If set, the slat target position will be set to the same level than the main device.</p> </li>
-      </ul>
-    </ul>
-    <ul>
-      <li>colorCommandMap</li> <br>
-        Allows mapping of values from the <i>Color></i> key to individual command. Example: 
+      <li><b>group</b>
+        <p>If set, the device will not be directly addressed, but the mentioned group - typically a FHEM <a href="#structure">structure</a> device or a HUEDevice-type group. This has the advantage of saving RF ressources and/or already implemented logics.<br>
+        Note: all addressed devices will be switched, even if they are not member of the rhasspyGroup. Each group should only be addressed once, but it's recommended to put this info in all devices under RHASSPY control in the same external group logic.<br>
+        All of the following options are optional.</p>
+        <ul>
+          <li><b>async_delay</b><br>
+            Float nummeric value, just as async_delay in structure; the delay will be obeyed prior to the next sending command.</li> 
+          <li><b>prio</b><br>
+            Numeric value, defaults to "0". <i>prio</i> and <i>async_delay</i> will be used to determine the sending order as follows: first devices will be those with lowest prio arg, second sort argument is <i>async_delay</i> with lowest value first.</li>
+        </ul>
+        <p>Example:</p>
+        <p><code>attr lamp1 rhasspySpecials group:async_delay=100 prio=1 group=lights</code></p>
+      </li>
+      <li><b>venetianBlind</b>
+        <p><code>attr blind1 rhasspySpecials venetianBlind:setter=dim device=blind1_slats</code></p>
+        <p>Explanation (one of the two arguments is mandatory):
+        <ul>
+          <li><b>setter</b> is the set command to control slat angle, e.g. <i>positionSlat</i> for CUL_HM or older ZWave type devices</li>
+          <li><b>device</b> is needed if the slat command has to be issued towards a different device (applies e.g. to newer ZWave type devices)</li>
+        </ul>
+        <p>If set, the slat target position will be set to the same level than the main device.</p>
+      </li>
+      <li><b>colorCommandMap</b>
+        <p>Allows mapping of values from the <i>Color></i> key to individual commands.</p>
+        <p>Example:</p>
         <p><code>attr lamp1 rhasspySpecials colorCommandMap:0='rgb FF0000' 120='rgb 00FF00' 240='rgb 0000FF'</code></p>
-      <li>colorForceHue2rgb</li>
-        defaults to "0". If set, a rgb command will be issued, even if the decice is capable to handle hue commands.
-        <p><code>attr lamp1 rhasspySpecials colorForceHue2rgb:1</code></p><br>
+      </li>
+      <li><b>colorForceHue2rgb</b>
+        <p>Defaults to "0". If set, a rgb command will be issued, even if the device is capable to handle hue commands.</p>
+        <p>Example:</p>
+        <p><code>attr lamp1 rhasspySpecials colorForceHue2rgb:1</code></p>
+      </li>
     </ul>
   </li>
 </ul>
