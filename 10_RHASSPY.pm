@@ -1142,72 +1142,22 @@ sub RHASSPY_DialogTimeout {
     my $hash = $fnHash->{HASH} // $fnHash;
     return if (!defined($hash));
 
-    #my $idx      = $fnHash->{MODIFIER};
+    my $identiy = $fnHash->{MODIFIER};
 
     #atm, handing over more than one argument is not implemented; 
     # would require more complex timer handling (as in WeekdayTimer)
     my $mode     = shift; #undef => timeout, 1 => cancellation, #2 => set timer
-    my $data     = shift // $hash->{helper}{'.delayed'};
-    my $timeout  = shift;
-    my $response = shift;
+    my $data     = shift // $hash->{helper}{'.delayed'}->{identiy};
+    delete $hash->{helper}{'.delayed'}{identiy};
 
     my $siteId = $data->{siteId};
     my $toDisable = defined $data->{custom_data} && defined $data->{custom_data}->{'.ENABLED'} ? $data->{custom_data}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
     
-    #timeout Case
-    #if (!defined $mode) {
-        #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
-        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
-        #Beta-User: we may need to start a new session first?
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
-        #delete $hash->{helper}{'.delayed'};
-        configure_DialogManager($hash, $siteId, $toDisable, 'false');
-        return;
-    #}
+    my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
+    respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
+    configure_DialogManager($hash, $siteId, $toDisable, 'false');
 
-=pod
-    #cancellation Case
-    # is replaced by handleIntentCancelAction()
-    if ( $mode == 1 ) {
-        #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
-        $response = $hash->{helper}{lng}->{responses}->{ defined $data->{custom_data} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
-        #delete $hash->{helper}{'.delayed'};
-        #Beta-User: might cause problems if there's more than one Rhasspy instance in dialogue mode...
-        configure_DialogManager($hash, $siteId, $toDisable, 'false');
-        return $hash->{NAME};
-    }
-=cut
-
-=pod
-    #only ok for simple "yes" answers 
-    # is replaced by setDialogTimeout()
-    if ( $mode == 2 ) {
-        #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
-        #$hash->{helper}{'.delayed'} = $data;
-        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
-
-        InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
-
-        #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
-        my $ca_string = qq{"$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction","$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction"};
-        my $reaction = ref $response eq 'HASH' 
-            ? $response
-            : { text         => $response, 
-                intentFilter => [$ca_string],
-                custom_data => $data
-              };
-
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
-
-        my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
-        delete $hash->{'.toTrigger'};
-
-        return $toTrigger;
-    }
-    return $hash->{NAME};
-=cut
+    return;
 }
 
 sub setDialogTimeout {
@@ -1219,29 +1169,29 @@ sub setDialogTimeout {
 
     my $siteId = $data->{siteId};
     $data->{'.ENABLED'} = $toEnable;
+    my $identiy = qq(${siteId}_$data->{intent});
 
     $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
 
-    InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
+    resetRegisteredInternalTimer( $identiy, time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
+    #InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
 
     #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
-        my $ca_string = qq{"$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction","$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction"};
-        my $reaction = ref $response eq 'HASH' 
-            ? $response
-            : { text         => $response, 
-                intentFilter => [$ca_string],
-                custom_data => $data
-              };
+    my $ca_string = qq{"$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction","$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction"};
+    my $reaction = ref $response eq 'HASH' 
+        ? $response
+        : { text         => $response, 
+            intentFilter => [$ca_string],
+            custom_data => $data
+          };
 
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
+    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
+    configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
 
-        my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
-        delete $hash->{'.toTrigger'};
+    my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
+    delete $hash->{'.toTrigger'};
 
-        return $toTrigger;
-    #}
-    #return $hash->{NAME};
+    return $toTrigger;
 }
 
 
