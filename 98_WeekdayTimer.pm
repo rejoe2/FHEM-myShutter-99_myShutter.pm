@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 24174 2021-04-07 + Test ext. delay Beta-User $
+# $Id: 98_WeekdayTimer.pm 24285 2021-04-29 Test single instance hash timer in the past array Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -773,9 +773,8 @@ sub WeekdayTimer_SetTimerForMidnightUpdate {
 sub WeekdayTimer_SetTimerOfDay {
   my $fnHash = shift // return;
   my $hash = $fnHash->{HASH} // $fnHash;
-  return if !defined $hash;
+  return if (!defined($hash));
   
-$hash->{startTime} = time;
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
   my $secSinceMidnight = 3600*$hour + 60*$min + $sec;
 
@@ -886,15 +885,19 @@ sub WeekdayTimer_SetTimer {
     my $device = $hash->{DEVICE};
     Log3( $hash, 4, "[$name] past timer on $hash->{DEVICE} at ". FmtDateTime($aktTime). " with  $aktParameter activated" );
 
-    my $parameter = $modules{WeekdayTimer}{timerInThePast}{$device}{$aktTime} // [];
+    #my $parameter = $modules{WeekdayTimer}{timerInThePast}{$device}{$aktTime} // [];
+    my $parameter = $hash->{helper}{timerInThePast}{$aktTime} // [];
     push @{$parameter},["$aktIdx", $aktTime, \&WeekdayTimer_Update, $hash, 0];
-    $modules{WeekdayTimer}{timerInThePast}{$device}{$aktTime} = $parameter;
+    $hash->{helper}{timerInThePast}{$aktTime} = $parameter;
+    #$modules{WeekdayTimer}{timerInThePast}{$device}{$aktTime} = $parameter;
 
-    my $tipHash = $modules{WeekdayTimer}{timerInThePastHash} // $hash;
+    #my $tipHash = $modules{WeekdayTimer}{timerInThePastHash} // $hash;
+    my $tipHash = $hash->{helper}{timerInThePastHash} // $hash;
     #$tipHash    = $hash if !defined $tipHash;
-    $modules{WeekdayTimer}{timerInThePastHash} = $tipHash;
+    #$modules{WeekdayTimer}{timerInThePastHash} = $tipHash;
+    $tipHash = $hash->{helper}{timerInThePastHash} = $tipHash;
 
-    resetRegisteredInternalTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0),, \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
+    resetRegisteredInternalTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
 
   return;
 }
@@ -908,7 +911,8 @@ sub WeekdayTimer_delayedTimerInPast {
 
   my $tim = time;
   
-  my $tipIpHash = $modules{WeekdayTimer}{timerInThePast};
+  #my $tipIpHash = $modules{WeekdayTimer}{timerInThePast};
+  my $tipIpHash = $hash->{helper}{timerInThePast};
   
   for my $device ( keys %{$tipIpHash} ) {
     for my $time ( sort keys %{$tipIpHash->{$device}} ) {
@@ -920,8 +924,10 @@ sub WeekdayTimer_delayedTimerInPast {
       }
     }
   }
-  delete $modules{WeekdayTimer}{timerInThePast};
-  delete $modules{WeekdayTimer}{timerInThePastHash};
+  #delete $modules{WeekdayTimer}{timerInThePast};
+  #delete $modules{WeekdayTimer}{timerInThePastHash};
+  delete $hash->{helper}{timerInThePast};
+  delete $hash->{helper}{timerInThePastHash};
   return;
 }
 
@@ -1015,12 +1021,13 @@ sub WeekdayTimer_Update {
   my $dieGanzeWoche = $hash->{helper}{WEDAYS}{0} ? [7]:[8];
 
   my ($activeTimer, $activeTimerState);
+  #if (defined $myHash->{forceSwitch}) {
   if (defined $fnHash->{forceSwitch}) {
       
     $activeTimer      = isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
-    resetRegisteredInternalTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ( $timToSwitch > $now || AttrVal($name, 'WDT_sendDelay',0) > $now - $hash->{startTime}) && ( $activeTimerState || $activeTimer );
+    resetRegisteredInternalTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
   } else {
     $activeTimer = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     $activeTimerState = $activeTimer;
@@ -1041,7 +1048,7 @@ sub WeekdayTimer_Update {
   readingsBeginUpdate($hash);
   readingsBulkUpdate ($hash, 'nextUpdate', FmtDateTime($nextTime));
   readingsBulkUpdate ($hash, 'nextValue',  $nextParameter);
-  readingsBulkUpdate ($hash, 'currValue',  $aktParameter);
+  readingsBulkUpdate ($hash, 'currValue',  $aktParameter); # HB
   readingsBulkUpdate ($hash, 'state',      $newParam ) if $activeTimerState;
   readingsEndUpdate  ($hash, 1);
 
@@ -1395,8 +1402,8 @@ sub WeekdayTimer_SetParm {
 ################################################################################
 sub WeekdayTimer_SetAllParms {
   my $group = shift // q{all}; 
-  my @wdtNames = $group eq 'all' ? devspec2array('TYPE=WeekdayTimer')
-                                 : devspec2array("TYPE=WeekdayTimer:FILTER=WDT_Group=$group");
+  my @wdtNames = $group eq 'all' ? devspec2array('TYPE=WeekdayTimer:FILTER=disable!=1')
+                                 : devspec2array("TYPE=WeekdayTimer:FILTER=WDT_Group=$group:FILTER=disable!=1");
 
   for my $wdName ( @wdtNames ) {
     WeekdayTimer_SetParm($wdName);

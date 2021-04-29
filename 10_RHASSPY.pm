@@ -91,6 +91,7 @@ my $languagevars = {
     'DefaultConfirmationRequest' => 'please confirm switching $device $wanted',
     'RequestChoiceDevice' => 'there are several possibe devices, coose between $first_items and $last_item',
     'RequestChoiceRoom' => 'more than one possible device, please choose one of the following rooms $first_items and $last_item',
+    'DefaultChoiceNoOutstanding' => "no choice expected",
     'timerSet'   => {
         '0' => '$label in room $room has been set to $seconds seconds',
         '1' => '$label in room $room has been set to $minutes minutes $seconds',
@@ -330,14 +331,14 @@ sub Define {
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.12';
+    $hash->{MODULE_VERSION} = '0.4.13';
     $hash->{baseUrl} = $Rhasspy;
     #$hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
     $hash->{devspec} = $h->{devspec} // q{room=Rhasspy};
     $hash->{fhemId} = $h->{fhemId} // q{fhem};
-    $hash->{baseId} = $h->{baseId} // q{default};
+    #$hash->{baseId} = $h->{baseId} // q{default};
     initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
     $hash->{encoding} = $h->{encoding} // q{UTF-8};
@@ -367,7 +368,7 @@ sub firstInit {
 
     fetchSiteIds($hash) if !ReadingsVal( $hash->{NAME}, 'siteIds', 0 );
     initialize_rhasspyTweaks($hash, AttrVal($hash->{NAME},'rhasspyTweaks', undef ));
-    initialize_DialogManager($hash);
+    configure_DialogManager($hash);
     initialize_devicemap($hash);
 
     return;
@@ -444,7 +445,9 @@ sub initialize_prefix {
 sub Undefine {
     my $hash = shift // return;
 
+    deleteAllRegisteredInternalTimer($hash);
     RemoveInternalTimer($hash);
+
 
     return;
 }
@@ -708,10 +711,20 @@ sub initialize_rhasspyTweaks {
     return;
 }
 
-sub initialize_DialogManager {
+sub configure_DialogManager {
     my $hash      = shift // return;
-    my $baseId    = shift // $hash->{baseId};
-    my $toDisable = shift // qw(ConfirmAction ChoiceRoom ChoiceDevice);
+    my $siteId    = shift;
+    my $toDisable = shift // [qw(ConfirmAction CancelAction ChoiceRoom ChoiceDevice)];
+    my $enable    = shift // q{false};
+
+    #loop for global initialization or for several siteId's
+    if (!defined $siteId || $siteId =~ m{,}xms) {
+        $siteId = ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) if !defined $siteId;
+        my @siteIds = split m{,}xms, $siteId;
+        for (@siteIds) {
+            configure_DialogManager($hash, $_, $toDisable, $enable);
+        }
+    }
 
     my $language = $hash->{LANGUAGE};
     my $fhemId   = $hash->{fhemId};
@@ -724,14 +737,17 @@ hermes/dialogueManager/configure (JSON)
         intentId: string - Name of intent
         enable: bool - true if intent should be eligible for recognition
     siteId: string = "default" - Hermes site ID
+    
+    Further reading on continuing sessions:
+    https://rhasspy-hermes-app.readthedocs.io/en/latest/usage.html#continuing-a-session
 =cut
 
     my @disabled;
     for my $intents (@{$toDisable}) {
-        $disabled[$intents] = {intentId => "${language}.${fhemId}.${intents}", enable => "false"}
+        $disabled[$intents] = {intentId => "${language}.${fhemId}.${intents}", enable => "$enable"}
     }
-    my $sendData =  {
-        siteId  => $baseId,
+    my $sendData = {
+        siteId  => $siteId,
         intents => @disabled
     };
 
@@ -756,11 +772,11 @@ sub init_custom_intents {
                 \(                  #opening bracket
                 (?<arg>.*)(\))\s*)  #everything up to the closing bracket, w/o ending whitespace
                 }xms; 
-        my $intent = trim(\g{'intent'});
+        my $intent = trim($+{intent});
         return "no intent found in $line!" if (!$intent || $intent eq q{}) && $init_done;
-        my $function = trim(\g{'function'});
+        my $function = trim($+{function});
         return "invalid function in line $line" if $function =~ m{\s+}x;
-        my $perlcommand = trim(\g{'perlcommand'});
+        my $perlcommand = trim($+{perlcommand});
         my $err = perlSyntaxCheck( $perlcommand );
         return "$err in $line" if $err && $init_done;
         
@@ -1121,39 +1137,149 @@ sub perlExecute {
     return AnalyzePerlCommand( $hash, $cmd );
 }
 
-sub RHASSPY_Confirmation {
-    my $hash     = shift // return;
+sub RHASSPY_DialogTimeout {
+    my $fnHash = shift // return;
+    my $hash = $fnHash->{HASH} // $fnHash;
+    return if (!defined($hash));
+
+    #my $idx      = $fnHash->{MODIFIER};
+
+    #atm, handing over more than one argument is not implemented; 
+    # would require more complex timer handling (as in WeekdayTimer)
     my $mode     = shift; #undef => timeout, 1 => cancellation, #2 => set timer
     my $data     = shift // $hash->{helper}{'.delayed'};
     my $timeout  = shift;
     my $response = shift;
 
+    my $siteId = $data->{siteId};
+    my $toDisable = defined $data->{custom_data} && defined $data->{custom_data}->{'.ENABLED'} ? $data->{custom_data}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    
     #timeout Case
-    if (!defined $mode) {
-        RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
+    #if (!defined $mode) {
+        #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
         #Beta-User: we may need to start a new session first?
+        respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
+        #delete $hash->{helper}{'.delayed'};
+        configure_DialogManager($hash, $siteId, $toDisable, 'false');
+        return;
+    #}
+
+=pod
+    #cancellation Case
+    # is replaced by handleIntentCancelAction()
+    if ( $mode == 1 ) {
+        #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+        $response = $hash->{helper}{lng}->{responses}->{ defined $data->{custom_data} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
-        delete $hash->{helper}{'.delayed'};
-        initialize_DialogManager($hash);
+        #delete $hash->{helper}{'.delayed'};
+        #Beta-User: might cause problems if there's more than one Rhasspy instance in dialogue mode...
+        configure_DialogManager($hash, $siteId, $toDisable, 'false');
+        return $hash->{NAME};
+    }
+=cut
+
+=pod
+    #only ok for simple "yes" answers 
+    # is replaced by setDialogTimeout()
+    if ( $mode == 2 ) {
+        #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+        #$hash->{helper}{'.delayed'} = $data;
+        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
+
+        InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
+
+        #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
+        my $ca_string = qq{"$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction","$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction"};
+        my $reaction = ref $response eq 'HASH' 
+            ? $response
+            : { text         => $response, 
+                intentFilter => [$ca_string],
+                custom_data => $data
+              };
+
+        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
+        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
+
+        my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
+        delete $hash->{'.toTrigger'};
+
+        return $toTrigger;
+    }
+    return $hash->{NAME};
+=cut
+}
+
+sub setDialogTimeout {
+    my $hash     = shift // return;
+    my $data     = shift // $hash->{helper}{'.delayed'};
+    my $timeout  = shift;
+    my $response = shift;
+    my $toEnable = shift // [qw(ConfirmAction CancelAction)];
+
+    my $siteId = $data->{siteId};
+    $data->{'.ENABLED'} = $toEnable;
+
+    $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
+
+    InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
+
+    #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
+        my $ca_string = qq{"$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction","$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction"};
+        my $reaction = ref $response eq 'HASH' 
+            ? $response
+            : { text         => $response, 
+                intentFilter => [$ca_string],
+                custom_data => $data
+              };
+
+        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
+        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
+
+        my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
+        delete $hash->{'.toTrigger'};
+
+        return $toTrigger;
+    #}
+    #return $hash->{NAME};
+}
+
+
+=pod
+sub RHASSPY_ChoiceTimeout{
+    my $hash     = shift // return;
+    my $data     = shift // return;
+    my $timeout  = shift;
+    my $response = shift;
+
+    my $siteId = $data->{siteId};
+
+    #timeout Case
+    if (!defined $mode) {
+        RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
+        #Beta-User: we may need to start a new session first?
+        respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
+        #delete $hash->{helper}{'.delayed'};
+        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'false');
         return;
     }
 
     #cancellation Case
     if ( $mode == 1 ) {
-        RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
+        RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
         $response = $hash->{helper}{lng}->{responses}->{ defined $hash->{helper}{'.delayed'} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
-        delete $hash->{helper}{'.delayed'};
-        initialize_DialogManager($hash);
+        #delete $hash->{helper}{'.delayed'};
+        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'false');
         return $hash->{NAME};
     }
     if ( $mode == 2 ) {
-        RemoveInternalTimer( $hash, \&RHASSPY_Confirmation );
-        $hash->{helper}{'.delayed'} = $data;
+        RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+        #$hash->{helper}{'.delayed'} = $data;
         $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
 
-        InternalTimer(time + $timeout, \&RHASSPY_Confirmation, $hash, 0);
+        InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
 
         #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
         my $ca_string = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
@@ -1165,7 +1291,7 @@ sub RHASSPY_Confirmation {
               };
 
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-        #initialize_DialogManager($hash);
+        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
 
         my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
         delete $hash->{'.toTrigger'};
@@ -1175,7 +1301,7 @@ sub RHASSPY_Confirmation {
     
     return $hash->{NAME};
 }
-
+=cut
 
 #from https://stackoverflow.com/a/43873983, modified...
 sub get_unique {
@@ -1909,6 +2035,9 @@ my $dispatchFns = {
     GetWeekday      => \&handleIntentGetWeekday,
     SetTimer        => \&handleIntentSetTimer,
     ConfirmAction   => \&handleIntentConfirmAction,
+    CancelAction    => \&handleIntentCancelAction,
+    ChoiceRoom      => \&handleIntentChoiceRoom,
+    ChoiceDevice    => \&handleIntentChoiceDevice,
     ReSpeak         => \&handleIntentReSpeak
 };
 
@@ -2390,12 +2519,12 @@ sub handleCustomIntent {
             my $timeout = ${$error}[1];
             $timeout = defined $timeout && looks_like_number($timeout) ? $timeout : 20;
             $hash->{'.toTrigger'} = ${$error}[1] if defined ${$error}[1];
-            return RHASSPY_Confirmation($hash, 2, $data, $timeout, ${$error}[0]);
+            return setDialogTimeout($hash, $data, $timeout, ${$error}[0]);
         }
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         return ${$error}[1]; #comma separated list of devices to trigger
     } elsif ( ref $error eq 'HASH' ) {
-        return RHASSPY_Confirmation($hash, 2, $data, 20, $error);
+        return setDialogTimeout($hash, $data, 20, $error);
     } else {
         $response = $error; # if $error && $error !~ m{Please.define.*first}x;
     }
@@ -2436,7 +2565,7 @@ sub handleIntentShortcuts {
     my $response;
     if ( defined $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout} && !$data->{Confirmation} ) {
         my $timeout = $hash->{helper}{shortcuts}{$data->{input}}{conf_timeout};
-        $response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};return RHASSPY_Confirmation($hash, 2, $data, $timeout, $response);
+        $response = $hash->{helper}{shortcuts}{$data->{input}}{conf_req};return setDialogTimeout($hash, $data, $timeout, $response);
     }
     $response = $shortcut->{response} // getResponse($hash, 'DefaultConfirmation');
     my $ret;
@@ -3461,26 +3590,50 @@ sub handleIntentSetTimer {
     return $name;
 }
 
+
+sub handleIntentCancelAction {
+    my $hash = shift // return;
+    my $data = shift // return;
+
+    Log3($hash->{NAME}, 5, 'handleIntentCancelAction called');
+
+    my $toDisable = defined $data->{custom_data} && defined $data->{custom_data}->{'.ENABLED'} ? $data->{custom_data}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    
+    my $response = $hash->{helper}{lng}->{responses}->{ 'SilentCancelConfirmation' };
+
+    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{custom_data};
+
+    #might lead to problems, if there's more than one timeout running...
+    RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+    $response = $hash->{helper}{lng}->{responses}->{ 'DefaultCancelConfirmation' };
+    configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
+
+    return $hash->{NAME};
+}
+
+
 sub handleIntentConfirmAction {
     my $hash = shift // return;
     my $data = shift // return;
-    
+
     Log3($hash->{NAME}, 5, 'handleIntentConfirmAction called');
-    
+
     #cancellation case
-    return RHASSPY_Confirmation($hash, 1, $data) if $data->{Mode} ne 'OK';
+    #return RHASSPY_DialogTimeout($hash, 1, $data) if $data->{Mode} ne 'OK';
+    return handleIntentCancelAction($hash, $data) if $data->{Mode} ne 'OK';
     
     #confirmed case
-    my $data_old = $hash->{helper}{'.delayed'};
-    
+    #my $data_old = $hash->{helper}{'.delayed'};
+    my $data_old = $data->{custom_data};
+
     return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
-    delete $hash->{helper}{'.delayed'};
-    
+    #delete $hash->{helper}{'.delayed'};
+
     $data_old->{siteId} = $data->{siteId};
     $data_old->{sessionId} = $data->{sessionId};
     $data_old->{requestType} = $data->{requestType};
     $data_old->{Confirmation} = 1;
-    
+
     my $intent = $data_old->{intent};
     my $device = $hash->{NAME};
 
@@ -3491,6 +3644,59 @@ sub handleIntentConfirmAction {
 
     return $device;
 }
+
+sub handleIntentChoiceRoom {
+    my $hash = shift // return;
+    my $data = shift // return;
+
+    Log3($hash->{NAME}, 5, 'handleIntentChoiceRoom called');
+
+    my $data_old = $data->{custom_data};
+
+    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if !defined $data_old;
+
+    $data_old->{siteId} = $data->{siteId};
+    $data_old->{sessionId} = $data->{sessionId};
+    $data_old->{requestType} = $data->{requestType};
+    $data_old->{Room} = $data->{Room};
+
+    my $intent = $data_old->{intent};
+    my $device = $hash->{NAME};
+
+    # Passenden Intent-Handler aufrufen
+    if (ref $dispatchFns->{$intent} eq 'CODE') {
+        $device = $dispatchFns->{$intent}->($hash, $data_old);
+    }
+
+    return $device;
+}
+
+sub handleIntentChoiceDevice {
+    my $hash = shift // return;
+    my $data = shift // return;
+
+    Log3($hash->{NAME}, 5, 'handleIntentChoiceDevice called');
+
+    my $data_old = $data->{custom_data};
+
+    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if ! defined $data_old;
+
+    $data_old->{siteId} = $data->{siteId};
+    $data_old->{sessionId} = $data->{sessionId};
+    $data_old->{requestType} = $data->{requestType};
+    $data_old->{Device} = $data->{Device};
+
+    my $intent = $data_old->{intent};
+    my $device = $hash->{NAME};
+
+    # Passenden Intent-Handler aufrufen
+    if (ref $dispatchFns->{$intent} eq 'CODE') {
+        $device = $dispatchFns->{$intent}->($hash, $data_old);
+    }
+
+    return $device;
+}
+
 
 sub handleIntentReSpeak {
     my $hash = shift // return;
@@ -3636,6 +3842,69 @@ sub _readLanguageFromFile {
     my @cleaned = grep { $_ !~ m{\A\s*[#]}x } @content;
 
     return 0, join q{ }, @cleaned;
+}
+
+# borrowed from WeekdayTimer
+################################################################################
+sub resetRegisteredInternalTimer {
+    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
+    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
+    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
+}
+
+################################################################################
+sub setRegisteredInternalTimer {
+    my $modifier = shift // return;
+    my $tim      = shift // return;
+    my $callback = shift // return;
+    my $hash     = shift // return;
+    my $initFlag = shift // 0;
+
+    my $timerName = "$hash->{NAME}_$modifier";
+    my $fnHash     = {
+        HASH     => $hash,
+        NAME     => $timerName,
+        MODIFIER => $modifier
+    };
+    if ( defined( $hash->{TIMER}{$timerName} ) ) {
+        Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
+        stacktrace();
+        #new for RHASSPY
+        $hash->{TIMER}{$timerName} = $fnHash;
+    }
+    else {
+        $hash->{TIMER}{$timerName} = $fnHash;
+    }
+
+    Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
+    InternalTimer( $tim, $callback, $fnHash, $initFlag );
+    return $fnHash;
+}
+
+################################################################################
+sub deleteSingleRegisteredInternalTimer {
+    my $modifier = shift;
+    my $hash     = shift // return;
+    my $callback = shift;
+
+    my $timerName = "$hash->{NAME}_$modifier";
+    my $fnHash    = $hash->{TIMER}{$timerName};
+    if ( defined($fnHash) ) {
+        Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
+        RemoveInternalTimer($fnHash);
+        delete $hash->{TIMER}{$timerName};
+    }
+    return;
+}
+
+################################################################################
+sub deleteAllRegisteredInternalTimer {
+    my $hash = shift // return;
+        
+    for my $key ( keys %{ $hash->{TIMER} } ) {
+        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
+    }
+    return;
 }
 
 
