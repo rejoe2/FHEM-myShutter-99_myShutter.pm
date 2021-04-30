@@ -431,7 +431,7 @@ sub initialize_prefix {
 
     for my $detail (qw( Name Room Mapping Group Specials)) { 
         for my $device (@devs) {
-            my $aval = AttrVal($device, "${old_prefix}$detail", undef); 
+            my $aval = AttrVal($device, "${old_prefix}$detail", undef);
             CommandAttr($hash, "$device ${prefix}$detail $aval") if $aval;
             CommandDeleteAttr($hash, "$device ${old_prefix}$detail") if @rhasspys < 2;
         }
@@ -764,14 +764,14 @@ sub init_custom_intents {
     
     for my $line (split m{\n}x, $attrVal) {
         next if !length $line;
-        #return "invalid line $line" if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)(\))\s*)}x;
+        #return "invalid line $line" if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)\)\s*)}x;
         return "invalid line $line" if $line !~ m{ 
             (?<intent>[^=]+)\s*     #string up to  =, w/o ending whitespace 
             =\s*                    #separator = and potential whitespace
             (?<perlcommand>         #identifier
                 (?<function>([^(]+))#string up to opening bracket
                 \(                  #opening bracket
-                (?<arg>.*)(\))\s*)  #everything up to the closing bracket, w/o ending whitespace
+                (?<arg>.*)\))\s*    #everything up to the closing bracket, w/o ending whitespace
                 }xms; 
         my $intent = trim($+{intent});
         return "no intent found in $line!" if (!$intent || $intent eq q{}) && $init_done;
@@ -1523,11 +1523,63 @@ sub getDeviceByIntentAndType {
     # Devices sammeln
     my ($matchesInRoom, $matchesOutsideRoom) = getDevicesByIntentAndType($hash, $room, $intent, $type);
     Log3($hash->{NAME}, 5, "matches in room: @{$matchesInRoom}, matches outside: @{$matchesOutsideRoom}");
-    
-    # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
-    $device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
+    my ($response, $last_item, $first_items);
 
-    Log3($hash->{NAME}, 5, "Device selected: ". $device ? $device : "none");
+    # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
+    if ( @{$matchesInRoom} ) {
+        if ( @{$matchesInRoom} == 1) {
+            $device = shift @{$matchesInRoom};
+        } else {
+            my @aliases;
+            for my $dev (@{$matchesInRoom}) {
+                push @aliases, $hash->{helper}{devicemap}{devices}{$dev}->{alias};
+            }
+            push @{$device}, join q{,}, @aliases;
+            $last_item = pop @aliases;
+            $first_items = join q{ }, @aliases;
+            $response = getResponse ($hash, 'RequestChoiceDevice');
+            $response =~ s{(\$\w+)}{$1}eegx;
+            unshift @{$device}, $response;
+            unshift @{$device}, $matchesInRoom->[0];
+            push @{$device}, 'RequestChoiceDevice';
+        }
+    } elsif ( @{$matchesOutsideRoom} ) { 
+        if ( @{$matchesOutsideRoom} == 1 ) {
+            $device = shift @{$matchesOutsideRoom};
+        } else {
+            my @rooms;
+            for my $dev (@{$matchesOutsideRoom}) {
+                push @rooms, (split m{,}x, $hash->{helper}{devicemap}{devices}{$dev}->{rooms})[0];
+            }
+            @rooms = get_unique(\@rooms);
+            if ( @rooms == 1 ) {
+                my @aliases;
+                for my $dev (@{$matchesOutsideRoom}) {
+                    push @aliases, $hash->{helper}{devicemap}{devices}{$dev}->{alias};
+                }
+                push @{$device}, join q{,}, @aliases;
+                $last_item = pop @aliases;
+                $first_items = join q{ }, @aliases;
+                $response = getResponse ($hash, 'RequestChoiceDevice');
+                $response =~ s{(\$\w+)}{$1}eegx;
+                unshift @{$device}, $response;
+                unshift @{$device}, $matchesOutsideRoom->[0];
+                push @{$device}, 'RequestChoiceDevice';
+            } else {
+                push @{$device}, join q{,}, @rooms;
+                $last_item = pop @rooms;
+                my $first_items = join q{ }, @rooms;
+                my $response = getResponse ($hash, 'RequestChoiceRoom');
+                $response =~ s{(\$\w+)}{$1}eegx;
+                unshift @{$device}, $response;
+                unshift @{$device}, $matchesOutsideRoom->[0];
+                push @{$device}, 'RequestChoiceRoom';
+            }
+        }
+    }
+    #$device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
+
+    Log3($hash->{NAME}, 5, "Device selected: ". defined $response ? 'more than one' : $device ? $device : "none");
 
     return $device;
 }
@@ -2948,6 +3000,17 @@ sub handleIntentGetNumeric {
         : getDeviceByIntentAndType($hash, $room, 'GetNumeric', $type)
         // return respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound'));
 
+    #more than one device 
+    if (ref $device eq 'ARRAY') {
+        #until now: only extended test code
+        my $first = $device->[0];
+        my $text = $device->[1];
+        my $all = $device->[2];
+        my $choice = $device->[3];
+        $device = $first;
+        Log3($hash->{NAME}, 4, "More than one device possilble, resp is $text, first is $first, all are $all, type is $choice");
+    }
+
     my $mapping = getMapping($hash, $device, 'GetNumeric', { type => $type, subType => $subType }, defined $hash->{helper}{devicemap}, 0)
         // return respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
 
@@ -2993,14 +3056,12 @@ sub handleIntentGetNumeric {
         //  $responses->{$type}
         //  $responses->{$de_mappings->{ToEn}->{$type}};
         $response = $response->{$isNumber} if ref $response eq 'HASH';
-    #Log3($hash->{NAME}, 3, "#2378: resp is $response, mT is $mappingType");
 
     # Antwort falls mappingType auf regex (en bzw. de) matched
     if (!defined $response && (
             $mappingType=~ m{\A$internal_mappings->{regex}->{setTarget}\z}xim 
             || $mappingType=~ m{\A$de_mappings->{regex}->{setTarget}\z}xim)) { 
-        $response = $responses->{setTarget}; 
-        #Log3($hash->{NAME}, 3, "#2384: resp now is $response");
+        $response = $responses->{setTarget};
     }
     if (!defined $response) {
         #or not and at least know the type...?
@@ -3800,7 +3861,7 @@ sub _readLanguageFromFile {
 # borrowed from WeekdayTimer
 ################################################################################
 sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $initFlag, $oldTime ) = @_;
+    my ( $modifier, $tim, $callback, $hash, $initFlag ) = @_;
     deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
     return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $initFlag );
 }
@@ -3873,13 +3934,10 @@ __END__
   Warum die Abfrage nach rgb? <code>if ( defined $data->{Colortemp} && defined $mapping->{rgb} && looks_like_number($data->{Colortemp}) ) {</code>
   Gibt auch Lampen, die können nur ct
 
-# PERL WARNING: Useless use of private variable in void context at ./FHEM/10_RHASSPY.pm line 1638, <$fh> line 310.
-        # [DEVICE:READING] Einträge ersetzen
-        $returnVal =    ($hash, $cmd);
-
 # Custom Intents
  - Bei Verwendung des Dialouges wenn man keine Antwort spricht, bricht Rhasspy ab. Die voice response "Tut mir leid, da hat etwas zu lange gedauert" wird
    also gar nicht ausgegeben und:
+
    PERL WARNING: Use of uninitialized value $cmd in pattern match (m//) at fhem.pl line 5868.
 
 # "rhasspySpecials" bzw. rhasspyTweaks als weitere Attribute
@@ -4295,6 +4353,7 @@ yellow=rgb FFFF00</code></p>
   <li>GetWeekday</li>
   <li>SetTimer</li>
   <li>ConfirmAction</li>
+  <li>CancelAction</li>
   <li>ReSpeak</li>
 </ul>
 
