@@ -1148,12 +1148,13 @@ sub RHASSPY_DialogTimeout {
     #atm, handing over more than one argument is not implemented; 
     # would require more complex timer handling (as in WeekdayTimer)
     my $mode     = shift; #undef => timeout, 1 => cancellation, #2 => set timer
-    my $data     = shift // $hash->{helper}{'.delayed'}->{identiy};
-    delete $hash->{helper}{'.delayed'}{identiy};
+    my $data     = shift // $hash->{helper}{'.delayed'}->{$identiy};
+    delete $hash->{helper}{'.delayed'}{$identiy};
+    deleteSingleRegisteredInternalTimer($identiy, $hash); 
 
     my $siteId = $data->{siteId};
     my $toDisable = defined $data->{custom_data} && defined $data->{custom_data}->{'.ENABLED'} ? $data->{custom_data}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
-    
+
     my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
     respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
     configure_DialogManager($hash, $siteId, $toDisable, 'false');
@@ -1173,6 +1174,7 @@ sub setDialogTimeout {
     my $identiy = qq(${siteId}_$data->{intent});
 
     $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
+    $hash->{helper}{'.delayed'}{$identiy} = $data;
 
     resetRegisteredInternalTimer( $identiy, time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
     #InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
@@ -3798,9 +3800,9 @@ sub _readLanguageFromFile {
 # borrowed from WeekdayTimer
 ################################################################################
 sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
+    my ( $modifier, $tim, $callback, $hash, $initFlag, $oldTime ) = @_;
     deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
-    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
+    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $initFlag );
 }
 
 ################################################################################
@@ -3817,15 +3819,15 @@ sub setRegisteredInternalTimer {
         NAME     => $timerName,
         MODIFIER => $modifier
     };
-    if ( defined( $hash->{TIMER}{$timerName} ) ) {
-        Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
-        stacktrace();
-        #new for RHASSPY
+    #if ( defined( $hash->{TIMER}{$timerName} ) ) {
+    #    Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
+    #    stacktrace();
+    #    #new for RHASSPY
+    #    $hash->{TIMER}{$timerName} = $fnHash;
+    #}
+    #else {
         $hash->{TIMER}{$timerName} = $fnHash;
-    }
-    else {
-        $hash->{TIMER}{$timerName} = $fnHash;
-    }
+    #}
 
     Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
     InternalTimer( $tim, $callback, $fnHash, $initFlag );
