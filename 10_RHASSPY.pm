@@ -285,6 +285,7 @@ BEGIN {
     HttpUtils_NonblockingGet
     round
     strftime
+    FmtDateTime
     makeReadingName
     FileRead
     trim
@@ -1186,7 +1187,7 @@ sub setDialogTimeout {
           };
 
     respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-    configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
+    configure_DialogManager($hash, $siteId, $toEnable, 'true');
 
     my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
     delete $hash->{'.toTrigger'};

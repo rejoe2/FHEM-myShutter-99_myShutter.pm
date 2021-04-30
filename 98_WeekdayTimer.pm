@@ -888,7 +888,7 @@ sub WeekdayTimer_SetTimer {
     #my $parameter = $modules{WeekdayTimer}{timerInThePast}{$device}{$aktTime} // [];
     my $parameter = $hash->{helper}{timerInThePast}{$aktTime} // [];
     push @{$parameter},["$aktIdx", $aktTime, \&WeekdayTimer_Update, $hash, 0];
-    $hash->{helper}{timerInThePast}{$aktTime} = $parameter;
+    $hash->{helper}{timerInThePast}{$device}{$aktTime} = $parameter;
     #$modules{WeekdayTimer}{timerInThePast}{$device}{$aktTime} = $parameter;
 
     #my $tipHash = $modules{WeekdayTimer}{timerInThePastHash} // $hash;
