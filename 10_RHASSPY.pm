@@ -431,7 +431,7 @@ sub initialize_prefix {
 
     for my $detail (qw( Name Room Mapping Group Specials)) { 
         for my $device (@devs) {
-            my $aval = AttrVal($device, "${old_prefix}$detail", undef); 
+            my $aval = AttrVal($device, "${old_prefix}$detail", undef);
             CommandAttr($hash, "$device ${prefix}$detail $aval") if $aval;
             CommandDeleteAttr($hash, "$device ${old_prefix}$detail") if @rhasspys < 2;
         }
@@ -717,6 +717,7 @@ sub configure_DialogManager {
     my $siteId    = shift;
     my $toDisable = shift // [qw(ConfirmAction CancelAction ChoiceRoom ChoiceDevice)];
     my $enable    = shift // q{false};
+    #return if !$hash->{testing};
 
     #loop for global initialization or for several siteId's
     if (!defined $siteId || $siteId =~ m{,}xms) {
@@ -744,12 +745,17 @@ hermes/dialogueManager/configure (JSON)
 =cut
 
     my @disabled;
-    for my $intents (@{$toDisable}) {
-        $disabled[$intents] = {intentId => "${language}.${fhemId}.${intents}", enable => "$enable"}
+    for (@{$toDisable}) {
+        my $id = qq(${language}.${fhemId}.$_);
+        my $disable = {intentId => "$id", enable => "$enable"};
+        push @disabled, $disable;
+        
+    
     }
+    #my $disable = {intentId => [@disabled], enable => "$enable"};
     my $sendData = {
         siteId  => $siteId,
-        intents => @disabled
+        intents => [@disabled]
     };
 
     my $json = toJSON($sendData);
@@ -764,14 +770,14 @@ sub init_custom_intents {
     
     for my $line (split m{\n}x, $attrVal) {
         next if !length $line;
-        #return "invalid line $line" if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)(\))\s*)}x;
+        #return "invalid line $line" if $line !~ m{(?<intent>[^=]+)\s*=\s*(?<perlcommand>(?<function>([^(]+))\((?<arg>.*)\)\s*)}x;
         return "invalid line $line" if $line !~ m{ 
             (?<intent>[^=]+)\s*     #string up to  =, w/o ending whitespace 
             =\s*                    #separator = and potential whitespace
             (?<perlcommand>         #identifier
                 (?<function>([^(]+))#string up to opening bracket
                 \(                  #opening bracket
-                (?<arg>.*)(\))\s*)  #everything up to the closing bracket, w/o ending whitespace
+                (?<arg>.*)\))\s*    #everything up to the closing bracket, w/o ending whitespace
                 }xms; 
         my $intent = trim($+{intent});
         return "no intent found in $line!" if (!$intent || $intent eq q{}) && $init_done;
@@ -1145,15 +1151,13 @@ sub RHASSPY_DialogTimeout {
 
     my $identiy = $fnHash->{MODIFIER};
 
-    #atm, handing over more than one argument is not implemented; 
-    # would require more complex timer handling (as in WeekdayTimer)
     my $mode     = shift; #undef => timeout, 1 => cancellation, #2 => set timer
     my $data     = shift // $hash->{helper}{'.delayed'}->{$identiy};
     delete $hash->{helper}{'.delayed'}{$identiy};
     deleteSingleRegisteredInternalTimer($identiy, $hash); 
 
     my $siteId = $data->{siteId};
-    my $toDisable = defined $data->{custom_data} && defined $data->{custom_data}->{'.ENABLED'} ? $data->{custom_data}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    my $toDisable = defined $data->{customData} && defined $data->{customData}->{'.ENABLED'} ? $data->{customData}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
 
     my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
     respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
@@ -1164,14 +1168,14 @@ sub RHASSPY_DialogTimeout {
 
 sub setDialogTimeout {
     my $hash     = shift // return;
-    my $data     = shift // $hash->{helper}{'.delayed'};
+    my $data     = shift // return; # $hash->{helper}{'.delayed'};
     my $timeout  = shift;
     my $response = shift;
     my $toEnable = shift // [qw(ConfirmAction CancelAction)];
 
     my $siteId = $data->{siteId};
     $data->{'.ENABLED'} = $toEnable;
-    my $identiy = qq(${siteId}_$data->{intent});
+    my $identiy = qq($data->{sessionId});
 
     $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
     $hash->{helper}{'.delayed'}{$identiy} = $data;
@@ -1180,17 +1184,21 @@ sub setDialogTimeout {
     #InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
 
     #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
-    my $ca_string = qq{"$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction","$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction"};
+    my @ca_strings;
+    my $ca_part = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
+    push @ca_strings, $ca_part;
+    $ca_part = qq{$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction};
+    push @ca_strings, $ca_part;
     my $reaction = ref $response eq 'HASH' 
         ? $response
         : { text         => $response, 
-            intentFilter => [$ca_string],
-            custom_data => $data
+            intentFilter => [@ca_strings],
+            #customData => $data
           };
 
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
     configure_DialogManager($hash, $siteId, $toEnable, 'true');
-
+    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
+    
     my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
     delete $hash->{'.toTrigger'};
 
@@ -1240,7 +1248,7 @@ sub RHASSPY_ChoiceTimeout{
             ? $response
             : { text         => $response, 
                 intentFilter => ["$ca_string"],
-                custom_data => $data
+                customData => $data
               };
 
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
@@ -1523,11 +1531,63 @@ sub getDeviceByIntentAndType {
     # Devices sammeln
     my ($matchesInRoom, $matchesOutsideRoom) = getDevicesByIntentAndType($hash, $room, $intent, $type);
     Log3($hash->{NAME}, 5, "matches in room: @{$matchesInRoom}, matches outside: @{$matchesOutsideRoom}");
-    
-    # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
-    $device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
+    my ($response, $last_item, $first_items);
 
-    Log3($hash->{NAME}, 5, "Device selected: ". $device ? $device : "none");
+    # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
+    if ( @{$matchesInRoom} ) {
+        if ( @{$matchesInRoom} == 1) {
+            $device = shift @{$matchesInRoom};
+        } else {
+            my @aliases;
+            for my $dev (@{$matchesInRoom}) {
+                push @aliases, $hash->{helper}{devicemap}{devices}{$dev}->{alias};
+            }
+            push @{$device}, join q{,}, @aliases;
+            $last_item = pop @aliases;
+            $first_items = join q{ }, @aliases;
+            $response = getResponse ($hash, 'RequestChoiceDevice');
+            $response =~ s{(\$\w+)}{$1}eegx;
+            unshift @{$device}, $response;
+            unshift @{$device}, $matchesInRoom->[0];
+            push @{$device}, 'RequestChoiceDevice';
+        }
+    } elsif ( @{$matchesOutsideRoom} ) { 
+        if ( @{$matchesOutsideRoom} == 1 ) {
+            $device = shift @{$matchesOutsideRoom};
+        } else {
+            my @rooms;
+            for my $dev (@{$matchesOutsideRoom}) {
+                push @rooms, (split m{,}x, $hash->{helper}{devicemap}{devices}{$dev}->{rooms})[0];
+            }
+            @rooms = get_unique(\@rooms);
+            if ( @rooms == 1 ) {
+                my @aliases;
+                for my $dev (@{$matchesOutsideRoom}) {
+                    push @aliases, $hash->{helper}{devicemap}{devices}{$dev}->{alias};
+                }
+                push @{$device}, join q{,}, @aliases;
+                $last_item = pop @aliases;
+                $first_items = join q{ }, @aliases;
+                $response = getResponse ($hash, 'RequestChoiceDevice');
+                $response =~ s{(\$\w+)}{$1}eegx;
+                unshift @{$device}, $response;
+                unshift @{$device}, $matchesOutsideRoom->[0];
+                push @{$device}, 'RequestChoiceDevice';
+            } else {
+                push @{$device}, join q{,}, @rooms;
+                $last_item = pop @rooms;
+                my $first_items = join q{ }, @rooms;
+                my $response = getResponse ($hash, 'RequestChoiceRoom');
+                $response =~ s{(\$\w+)}{$1}eegx;
+                unshift @{$device}, $response;
+                unshift @{$device}, $matchesOutsideRoom->[0];
+                push @{$device}, 'RequestChoiceRoom';
+            }
+        }
+    }
+    #$device = (@{$matchesInRoom}) ? shift @{$matchesInRoom} : shift @{$matchesOutsideRoom};
+
+    Log3($hash->{NAME}, 5, "Device selected: ". defined $response ? 'more than one' : $device ? $device : "none");
 
     return $device;
 }
@@ -1884,14 +1944,14 @@ sub parseJSONPayload {
     # Standard-Keys auslesen
     ($data->{intent} = $decoded->{intent}{intentName}) =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName};
     $data->{probability} = $decoded->{intent}{confidenceScore}         if exists $decoded->{intent}{confidenceScore};
-    for my $key (qw(sessionId siteId input rawInput custom_data)) {
+    for my $key (qw(sessionId siteId input rawInput customData)) {
         $data->{$key} = $decoded->{$key} if exists $decoded->{$key};
     }
     #$data->{sessionId}   = $decoded->{sessionId}                       if exists $decoded->{sessionId};
     #$data->{siteId}      = $decoded->{siteId}                          if exists $decoded->{siteId};
-    #$data->{input}       = $decoded->{input}                           if exists $decoded->{input};
-    #$data->{rawInput}    = $decoded->{rawInput}                        if exists $decoded->{rawInput};
-    #$data->{custom_data} = $decoded->{custom_data}                     if exists $decoded->{custom_data};
+    #$data->{input}      = $decoded->{input}                           if exists $decoded->{input};
+    #$data->{rawInput}   = $decoded->{rawInput}                        if exists $decoded->{rawInput};
+    #$data->{customData} = $decoded->{custom_data}                     if exists $decoded->{custom_data};
 
     # Überprüfen ob Slot Array existiert
     if (exists $decoded->{slots}) {
@@ -2111,7 +2171,7 @@ sub respond {
     }
 
     my $json = toJSON($sendData);
-
+    $response = $response->{response} if ref $response eq 'HASH';
     readingsBeginUpdate($hash);
     $type eq 'voice' ?
         readingsBulkUpdate($hash, 'voiceResponse', $response)
@@ -2948,6 +3008,17 @@ sub handleIntentGetNumeric {
         : getDeviceByIntentAndType($hash, $room, 'GetNumeric', $type)
         // return respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound'));
 
+    #more than one device 
+    if (ref $device eq 'ARRAY') {
+        #until now: only extended test code
+        my $first = $device->[0];
+        my $text = $device->[1];
+        my $all = $device->[2];
+        my $choice = $device->[3];
+        $device = $first;
+        Log3($hash->{NAME}, 4, "More than one device possilble, resp is $text, first is $first, all are $all, type is $choice");
+    }
+
     my $mapping = getMapping($hash, $device, 'GetNumeric', { type => $type, subType => $subType }, defined $hash->{helper}{devicemap}, 0)
         // return respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
 
@@ -2993,14 +3064,12 @@ sub handleIntentGetNumeric {
         //  $responses->{$type}
         //  $responses->{$de_mappings->{ToEn}->{$type}};
         $response = $response->{$isNumber} if ref $response eq 'HASH';
-    #Log3($hash->{NAME}, 3, "#2378: resp is $response, mT is $mappingType");
 
     # Antwort falls mappingType auf regex (en bzw. de) matched
     if (!defined $response && (
             $mappingType=~ m{\A$internal_mappings->{regex}->{setTarget}\z}xim 
             || $mappingType=~ m{\A$de_mappings->{regex}->{setTarget}\z}xim)) { 
-        $response = $responses->{setTarget}; 
-        #Log3($hash->{NAME}, 3, "#2384: resp now is $response");
+        $response = $responses->{setTarget};
     }
     if (!defined $response) {
         #or not and at least know the type...?
@@ -3550,14 +3619,16 @@ sub handleIntentCancelAction {
 
     Log3($hash->{NAME}, 5, 'handleIntentCancelAction called');
 
-    my $toDisable = defined $data->{custom_data} && defined $data->{custom_data}->{'.ENABLED'} ? $data->{custom_data}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    my $toDisable = defined $data->{customData} && defined $data->{customData}->{'.ENABLED'} ? $data->{customData}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
     
     my $response = $hash->{helper}{lng}->{responses}->{ 'SilentCancelConfirmation' };
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{custom_data};
+    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{customData};
 
     #might lead to problems, if there's more than one timeout running...
-    RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+    #RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
+    my $identiy = qq($data->{siteId}_$data->{sessionId});
+    deleteSingleRegisteredInternalTimer($identiy, $hash);
     $response = $hash->{helper}{lng}->{responses}->{ 'DefaultCancelConfirmation' };
     configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
 
@@ -3574,10 +3645,20 @@ sub handleIntentConfirmAction {
     #cancellation case
     #return RHASSPY_DialogTimeout($hash, 1, $data) if $data->{Mode} ne 'OK';
     return handleIntentCancelAction($hash, $data) if $data->{Mode} ne 'OK';
-    
+       
     #confirmed case
+    my $identiy = qq($data->{sessionId});
+    my $data_saved = $hash->{helper}{'.delayed'}->{$identiy};
+    delete $hash->{helper}{'.delayed'}{$identiy};
+    deleteSingleRegisteredInternalTimer($identiy, $hash);
+    
     #my $data_old = $hash->{helper}{'.delayed'};
-    my $data_old = $data->{custom_data};
+    #my $data_old = $data->{customData} // $data_saved;
+    my $data_old = $data_saved;
+
+    #my $toDisable = defined $data->{customData} && defined $data->{customData}->{'.ENABLED'} ? $data->{customData}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    my $toDisable = defined $data_old && defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
 
     return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
     #delete $hash->{helper}{'.delayed'};
@@ -3604,7 +3685,7 @@ sub handleIntentChoiceRoom {
 
     Log3($hash->{NAME}, 5, 'handleIntentChoiceRoom called');
 
-    my $data_old = $data->{custom_data};
+    my $data_old = $data->{customData};
 
     return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if !defined $data_old;
 
@@ -3630,7 +3711,7 @@ sub handleIntentChoiceDevice {
 
     Log3($hash->{NAME}, 5, 'handleIntentChoiceDevice called');
 
-    my $data_old = $data->{custom_data};
+    my $data_old = $data->{customData};
 
     return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if ! defined $data_old;
 
@@ -3800,7 +3881,7 @@ sub _readLanguageFromFile {
 # borrowed from WeekdayTimer
 ################################################################################
 sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $initFlag, $oldTime ) = @_;
+    my ( $modifier, $tim, $callback, $hash, $initFlag ) = @_;
     deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
     return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $initFlag );
 }
@@ -3873,13 +3954,10 @@ __END__
   Warum die Abfrage nach rgb? <code>if ( defined $data->{Colortemp} && defined $mapping->{rgb} && looks_like_number($data->{Colortemp}) ) {</code>
   Gibt auch Lampen, die können nur ct
 
-# PERL WARNING: Useless use of private variable in void context at ./FHEM/10_RHASSPY.pm line 1638, <$fh> line 310.
-        # [DEVICE:READING] Einträge ersetzen
-        $returnVal =    ($hash, $cmd);
-
 # Custom Intents
  - Bei Verwendung des Dialouges wenn man keine Antwort spricht, bricht Rhasspy ab. Die voice response "Tut mir leid, da hat etwas zu lange gedauert" wird
    also gar nicht ausgegeben und:
+
    PERL WARNING: Use of uninitialized value $cmd in pattern match (m//) at fhem.pl line 5868.
 
 # "rhasspySpecials" bzw. rhasspyTweaks als weitere Attribute
@@ -4295,6 +4373,7 @@ yellow=rgb FFFF00</code></p>
   <li>GetWeekday</li>
   <li>SetTimer</li>
   <li>ConfirmAction</li>
+  <li>CancelAction</li>
   <li>ReSpeak</li>
 </ul>
 
