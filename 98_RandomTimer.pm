@@ -1,5 +1,5 @@
 ##########################################################################
-# $Id: 98_RandomTimer.pm 23689 2021-02-22 cleanup Beta-User $
+# $Id: 98_RandomTimer.pm 23863 2021-03-01 07:05:16Z Beta-User $
 #
 # copyright ###################################################################
 #
@@ -678,11 +678,11 @@ __END__
 
 =begin html
 
-<a name="RandomTimer"></a>
+<a id="RandomTimer"></a>
 <h3>RandomTimer</h3>
 <div>
   <ul>
-    <a name="RandomTimerdefine"></a>
+    <a id="RandomTimer-define"></a>
     <b>Define</b>
     <ul>
       <code>
@@ -757,7 +757,7 @@ __END__
       </ul><br>
    </ul>
    <ul>
-     <a name="RandomTimerset"></a>
+     <a id="RandomTimer-set"></a>
      <b>Set</b><br>
      <ul>
        <code>set &lt;name&gt; execNow</code>
@@ -777,7 +777,7 @@ __END__
      </ul><br>
     </ul>
    <ul>  
-    <a name="RandomTimerAttributes"></a>
+    <a id="RandomTimer-attr"></a>
     <b>Attributes</b>
     <ul>
       <li>
