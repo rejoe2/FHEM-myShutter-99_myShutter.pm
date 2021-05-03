@@ -309,6 +309,7 @@ sub Initialize {
     $hash->{DefFn}       = \&Define;
     $hash->{UndefFn}     = \&Undefine;
     $hash->{DeleteFn}    = \&Delete;
+    $hash->{RenameFn}    = \&Rename;
     $hash->{SetFn}       = \&Set;
     $hash->{AttrFn}      = \&Attr;
     $hash->{AttrList}    = "IODev rhasspyIntents:textField-long rhasspyShortcuts:textField-long rhasspyTweaks:textField-long response:textField-long forceNEXT:0,1 disable:0,1 disabledForIntervals languageFile " . $readingFnAttributes;
@@ -489,6 +490,14 @@ sub Delete {
 =end comment
 =cut
     return;
+}
+
+sub Rename {
+    my $new_name = shift // return;
+    my $old_name = shift // return;
+
+    my $hash = $defs{$new_name} // return;
+    return renameAllRegisteredInternalTimer($hash, $new_name, $old_name);
 }
 
 # Set Befehl aufgerufen
@@ -1145,11 +1154,14 @@ sub perlExecute {
 }
 
 sub RHASSPY_DialogTimeout {
-    my $fnHash = shift // return;
-    my $hash = $fnHash->{HASH} // $fnHash;
-    return if (!defined($hash));
+    my $arg = shift // return;
+    my ( $name,$identiy ) = split m{:}xms, $arg;
+    my $hash = $defs{$name} // return;
+    #my $fnHash = shift // return;
+    #my $hash = $fnHash->{HASH} // $fnHash;
+    #return if (!defined($hash));
 
-    my $identiy = $fnHash->{MODIFIER};
+    #my $identiy = $fnHash->{MODIFIER};
 
     my $data     = shift // $hash->{helper}{'.delayed'}->{$identiy};
     delete $hash->{helper}{'.delayed'}{$identiy};
@@ -3893,27 +3905,25 @@ sub _readLanguageFromFile {
     return 0, join q{ }, @cleaned;
 }
 
-# borrowed from WeekdayTimer
+# borrowed from Twilight
 ################################################################################
 sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $initFlag ) = @_;
-    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
-    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $initFlag );
+    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
+    deleteSingleRegisteredInternalTimer( $modifier, $hash );
+    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
 }
 
 ################################################################################
 sub setRegisteredInternalTimer {
-    my $modifier = shift // return;
-    my $tim      = shift // return;
-    my $callback = shift // return;
-    my $hash     = shift // return;
-    my $initFlag = shift // 0;
+    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
 
-    my $timerName = "$hash->{NAME}_$modifier";
+    my $timerName = "$hash->{NAME}:$modifier";
     my $fnHash     = {
-        HASH     => $hash,
-        NAME     => $timerName,
-        MODIFIER => $modifier
+        time     => $tim,
+        callback => $callback
+    #    HASH     => $hash,
+    #    NAME     => $timerName,
+    #    MODIFIER => $modifier
     };
     if ( defined( $hash->{TIMER}{$timerName} ) ) {
         Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
@@ -3924,21 +3934,22 @@ sub setRegisteredInternalTimer {
     }
 
     Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    InternalTimer( $tim, $callback, $fnHash, $initFlag );
+    #InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
+    InternalTimer( $tim, $callback, $timerName, $waitIfInitNotDone );
     return $fnHash;
 }
 
 ################################################################################
 sub deleteSingleRegisteredInternalTimer {
     my $modifier = shift;
-    my $hash     = shift // return;
-    my $callback = shift;
+    my $hash = shift // return;
 
-    my $timerName = "$hash->{NAME}_$modifier";
+    my $timerName = "$hash->{NAME}:$modifier";
     my $fnHash    = $hash->{TIMER}{$timerName};
     if ( defined($fnHash) ) {
         Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        RemoveInternalTimer($fnHash);
+        #RemoveInternalTimer($fnHash);
+        RemoveInternalTimer($timerName);
         delete $hash->{TIMER}{$timerName};
     }
     return;
@@ -3947,9 +3958,26 @@ sub deleteSingleRegisteredInternalTimer {
 ################################################################################
 sub deleteAllRegisteredInternalTimer {
     my $hash = shift // return;
+
+    for my $key ( keys %{ $hash->{TIMER} } ) {
+        my ($oname, $modifier) = split m{:}xms, $key;
+        deleteSingleRegisteredInternalTimer( $modifier, $hash );
+    }
+    return;
+}
+
+sub renameAllRegisteredInternalTimer {
+    my $hash = shift // return;
+    my $newName = shift // return;
+    my $oldName = shift // return;
         
     for my $key ( keys %{ $hash->{TIMER} } ) {
-        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
+        my $tim = $hash->{TIMER}{$key}->{time};
+        my $callback = $hash->{TIMER}{$key}->{callback};
+        RemoveInternalTimer($key);
+        delete $hash->{TIMER}{$key};
+        my ($oname, $modifier) = split m{:}xms, $key;
+        setRegisteredInternalTimer($modifier, $tim, $callback, $hash);
     }
     return;
 }

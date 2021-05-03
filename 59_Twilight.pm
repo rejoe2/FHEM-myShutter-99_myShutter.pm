@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm 23491 2021-01-09 05:12:53Z Beta-User $
+# $Id: 59_Twilight.pm 24052 2021-03-22 06:29:38Z Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -100,18 +100,19 @@ sub Initialize {
     my $hash = shift // return;
 
     # Consumer
-    $hash->{DefFn}    = \&Twilight_Define;
-    $hash->{UndefFn}  = \&Twilight_Undef;
-    $hash->{GetFn}    = \&Twilight_Get;
-    $hash->{NotifyFn} = \&Twilight_Notify;
-    $hash->{AttrFn}   = \&Twilight_Attr;
+    $hash->{DefFn}    = \&Define;
+    $hash->{UndefFn}  = \&Undef;
+    $hash->{RenameFn} = \&Rename;
+    $hash->{GetFn}    = \&Get;
+    $hash->{NotifyFn} = \&Notify;
+    $hash->{AttrFn}   = \&Attr;
     $hash->{AttrList} = "$readingFnAttributes useExtWeather";
     $hash->{parseParams} = 1;
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
 
 ################################################################################
-sub Twilight_Define {
+sub Define {
     my $hash = shift;
     my $aref = shift;
     my $href = shift;
@@ -154,7 +155,7 @@ sub Twilight_Define {
     $hash->{INDOOR_HORIZON} = $indoor_horizon; 
     $hash->{helper}{'.LATITUDE'}        = $latitude;
     $hash->{helper}{'.LONGITUDE'}       = $longitude;
-    $hash->{helper}{'.startuptime'}     = time();
+    $hash->{helper}{'.startuptime'}     = time;
     $hash->{SUNPOS_OFFSET} = 5 * 60;
     
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
@@ -172,7 +173,7 @@ sub Twilight_Define {
 }
 
 ################################################################################
-sub Twilight_Undef {
+sub Undef {
     my $hash = shift;
     my $arg = shift // return;
     
@@ -186,6 +187,16 @@ sub Twilight_Undef {
 
     return;
 }
+
+sub Rename {
+    my $new_name = shift // return;
+    my $old_name = shift // return;
+
+    my $hash = $defs{$new_name} // return;
+    return renameAllRegisteredInternalTimer($hash, $new_name, $old_name);
+}
+
+
 
 
 ################################################################################
@@ -208,7 +219,7 @@ sub Twilight_Change_DEF {
 }
 
 ################################################################################
-sub Twilight_Notify {
+sub Notify {
     my $hash  = shift;
     my $whash = shift // return;
     
@@ -385,9 +396,12 @@ sub Twilight_Firstrun {
     }
     Twilight_getWeatherHorizon( $hash, $extWeatherVal );
     
-    my $fnHash = { HASH => $hash };
-    Twilight_sunpos($fnHash) if !$attrVal || $attrVal eq 'none';
-    Twilight_Midnight($fnHash, 1);
+    #my $fnHash = { HASH => $hash };
+    #Twilight_sunpos($fnHash) if !$attrVal || $attrVal eq 'none';
+    #Twilight_Midnight($fnHash, 1);
+    Twilight_sunpos("${name}:sunpos") if !$attrVal || $attrVal eq 'none';
+    Twilight_Midnight("${name}:Midnight", 1);
+
 
     delete $hash->{DEFINE};
 
@@ -395,14 +409,14 @@ sub Twilight_Firstrun {
 }
 
 ################################################################################
-sub Twilight_Attr {
+sub Attr {
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
     return if (!$init_done);
     my $hash = $defs{$name};
 
     if ( $attrName eq 'useExtWeather' ) {
         if ($cmd eq 'set') {
-            return "External weather device already in use, most likely assigned by define" if $hash->{helper}{extWeather}{regexp} =~ m{$attrVal}xms;
+            return "External weather device already in use, most likely assigned by define" if defined $hash->{helper} && defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{regexp} && $hash->{helper}{extWeather}{regexp} =~ m{$attrVal}xms;
             return Twilight_init_ExtWeather_usage($hash, $attrVal); 
         } elsif ($cmd eq 'del') {
             notifyRegexpChanged( $hash, q{} );
@@ -421,7 +435,7 @@ sub Twilight_init_ExtWeather_usage {
     my ($extWeather, $extWReading, $err);
     my @parts;
     if (!looks_like_number($devreading)) {
-        @parts = split m{ }x, $devreading, 2;
+        @parts = split m{\s}x, $devreading, 2;
         ($extWeather, $extWReading) = split m{:}x, $parts[0]; 
         return 'External weather device seems not to exist' if !defined $defs{$extWeather} && $init_done;
         
@@ -490,7 +504,7 @@ sub Twilight_disp_ExtWeather {
 }
 
 ################################################################################
-sub Twilight_Get {
+sub Get {
     my ( $hash, $aref, $href ) = @_;
     return 'argument is missing' if ( int(@$aref) != 2 );
 
@@ -509,7 +523,7 @@ sub Twilight_Get {
 ################################################################################
 sub resetRegisteredInternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
-    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
+    deleteSingleRegisteredInternalTimer( $modifier, $hash );
     return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
 }
 
@@ -517,11 +531,13 @@ sub resetRegisteredInternalTimer {
 sub setRegisteredInternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
 
-    my $timerName = "$hash->{NAME}_$modifier";
+    my $timerName = "$hash->{NAME}:$modifier";
     my $fnHash     = {
-        HASH     => $hash,
-        NAME     => $timerName,
-        MODIFIER => $modifier
+        time     => $tim,
+        callback => $callback
+    #    HASH     => $hash,
+    #    NAME     => $timerName,
+    #    MODIFIER => $modifier
     };
     if ( defined( $hash->{TIMER}{$timerName} ) ) {
         Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
@@ -532,7 +548,8 @@ sub setRegisteredInternalTimer {
     }
 
     Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
+    #InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
+    InternalTimer( $tim, $callback, $timerName, $waitIfInitNotDone );
     return $fnHash;
 }
 
@@ -540,13 +557,13 @@ sub setRegisteredInternalTimer {
 sub deleteSingleRegisteredInternalTimer {
     my $modifier = shift;
     my $hash = shift // return;
-    my $callback = shift;
 
-    my $timerName = "$hash->{NAME}_$modifier";
+    my $timerName = "$hash->{NAME}:$modifier";
     my $fnHash    = $hash->{TIMER}{$timerName};
     if ( defined($fnHash) ) {
         Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        RemoveInternalTimer($fnHash);
+        #RemoveInternalTimer($fnHash);
+        RemoveInternalTimer($timerName);
         delete $hash->{TIMER}{$timerName};
     }
     return;
@@ -555,9 +572,26 @@ sub deleteSingleRegisteredInternalTimer {
 ################################################################################
 sub deleteAllRegisteredInternalTimer {
     my $hash = shift // return;
-        
+
     for my $key ( keys %{ $hash->{TIMER} } ) {
-        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
+        my ($oname, $modifier) = split m{:}xms, $key;
+        deleteSingleRegisteredInternalTimer( $modifier, $hash );
+    }
+    return;
+}
+
+sub renameAllRegisteredInternalTimer {
+    my $hash = shift // return;
+    my $newName = shift // return;
+    my $oldName = shift // return;
+
+    for my $key ( keys %{ $hash->{TIMER} } ) {
+        my $tim = $hash->{TIMER}{$key}->{time};
+        my $callback = $hash->{TIMER}{$key}->{callback};
+        RemoveInternalTimer($key);
+        delete $hash->{TIMER}{$key};
+        my ($oname, $modifier) = split m{:}xms, $key;
+        setRegisteredInternalTimer($modifier, $tim, $callback, $hash);
     }
     return;
 }
@@ -565,7 +599,7 @@ sub deleteAllRegisteredInternalTimer {
 
 ################################################################################
 sub secondsSinceMidnight {
-    my $now  = shift // time();
+    my $now  = shift // time;
     my @time = localtime($now);
     my $secs = ( $time[2] * 3600 ) + ( $time[1] * 60 ) + $time[0];
     return $secs;
@@ -576,7 +610,7 @@ sub Twilight_calc {
     my $hash = shift;
     my $deg  = shift;
     my $idx  = shift // return;
-    my $now  = shift // time();
+    my $now  = shift // time;
     
     my $midnight = $now - secondsSinceMidnight( $now );
     my $lat      = $hash->{helper}{'.LATITUDE'};
@@ -673,7 +707,7 @@ sub Twilight_TwilightTimes {
       0 .. $#ereignisse - 1;
 
 # ------------------------------------------------------------------------------
-    my $now              = time();
+    my $now              = time;
 
     for my $ereignis ( sort keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq 'weather' && $ereignis !~ m{weather}x );
@@ -692,13 +726,16 @@ sub Twilight_TwilightTimes {
 }
 ################################################################################
 sub Twilight_fireEvent {
-    my $fnHash = shift // return;
-    
-    my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+    my $arg = shift // return;
+    #my $fnHash = shift // return;
 
-    return if ( !defined $hash );
+    my ( $name,$modifier ) = split m{:}xms, $arg;
+    my $hash = $defs{$name} // return;
+    #my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+
+    #return if ( !defined $hash );
     
-    my $name = $hash->{NAME};
+    #my $name = $hash->{NAME};
 
     my $event = $modifier;
     my $myHash =$hash->{TW}{$modifier};
@@ -706,7 +743,7 @@ sub Twilight_fireEvent {
     my $light = $myHash->{LIGHT};
     my $state = $myHash->{STATE};
     my $swip  = $myHash->{SWIP};
-    $swip = 0 if time() - $hash->{helper}{'.startuptime'} < 60;
+    $swip = 0 if time - $hash->{helper}{'.startuptime'} < 60;
     
     my $eventTime = $myHash->{TIME};
     my $nextEvent = $myHash->{NAMENEXT};
@@ -744,11 +781,14 @@ sub Twilight_fireEvent {
 
 ################################################################################
 sub Twilight_Midnight {
-    my $fnHash = shift // return;
+    my $arg = shift // return;
+    #my $fnHash = shift // return;
     my $firstrun = shift // 0;
-    
-    my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
-    
+
+    #my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+    my ( $name,$modifier ) = split m{:}xms, $arg;
+    my $hash = $defs{$name} // return;
+
     return if !defined $hash;
     
     if (!defined $hash->{helper}{extWeather}{Device}) {
@@ -774,7 +814,7 @@ sub Twilight_Midnight {
 sub Twilight_sunposTimerSet {
     my $hash = shift // return;
 
-    return resetRegisteredInternalTimer( 'sunpos', time() + $hash->{SUNPOS_OFFSET}, \&Twilight_sunpos, $hash, 0 );
+    return resetRegisteredInternalTimer( 'sunpos', time + $hash->{SUNPOS_OFFSET}, \&Twilight_sunpos, $hash, 0 );
 }
 
 ################################################################################
@@ -798,14 +838,18 @@ sub Twilight_getWeatherHorizon {
 
 ################################################################################
 sub Twilight_sunpos {
-    my $fnHash = shift // return;
+    my $arg = shift // return;
+    my ( $hashName,$modifier ) = split m{:}xms, $arg;
+    my $hash = $defs{$hashName} // return;
+    
+    #my $fnHash = shift // return;
 
-    my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+    #my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
 
     #my $hash = Twilight_GetHashIndirekt( $fnHash, ( caller(0) )[3] );
-    return if ( !defined($hash) );
+    #return if ( !defined($hash) );
 
-    my $hashName = $hash->{NAME};
+    #my $hashName = $hash->{NAME};
     return if(IsDisabled($hashName));
 
     my (
@@ -990,7 +1034,7 @@ sub twilight {
 
     if ($reading eq 'sr_tomorrow' or $reading eq 'ss_tomorrow') {
         my $wh = Twilight_getWeatherHorizon( $hash, $cloudCover // 50, 0);
-        my ($sr, $ss) = Twilight_calc( $hash, $wh, '7', time() + DAYSECONDS );
+        my ($sr, $ss) = Twilight_calc( $hash, $wh, '7', time + DAYSECONDS );
         $t = hms2h( FmtTime( $reading eq 'sr_tomorrow' ? $sr : $ss ) );
     }
 
@@ -1048,7 +1092,7 @@ sub getwTYPE_PROPLANTA {
     my $extDev = $hash->{helper}{extWeather}{Device};
     my @hour  = getTwilightHours($hash); 
     
-    my $fc_day0 = secondsSinceMidnight( time() ) > 60 ? 0 : 1;
+    my $fc_day0 = secondsSinceMidnight( time ) > 60 ? 0 : 1;
     my $fc_day1 = $fc_day0 + 1;
     
     my @ret;
@@ -1077,14 +1121,14 @@ __END__
 =item summary_DE liefert Dämmerungs Sonnen basierte Events. Alternative: Astro
 =begin html
 
-<a name="Twilight"></a>
+<a id="Twilight"></a>
 <h3>Twilight</h3>
 <ul>
   <br>
-  <a name="Twilightgeneral"></a>
+  <a id="Twilight-general"></a>
   <b>General Remarks</b><br>
   This module profited much from the use of the yahoo weather API. Unfortunately, this service is no longer available, so Twilight functionality is very limited nowerdays. To some extend, the use of <a href="#Twilightattr">useExtWeather</a> may compensate to dect cloudy skys. If you just want to have astronomical data available, consider using Astro instead.<br><br>
-  <a name="Twilightdefine"></a>
+  <a id="Twilight-define"></a>
   <b>Define</b>
   <ul>
     <code>define &lt;name&gt; Twilight [&lt;latitude&gt; &lt;longitude&gt;] [&lt;indoor_horizon&gt; [&lt;weatherDevice[:Reading]&gt;]]</code><br>
@@ -1154,7 +1198,7 @@ __END__
   </ul>
   <br>
 
-  <a name="Twilightset"></a>
+  <a id="Twilight-set"></a>
   <b>Set </b>
   <ul>
     N/A
@@ -1162,7 +1206,7 @@ __END__
   <br>
 
 
-  <a name="Twilightget"></a>
+  <a id="Twilight-get"></a>
   <b>Get</b>
   <ul>
 
@@ -1197,7 +1241,7 @@ __END__
   </ul>
   <br>
 
-  <a name="Twilightattr"></a>
+  <a id="Twilight-attr"></a>
   <b>Attributes</b>
   <ul>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
@@ -1227,7 +1271,7 @@ __END__
   </ul>
   <br>
 
-  <a name="Twilightfunc"></a>
+  <a id="Twilight-func"></a>
   <b>Functions</b>
   <ul>
      <li><b>twilight</b>(<b>$twilight</b>, <b>$reading</b>, <b>$min</b>, <b>$max</b>)</li> - implements a routine to compute the twilighttimes like sunrise with min max values.<br><br>
@@ -1251,7 +1295,7 @@ Example:
 
 =begin html_DE
 
-<a name="Twilight"></a>
+<a id="Twilight"></a>
 <h3>Twilight</h3>
 <ul>
   <b>Allgemeine Hinweise</b><br>
@@ -1259,7 +1303,7 @@ Example:
 
   <br>
 
-  <a name="Twilightdefine"></a>
+  <a id="Twilight-define"></a>
   <b>Define</b>
   <ul>
     <code>define &lt;name&gt; Twilight [&lt;latitude&gt; &lt;longitude&gt;] [&lt;indoor_horizon&gt; [&lt;weatherDevice[:Reading]&gt;]]</code><br>
@@ -1321,7 +1365,7 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
   </ul>
   <br>
 
-  <a name="Twilightset"></a>
+  <a id="Twilight-set"></a>
   <b>Set </b>
   <ul>
     N/A
@@ -1329,7 +1373,7 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
   <br>
 
 
-  <a name="Twilightget"></a>
+  <a id="Twilight-get"></a>
   <b>Get</b>
   <ul>
 
@@ -1363,7 +1407,7 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
   </ul>
   <br>
 
-  <a name="Twilightattr"></a>
+  <a id="Twilight-attr"></a>
   <b>Attributes</b>
   <ul>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
@@ -1392,7 +1436,7 @@ Wissenswert dazu ist, dass die Sonne, abh&auml;gnig vom Breitengrad, bestimmte E
   </ul>
   <br>
 
-  <a name="Twilightfunc"></a>
+  <a id="Twilight-func"></a>
   <b>Functions</b>
   <ul>
      <li><b>twilight</b>(<b>$twilight</b>, <b>$reading</b>, <b>$min</b>, <b>$max</b>)</li> - implementiert eine Routine um die D&auml;mmerungszeiten wie Sonnenaufgang mit min und max Werten zu berechnen.<br><br>
