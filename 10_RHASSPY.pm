@@ -72,6 +72,7 @@ my $languagevars = {
       },
       'unitSeconds' => {
           0    => 'seconds',
+          0    => 'seconds',
           1    => 'one second'
       }
    },
@@ -111,7 +112,7 @@ my $languagevars = {
     'duration_not_understood'   => "Sorry I could not understand the desired duration",
     'reSpeak_failed'   => 'i am sorry i can not remember',
     'Change' => {
-      'airHumidity'  => 'air humidity in $location is $value percent',
+      'humidity'     => 'air humidity in $location is $value percent',
       'battery'      => {
         '0' => 'battery level in $location is $value',
         '1' => 'battery level in $location is $value percent'
@@ -216,7 +217,7 @@ my $de_mappings = {
   },
   'ToEn' => {
     'Temperatur'       => 'temperature',
-    'Luftfeuchtigkeit' => 'airHumidity',
+    'Luftfeuchtigkeit' => 'humidity',
     'Batterie'         => 'battery',
     'Wasserstand'      => 'waterLevel',
     'Bodenfeuchte'     => 'soilMoisture',
@@ -344,7 +345,7 @@ sub Define {
     #$hash->{baseId} = $h->{baseId} // q{default};
     initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
-    $hash->{encoding} = $h->{encoding} // q{UTF-8};
+    $hash->{encoding} = $h->{encoding} // q{utf8};
     $hash->{useGenericAttrs} = $h->{useGenericAttrs} // 1;
     $hash->{'.asyncQueue'} = [];
     #Beta-User: Für's Ändern von defaultRoom oder prefix vielleicht (!?!) hilfreich: https://forum.fhem.de/index.php/topic,119150.msg1135838.html#msg1135838 (Rudi zu resolveAttrRename) 
@@ -904,11 +905,11 @@ sub _analyze_rhassypAttr {
         }
         if ($key eq 'colorCommandMap') {
             my($unnamed, $named) = parseParams($val);
-            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{CommandMap} = $named if defined$named;
+            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{CommandMap} = $named if defined $named;
         }
         if ($key eq 'colorTempMap') {
             my($unnamed, $named) = parseParams($val);
-            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{Colortemp} = $named if defined$named;
+            $hash->{helper}{devicemap}{devices}{$device}{color_specials}{Colortemp} = $named if defined $named;
         }
         if ($key eq 'venetianBlind') {
             my($unnamed, $named) = parseParams($val);
@@ -920,6 +921,11 @@ sub _analyze_rhassypAttr {
             $specials->{CustomCommand} = $named->{CustomCommand} if defined $named->{CustomCommand};
 
             $hash->{helper}{devicemap}{devices}{$device}{venetian_specials} = $specials if defined $vencmd || defined $vendev;
+        }
+        if ($key eq 'priority') {
+            my($unnamed, $named) = parseParams($val);
+            $hash->{helper}{devicemap}{devices}{$device}{prio}{inRoom} = $named->{inRoom} if defined $named->{inRoom};
+            $hash->{helper}{devicemap}{devices}{$device}{prio}{outsideRoom} = $named->{outsideRoom} if defined $named->{outsideRoom};
         }
     }
 
@@ -1157,7 +1163,7 @@ sub perlExecute {
 sub RHASSPY_DialogTimeout {
     my $fnHash = shift // return;
     my $hash = $fnHash->{HASH} // $fnHash;
-    return if (!defined($hash));
+    return if !defined $hash;
 
     my $identiy = $fnHash->{MODIFIER};
 
@@ -4331,7 +4337,7 @@ orf drei=channel 203<br>
 green=rgb 008000<br>
 blue=rgb 0000FF<br>
 yellow=rgb FFFF00</code></p>
-    <p>Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.</p>
+    <p>Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute. You may consider using <a href="#RHASSPY-attr-rhasspySpecials">rhasspySpecials</a> (<i>colorCommandMap</i> and/or <i>colorForceHue2rgb</i>) instead.</p>
   </li>
   <li>
     <a id="RHASSPY-attr-rhasspySpecials"></a><b>rhasspySpecials</b>
@@ -4396,6 +4402,8 @@ yellow=rgb FFFF00</code></p>
   <li>SetTimer</li>
   <li>ConfirmAction</li>
   <li>CancelAction</li>
+  <li>ChoiceRoom</li>
+  <li>ChoiceDevice</li>
   <li>ReSpeak</li>
 </ul>
 

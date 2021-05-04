@@ -340,7 +340,7 @@ sub deleteSingleRegisteredInternalTimer {
 ################################################################################
 sub deleteAllRegisteredInternalTimer {
     my $hash = shift // return;
-        
+
     for my $key ( keys %{ $hash->{TIMER} } ) {
         deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
     }
