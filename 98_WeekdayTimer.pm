@@ -33,6 +33,7 @@ use warnings;
 use Time::Local qw( timelocal_nocheck );
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
+use Scalar::Util qw( weaken );
 
 use GPUtils qw(GP_Import);
 
@@ -304,6 +305,8 @@ sub setRegisteredInternalTimer {
         NAME     => $timerName,
         MODIFIER => $modifier
     };
+    weaken($fnHash->{HASH});
+
     if ( defined $hash->{TIMER}{$timerName} ) {
         Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
         stacktrace();

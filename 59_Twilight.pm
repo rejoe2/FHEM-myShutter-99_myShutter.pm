@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm 24052 2021-03-22 06:29:38Z Beta-User $
+# $Id: 59_Twilight.pm 24052 2021-05-04 "weaken version" Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -40,6 +40,7 @@ use warnings;
 use Math::Trig;
 use Time::Local qw(timelocal_nocheck);
 use List::Util qw(max min);
+use Scalar::Util qw( weaken );
 use GPUtils qw(GP_Import GP_Export);
 #eval { use FHEM::Core::Timer::Helper qw( addTimer removeTimer optimizeLOT ); 1 };
 use FHEM::Meta;
@@ -100,31 +101,30 @@ sub Initialize {
     my $hash = shift // return;
 
     # Consumer
-    $hash->{DefFn}    = \&Define;
-    $hash->{UndefFn}  = \&Undef;
-    $hash->{RenameFn} = \&Rename;
-    $hash->{GetFn}    = \&Get;
-    $hash->{NotifyFn} = \&Notify;
-    $hash->{AttrFn}   = \&Attr;
+    $hash->{DefFn}    = \&Twilight_Define;
+    $hash->{UndefFn}  = \&Twilight_Undef;
+    $hash->{GetFn}    = \&Twilight_Get;
+    $hash->{NotifyFn} = \&Twilight_Notify;
+    $hash->{AttrFn}   = \&Twilight_Attr;
     $hash->{AttrList} = "$readingFnAttributes useExtWeather";
     $hash->{parseParams} = 1;
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
 
 ################################################################################
-sub Define {
+sub Twilight_Define {
     my $hash = shift;
     my $aref = shift;
     my $href = shift;
     return if !defined $aref && !defined $href;
-    
+
     return $@ unless ( FHEM::Meta::SetInternals($hash) );
-    
+
     return 'syntax: define <name> Twilight [<latitude> <longitude>] [indoorHorizon=... ] [weatherDevice=<device:reading>]'
       if int(@$aref) < 2 || int(@$aref) > 6;
-    
+
     my $DEFmayChange = int(@$aref) == 6 ? 1 : 0;
-    
+
     my $weather = q{none};
     $weather = pop @$aref if int(@$aref) == 6 || int(@$aref) == 4 && !looks_like_number($$aref[3]);
     $weather = $$href{weatherDevice} // $weather; ##hashes don't work yet...
@@ -157,26 +157,26 @@ sub Define {
     $hash->{helper}{'.LONGITUDE'}       = $longitude;
     $hash->{helper}{'.startuptime'}     = time;
     $hash->{SUNPOS_OFFSET} = 5 * 60;
-    
+
     $attr{$name}{verbose} = 4 if ( $name =~ m/^tst.*$/x );
 
     Log3( $hash, 1, "[$hash->{NAME}] Note: Twilight formerly used weather info from yahoo, but source is offline. Using a guessed Weather type device instead if available!"
     ) if looks_like_number($weather);
-    
+
     my $useTimer = looks_like_number($weather) || ( $DEFmayChange && $latitude  == AttrVal( 'global', 'latitude', 50.112 ) && $longitude == AttrVal( 'global', 'longitude', 8.686 ) ) ? 1 : 0;
-    
+
     $hash->{DEFINE} = $weather ? $weather : 'none';
     InternalTimer(time, \&Twilight_Change_DEF,$hash,0) if $useTimer;
-        
+
     return InternalTimer( time+$useTimer, \&Twilight_Firstrun,$hash,0) if !$init_done || $useTimer;
     return Twilight_Firstrun($hash);
 }
 
 ################################################################################
-sub Undef {
+sub Twilight_Undef {
     my $hash = shift;
     my $arg = shift // return;
-    
+
     deleteAllRegisteredInternalTimer($hash);
 
     notifyRegexpChanged( $hash, "" );
@@ -187,16 +187,6 @@ sub Undef {
 
     return;
 }
-
-sub Rename {
-    my $new_name = shift // return;
-    my $old_name = shift // return;
-
-    my $hash = $defs{$new_name} // return;
-    return renameAllRegisteredInternalTimer($hash, $new_name, $old_name);
-}
-
-
 
 
 ################################################################################
@@ -215,16 +205,16 @@ sub Twilight_Change_DEF {
     $newdef = "$hash->{helper}{'.LATITUDE'} $hash->{helper}{'.LONGITUDE'}" if $hash->{helper}{'.LATITUDE'} != AttrVal( 'global', 'latitude', 50.112 ) || $hash->{helper}{'.LONGITUDE'} != AttrVal( 'global', 'longitude', 8.686 );
     $newdef .= " $hash->{INDOOR_HORIZON} $weather";
     $hash->{DEF} = $newdef;
-    return; # CommandModify(undef, "$name $newdef");
+    return;
 }
 
 ################################################################################
-sub Notify {
+sub Twilight_Notify {
     my $hash  = shift;
     my $whash = shift // return;
-    
+
     return if !exists $hash->{helper}{extWeather};
-    
+
     my $name = $hash->{NAME};
     return if(IsDisabled($name));
 
@@ -240,7 +230,7 @@ sub Notify {
         my $s = $events->[$i];
         $s = "" if(!defined($s));
         my $found = ($wname =~ m/^$re$/x || "$wname:$s" =~ m/^$re$/sx);
-    
+
         return Twilight_HandleWeatherData( $hash, 1) if $found;
     }
     return;
@@ -252,11 +242,11 @@ sub Twilight_HandleWeatherData {
     my $wname = $hash->{helper}{extWeather}{Device} // q{none};
     my $name = $hash->{NAME};
     my ($extWeather, $sr_extWeather, $ss_extWeather);
-    my $dispatch = defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{dispatch} ? 1 : 0; 
+    my $dispatch = defined $hash->{helper}{extWeather} && defined $hash->{helper}{extWeather}{dispatch} ? 1 : 0;
 
     if (!$dispatch 
-        || $dispatch && !defined $hash->{helper}{extWeather}{dispatch}{function} && !defined $hash->{helper}{extWeather}{dispatch}{userfunction} ) 
-    { 
+        || $dispatch && !defined $hash->{helper}{extWeather}{dispatch}{function} && !defined $hash->{helper}{extWeather}{dispatch}{userfunction} )
+    {
         $extWeather = ReadingsNum($wname, $hash->{helper}{extWeather}{Reading},-1);
     } elsif (defined $hash->{helper}{extWeather}{dispatch}{function} ) {
         #Log3( $hash, 5, "[$hash->{NAME}] before dispatch" );
@@ -289,16 +279,15 @@ sub Twilight_HandleWeatherData {
     }
 
     my $lastcc = ReadingsNum($name, 'cloudCover', -1);
-            
+
     #here we have to split up for extended forecast handling... 
-            
     $inNotify ? Log3( $hash, 5, "[$name] NotifyFn called, reading is $extWeather, last is $lastcc" ) 
               : Log3( $hash, 5, "[$name] timer based weather update called, reading is $extWeather, last is $lastcc" );
 
     return if $inNotify && (abs($lastcc - $extWeather) <6 && !defined $hash->{helper}{extWeather}{dispatch} || ReadingsAge($name, 'cloudCover', 4000) < 3575 && defined $hash->{helper}{extWeather}{dispatch});
 
     my $weather_horizon = Twilight_getWeatherHorizon( $hash, $extWeather, 1);
-            
+
     my ($sr, $ss) = Twilight_calc( $hash, $weather_horizon, '7' ); #these are numbers
     my ($sr_wh,$ss_wh);
     if (defined $ss_extWeather) {
@@ -326,7 +315,7 @@ sub Twilight_HandleWeatherData {
         $ss = max( $ss, $now - 0.01 );
         $sr_passed = $hash->{TW}{sr_weather}{TIME} > $sr ? 1 : 0;
         $ss_passed = $hash->{TW}{ss_weather}{TIME} > $ss ? 1 : 0;
-    } 
+    }
 
     #renew dates and timers?, fire events?
     my $nextevent = ReadingsVal($name,"nextEvent","none");            
@@ -354,7 +343,7 @@ sub Twilight_HandleWeatherData {
             resetRegisteredInternalTimer( 'ss_weather', $ss, \&Twilight_fireEvent, $hash, 0 );
         }
     } 
-    
+
     if ( $now < $ss ) {
         $nextEventTime = FmtTime( $ss );
         $hash->{TW}{ss_weather}{TIME} = $ss;
@@ -381,13 +370,13 @@ sub Twilight_HandleWeatherData {
 sub Twilight_Firstrun {
     my $hash = shift // return;
     my $name = $hash->{NAME};
-    
+
     my $attrVal = AttrVal( $name,'useExtWeather', $hash->{DEFINE});
     $attrVal = "$hash->{helper}{extWeather}{Device}:$hash->{helper}{extWeather}{Reading}" if !$attrVal && defined $hash->{helper} && defined $hash->{helper}{extWeather}{Device} && defined $hash->{helper}{extWeather}{Reading};
     $attrVal = "$hash->{helper}{extWeather}{Device}:$hash->{helper}{extWeather}{trigger}" if !$attrVal && defined $hash->{helper} && defined $hash->{helper}{extWeather}{Device} && defined $hash->{helper}{extWeather}{trigger};
-    
+
     my $extWeatherVal = 0;
-    
+
     if ($attrVal && $attrVal ne 'none') {
         Twilight_init_ExtWeather_usage( $hash, $attrVal );
         my $ewr = $hash->{helper}{extWeather}{Reading}  // $hash->{helper}{extWeather}{dispatch}{trigger} // $hash->{helper}{extWeather}{trigger}; 
@@ -396,12 +385,9 @@ sub Twilight_Firstrun {
     }
     Twilight_getWeatherHorizon( $hash, $extWeatherVal );
     
-    #my $fnHash = { HASH => $hash };
-    #Twilight_sunpos($fnHash) if !$attrVal || $attrVal eq 'none';
-    #Twilight_Midnight($fnHash, 1);
-    Twilight_sunpos("${name}:sunpos") if !$attrVal || $attrVal eq 'none';
-    Twilight_Midnight("${name}:Midnight", 1);
-
+    my $fnHash = { HASH => $hash };
+    Twilight_sunpos($fnHash) if !$attrVal || $attrVal eq 'none';
+    Twilight_Midnight($fnHash, 1);
 
     delete $hash->{DEFINE};
 
@@ -409,7 +395,7 @@ sub Twilight_Firstrun {
 }
 
 ################################################################################
-sub Attr {
+sub Twilight_Attr {
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
     return if (!$init_done);
     my $hash = $defs{$name};
@@ -428,6 +414,7 @@ sub Attr {
     }
     return;
 }
+
 sub Twilight_init_ExtWeather_usage {
     my $hash = shift // return;
     my $devreading = shift // 1000;
@@ -481,8 +468,7 @@ sub Twilight_disp_ExtWeather {
         delete $hash->{helper}{extWeather}{$key};
     }
     delete $hash->{helper}{extWeather}{dispatch};
-    
-    
+
     my $dispatch = {
         Weather => {
             trigger => 'cloudCover', 
@@ -504,7 +490,7 @@ sub Twilight_disp_ExtWeather {
 }
 
 ################################################################################
-sub Get {
+sub Twilight_Get {
     my ( $hash, $aref, $href ) = @_;
     return 'argument is missing' if ( int(@$aref) != 2 );
 
@@ -522,8 +508,8 @@ sub Get {
 
 ################################################################################
 sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
-    deleteSingleRegisteredInternalTimer( $modifier, $hash );
+    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
+    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
     return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
 }
 
@@ -531,14 +517,14 @@ sub resetRegisteredInternalTimer {
 sub setRegisteredInternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
 
-    my $timerName = "$hash->{NAME}:$modifier";
+    my $timerName = "$hash->{NAME}_$modifier";
     my $fnHash     = {
-        time     => $tim,
-        callback => $callback
-    #    HASH     => $hash,
-    #    NAME     => $timerName,
-    #    MODIFIER => $modifier
+        HASH     => $hash,
+        NAME     => $timerName,
+        MODIFIER => $modifier
     };
+    weaken($fnHash->{HASH});
+
     if ( defined( $hash->{TIMER}{$timerName} ) ) {
         Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
         stacktrace();
@@ -548,8 +534,7 @@ sub setRegisteredInternalTimer {
     }
 
     Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    #InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
-    InternalTimer( $tim, $callback, $timerName, $waitIfInitNotDone );
+    InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
     return $fnHash;
 }
 
@@ -558,12 +543,11 @@ sub deleteSingleRegisteredInternalTimer {
     my $modifier = shift;
     my $hash = shift // return;
 
-    my $timerName = "$hash->{NAME}:$modifier";
+    my $timerName = "$hash->{NAME}_$modifier";
     my $fnHash    = $hash->{TIMER}{$timerName};
     if ( defined($fnHash) ) {
         Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        #RemoveInternalTimer($fnHash);
-        RemoveInternalTimer($timerName);
+        RemoveInternalTimer($fnHash);
         delete $hash->{TIMER}{$timerName};
     }
     return;
@@ -574,24 +558,7 @@ sub deleteAllRegisteredInternalTimer {
     my $hash = shift // return;
 
     for my $key ( keys %{ $hash->{TIMER} } ) {
-        my ($oname, $modifier) = split m{:}xms, $key;
-        deleteSingleRegisteredInternalTimer( $modifier, $hash );
-    }
-    return;
-}
-
-sub renameAllRegisteredInternalTimer {
-    my $hash = shift // return;
-    my $newName = shift // return;
-    my $oldName = shift // return;
-
-    for my $key ( keys %{ $hash->{TIMER} } ) {
-        my $tim = $hash->{TIMER}{$key}->{time};
-        my $callback = $hash->{TIMER}{$key}->{callback};
-        RemoveInternalTimer($key);
-        delete $hash->{TIMER}{$key};
-        my ($oname, $modifier) = split m{:}xms, $key;
-        setRegisteredInternalTimer($modifier, $tim, $callback, $hash);
+        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
     }
     return;
 }
@@ -726,16 +693,13 @@ sub Twilight_TwilightTimes {
 }
 ################################################################################
 sub Twilight_fireEvent {
-    my $arg = shift // return;
-    #my $fnHash = shift // return;
-
-    my ( $name,$modifier ) = split m{:}xms, $arg;
-    my $hash = $defs{$name} // return;
-    #my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
-
-    #return if ( !defined $hash );
+    my $fnHash = shift // return;
     
-    #my $name = $hash->{NAME};
+    my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+
+    return if ( !defined $hash );
+    
+    my $name = $hash->{NAME};
 
     my $event = $modifier;
     my $myHash =$hash->{TW}{$modifier};
@@ -781,14 +745,11 @@ sub Twilight_fireEvent {
 
 ################################################################################
 sub Twilight_Midnight {
-    my $arg = shift // return;
-    #my $fnHash = shift // return;
+    my $fnHash = shift // return;
     my $firstrun = shift // 0;
-
-    #my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
-    my ( $name,$modifier ) = split m{:}xms, $arg;
-    my $hash = $defs{$name} // return;
-
+    
+    my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+    
     return if !defined $hash;
     
     if (!defined $hash->{helper}{extWeather}{Device}) {
@@ -838,18 +799,14 @@ sub Twilight_getWeatherHorizon {
 
 ################################################################################
 sub Twilight_sunpos {
-    my $arg = shift // return;
-    my ( $hashName,$modifier ) = split m{:}xms, $arg;
-    my $hash = $defs{$hashName} // return;
-    
-    #my $fnHash = shift // return;
+    my $fnHash = shift // return;
 
-    #my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
+    my ($hash, $modifier) = ($fnHash->{HASH}, $fnHash->{MODIFIER});
 
     #my $hash = Twilight_GetHashIndirekt( $fnHash, ( caller(0) )[3] );
-    #return if ( !defined($hash) );
+    return if ( !defined($hash) );
 
-    #my $hashName = $hash->{NAME};
+    my $hashName = $hash->{NAME};
     return if(IsDisabled($hashName));
 
     my (

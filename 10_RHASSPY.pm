@@ -36,9 +36,10 @@ use GPUtils qw(:all);
 use JSON;
 use Encode;
 use HttpUtils;
-#use utf8;
+use utf8;
 use List::Util 1.45 qw(max min uniq);
 use Data::Dumper;
+use Scalar::Util qw(weaken);
 
 sub ::RHASSPY_Initialize { goto &Initialize }
 
@@ -1154,14 +1155,11 @@ sub perlExecute {
 }
 
 sub RHASSPY_DialogTimeout {
-    my $arg = shift // return;
-    my ( $name,$identiy ) = split m{:}xms, $arg;
-    my $hash = $defs{$name} // return;
-    #my $fnHash = shift // return;
-    #my $hash = $fnHash->{HASH} // $fnHash;
-    #return if (!defined($hash));
+    my $fnHash = shift // return;
+    my $hash = $fnHash->{HASH} // $fnHash;
+    return if (!defined($hash));
 
-    #my $identiy = $fnHash->{MODIFIER};
+    my $identiy = $fnHash->{MODIFIER};
 
     my $data     = shift // $hash->{helper}{'.delayed'}->{$identiy};
     delete $hash->{helper}{'.delayed'}{$identiy};
@@ -3907,9 +3905,10 @@ sub _readLanguageFromFile {
 
 # borrowed from Twilight
 ################################################################################
+################################################################################
 sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone, $oldTime ) = @_;
-    deleteSingleRegisteredInternalTimer( $modifier, $hash );
+    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
+    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
     return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
 }
 
@@ -3917,14 +3916,14 @@ sub resetRegisteredInternalTimer {
 sub setRegisteredInternalTimer {
     my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
 
-    my $timerName = "$hash->{NAME}:$modifier";
+    my $timerName = "$hash->{NAME}_$modifier";
     my $fnHash     = {
-        time     => $tim,
-        callback => $callback
-    #    HASH     => $hash,
-    #    NAME     => $timerName,
-    #    MODIFIER => $modifier
+        HASH     => $hash,
+        NAME     => $timerName,
+        MODIFIER => $modifier
     };
+    weaken($fnHash->{HASH});
+
     if ( defined( $hash->{TIMER}{$timerName} ) ) {
         Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
         stacktrace();
@@ -3934,8 +3933,7 @@ sub setRegisteredInternalTimer {
     }
 
     Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    #InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
-    InternalTimer( $tim, $callback, $timerName, $waitIfInitNotDone );
+    InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
     return $fnHash;
 }
 
@@ -3944,12 +3942,11 @@ sub deleteSingleRegisteredInternalTimer {
     my $modifier = shift;
     my $hash = shift // return;
 
-    my $timerName = "$hash->{NAME}:$modifier";
+    my $timerName = "$hash->{NAME}_$modifier";
     my $fnHash    = $hash->{TIMER}{$timerName};
     if ( defined($fnHash) ) {
         Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        #RemoveInternalTimer($fnHash);
-        RemoveInternalTimer($timerName);
+        RemoveInternalTimer($fnHash);
         delete $hash->{TIMER}{$timerName};
     }
     return;
@@ -3960,27 +3957,11 @@ sub deleteAllRegisteredInternalTimer {
     my $hash = shift // return;
 
     for my $key ( keys %{ $hash->{TIMER} } ) {
-        my ($oname, $modifier) = split m{:}xms, $key;
-        deleteSingleRegisteredInternalTimer( $modifier, $hash );
+        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
     }
     return;
 }
 
-sub renameAllRegisteredInternalTimer {
-    my $hash = shift // return;
-    my $newName = shift // return;
-    my $oldName = shift // return;
-        
-    for my $key ( keys %{ $hash->{TIMER} } ) {
-        my $tim = $hash->{TIMER}{$key}->{time};
-        my $callback = $hash->{TIMER}{$key}->{callback};
-        RemoveInternalTimer($key);
-        delete $hash->{TIMER}{$key};
-        my ($oname, $modifier) = split m{:}xms, $key;
-        setRegisteredInternalTimer($modifier, $tim, $callback, $hash);
-    }
-    return;
-}
 
 
 1;
