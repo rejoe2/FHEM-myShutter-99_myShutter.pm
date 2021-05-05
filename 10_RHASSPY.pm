@@ -1553,6 +1553,7 @@ sub getDeviceByIntentAndType {
     Log3($hash->{NAME}, 5, "matches in room: @{$matchesInRoom}, matches outside: @{$matchesOutsideRoom}");
     my ($response, $last_item, $first_items);
 
+    my @priority;
     # Erstes Device im passenden Raum zurückliefern falls vorhanden, sonst erstes Device außerhalb
     if ( @{$matchesInRoom} ) {
         if ( @{$matchesInRoom} == 1) {
@@ -1561,15 +1562,22 @@ sub getDeviceByIntentAndType {
             my @aliases;
             for my $dev (@{$matchesInRoom}) {
                 push @aliases, $hash->{helper}{devicemap}{devices}{$dev}->{alias};
+                if (defined $hash->{helper}{devicemap}{devices}{$dev}->{prio} && defined $hash->{helper}{devicemap}{devices}{$dev}{prio}->{inRoom}) {
+                    push @priority, $dev if $hash->{helper}{devicemap}{devices}{$dev}{prio}->{inRoom} =~ m{\b$type\b}xms;
+                }
             }
-            push @{$device}, join q{,}, @aliases;
-            $last_item = pop @aliases;
-            $first_items = join q{ }, @aliases;
-            $response = getResponse ($hash, 'RequestChoiceDevice');
-            $response =~ s{(\$\w+)}{$1}eegx;
-            unshift @{$device}, $response;
-            unshift @{$device}, $matchesInRoom->[0];
-            push @{$device}, 'RequestChoiceDevice';
+            if (@priority) { 
+                $device = shift @priority;
+            } else {
+                push @{$device}, join q{,}, @aliases;
+                $last_item = pop @aliases;
+                $first_items = join q{ }, @aliases;
+                $response = getResponse ($hash, 'RequestChoiceDevice');
+                $response =~ s{(\$\w+)}{$1}eegx;
+                unshift @{$device}, $response;
+                unshift @{$device}, $matchesInRoom->[0];
+                push @{$device}, 'RequestChoiceDevice';
+            }
         }
     } elsif ( @{$matchesOutsideRoom} ) { 
         if ( @{$matchesOutsideRoom} == 1 ) {
@@ -1578,30 +1586,44 @@ sub getDeviceByIntentAndType {
             my @rooms;
             for my $dev (@{$matchesOutsideRoom}) {
                 push @rooms, (split m{,}x, $hash->{helper}{devicemap}{devices}{$dev}->{rooms})[0];
+                if (defined $hash->{helper}{devicemap}{devices}{$dev}->{prio} && defined $hash->{helper}{devicemap}{devices}{$dev}{prio}->{outsideRoom}) {
+                    push @priority, $dev if $hash->{helper}{devicemap}{devices}{$dev}{prio}->{outsideRoom} =~ m{\b$type\b}xms;
+                }
             }
             @rooms = get_unique(\@rooms);
             if ( @rooms == 1 ) {
                 my @aliases;
                 for my $dev (@{$matchesOutsideRoom}) {
                     push @aliases, $hash->{helper}{devicemap}{devices}{$dev}->{alias};
+                    if (defined $hash->{helper}{devicemap}{devices}{$dev}->{prio} && defined $hash->{helper}{devicemap}{devices}{$dev}{prio}->{inRoom}) {
+                        unshift @priority, $dev if $hash->{helper}{devicemap}{devices}{$dev}{prio}->{inRoom} =~ m{\b$type\b}xms;
+                    }
                 }
-                push @{$device}, join q{,}, @aliases;
-                $last_item = pop @aliases;
-                $first_items = join q{ }, @aliases;
-                $response = getResponse ($hash, 'RequestChoiceDevice');
-                $response =~ s{(\$\w+)}{$1}eegx;
-                unshift @{$device}, $response;
-                unshift @{$device}, $matchesOutsideRoom->[0];
-                push @{$device}, 'RequestChoiceDevice';
+                if (@priority) { 
+                    $device = shift @priority;
+                } else {
+                    push @{$device}, join q{,}, @aliases;
+                    $last_item = pop @aliases;
+                    $first_items = join q{ }, @aliases;
+                    $response = getResponse ($hash, 'RequestChoiceDevice');
+                    $response =~ s{(\$\w+)}{$1}eegx;
+                    unshift @{$device}, $response;
+                    unshift @{$device}, $matchesOutsideRoom->[0];
+                    push @{$device}, 'RequestChoiceDevice';
+                }
             } else {
-                push @{$device}, join q{,}, @rooms;
-                $last_item = pop @rooms;
-                my $first_items = join q{ }, @rooms;
-                my $response = getResponse ($hash, 'RequestChoiceRoom');
-                $response =~ s{(\$\w+)}{$1}eegx;
-                unshift @{$device}, $response;
-                unshift @{$device}, $matchesOutsideRoom->[0];
-                push @{$device}, 'RequestChoiceRoom';
+                if (@priority) { 
+                    $device = shift @priority;
+                } else {
+                    push @{$device}, join q{,}, @rooms;
+                    $last_item = pop @rooms;
+                    my $first_items = join q{ }, @rooms;
+                    my $response = getResponse ($hash, 'RequestChoiceRoom');
+                    $response =~ s{(\$\w+)}{$1}eegx;
+                    unshift @{$device}, $response;
+                    unshift @{$device}, $matchesOutsideRoom->[0];
+                    push @{$device}, 'RequestChoiceRoom';
+                }
             }
         }
     }
@@ -4375,6 +4397,11 @@ yellow=rgb FFFF00</code></p>
         <p>Defaults to "0". If set, a rgb command will be issued, even if the device is capable to handle hue commands.</p>
         <p>Example:</p>
         <p><code>attr lamp1 rhasspySpecials colorForceHue2rgb:1</code></p>
+      </li>
+      <li><b>priority</b>
+        <p>Keywords <i>inRoom</i> and <i>outsideRoom</i> can be used, each followed by comma separated types to give priority in <i>GetNumeric</i>. This may eleminate requests in case of several possible devices or rooms to deliver requested info type.</p>
+        <p>Example:</p>
+        <p><code>attr sensor_outside_main rhasspySpecials priority:inRoom=temperature outsideRoom=temperature,humidity,pressure</code></p>
       </li>
     </ul>
   </li>
