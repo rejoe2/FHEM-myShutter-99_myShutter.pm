@@ -335,7 +335,7 @@ sub Define {
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.13';
+    $hash->{MODULE_VERSION} = '0.4.14';
     $hash->{baseUrl} = $Rhasspy;
     #$hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
@@ -700,7 +700,7 @@ sub initialize_rhasspyTweaks {
             $hash->{helper}{tweaks}{$tweak} = [@test];
             next;
         }
-
+=pod
         if ($line =~ m{\A[\s]*timerSounds[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
@@ -710,8 +710,8 @@ sub initialize_rhasspyTweaks {
             $hash->{helper}{tweaks}{$tweak} = $namedParams;
             next;
         }
-
-        if ($line =~ m{\A[\s]*useGenericAttrs[\s]*=}x) {
+=cut
+        if ($line =~ m{\A[\s]*(timeouts|useGenericAttrs|timerSounds)[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
             return "Error in $line! No content provided!" if !length $values && $init_done;
@@ -884,6 +884,22 @@ sub _analyze_rhassypAttr {
         }
     }
 
+    #Hash mit {FHEM-Device-Name}{$intent}{$type}?
+    my $mappingsString = AttrVal($device, "${prefix}Mapping", q{});
+    for (split m{\n}x, $mappingsString) {
+        my ($key, $val) = split m{:}x, $_, 2;
+        #$key = lc($key);
+        #$val = lc($val);
+        my %currentMapping = splitMappingString($val);
+        next if !%currentMapping;
+        # Übersetzen, falls möglich:
+        $currentMapping{type} = 
+            defined $currentMapping{type} ?
+            $de_mappings->{ToEn}->{$currentMapping{type}} // $currentMapping{type} // $key
+            : $key;
+        $hash->{helper}{devicemap}{devices}{$device}{intents}{$key}->{$currentMapping{type}} = \%currentMapping;
+    }
+
     #Specials
     my @lines = split m{\n}x, AttrVal($device, "${prefix}Specials", q{});
     for my $line (@lines) {
@@ -927,22 +943,11 @@ sub _analyze_rhassypAttr {
             $hash->{helper}{devicemap}{devices}{$device}{prio}{inRoom} = $named->{inRoom} if defined $named->{inRoom};
             $hash->{helper}{devicemap}{devices}{$device}{prio}{outsideRoom} = $named->{outsideRoom} if defined $named->{outsideRoom};
         }
-    }
-
-    #Hash mit {FHEM-Device-Name}{$intent}{$type}?
-    my $mappingsString = AttrVal($device, "${prefix}Mapping", q{});
-    for (split m{\n}x, $mappingsString) {
-        my ($key, $val) = split m{:}x, $_, 2;
-        #$key = lc($key);
-        #$val = lc($val);
-        my %currentMapping = splitMappingString($val);
-    next if !%currentMapping;
-        # Übersetzen, falls möglich:
-        $currentMapping{type} = 
-            defined $currentMapping{type} ?
-            $de_mappings->{ToEn}->{$currentMapping{type}} // $currentMapping{type} // $key
-            : $key;
-        $hash->{helper}{devicemap}{devices}{$device}{intents}{$key}->{$currentMapping{type}} = \%currentMapping;
+        if ( $key eq 'scenes' && defined $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene} ) {
+            my($unnamed, $named) = parseParams($val);
+            my $combined = _combineHashes( $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene}, $named);
+            $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene} = $combined;
+        }
     }
 
     my @groups;
@@ -1028,7 +1033,7 @@ sub _analyze_genDevType {
             $currentMapping->{SetNumeric} = {
                 brightness => { cmd => 'brightness', currentVal => 'brightness', maxVal => '255', minVal => '0', step => '10', map => 'percent', type => 'brightness'}};
         }
-        $currentMapping = _analyze_genDevType_setter( $allset, $currentMapping );
+        $currentMapping = _analyze_genDevType_setter( $allset, $currentMapping, $device );
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
     elsif ( $gdt eq 'thermostat' ) {
@@ -1083,7 +1088,7 @@ sub _analyze_genDevType {
             GetNumeric => { 'volume' => {currentVal => 'volume', type => 'volume' } }
             };
 
-        $currentMapping = _analyze_genDevType_setter( $allset, $currentMapping );
+        $currentMapping = _analyze_genDevType_setter( $hash, $device, $allset, $currentMapping );
         $hash->{helper}{devicemap}{devices}{$device}{intents} = $currentMapping;
     }
 
@@ -1091,7 +1096,9 @@ sub _analyze_genDevType {
 }
 
 sub _analyze_genDevType_setter {
-    my $setter = shift;
+    my $hash    = shift;
+    my $device  = shift;
+    my $setter  = shift;
     my $mapping = shift // {};
 
     my $allValMappings = {
@@ -1136,8 +1143,15 @@ sub _analyze_genDevType_setter {
             }
         }
     }
+
+    if ($setter =~ m{\bscene:(?<scnames>[\S]+)}xm) {
+        for my $scname (split m{,}xms, $+{scnames}) {
+            $mapping->{SetScene}->{SetScene}->{$scname} = $scname;
+        }
+    }
     return $mapping;
 }
+
 
 sub perlExecute {
     my $hash   = shift // return;
@@ -1224,65 +1238,6 @@ sub setDialogTimeout {
 
     return $toTrigger;
 }
-
-
-=pod
-sub RHASSPY_ChoiceTimeout{
-    my $hash     = shift // return;
-    my $data     = shift // return;
-    my $timeout  = shift;
-    my $response = shift;
-
-    my $siteId = $data->{siteId};
-
-    #timeout Case
-    if (!defined $mode) {
-        RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
-        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
-        #Beta-User: we may need to start a new session first?
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
-        #delete $hash->{helper}{'.delayed'};
-        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'false');
-        return;
-    }
-
-    #cancellation Case
-    if ( $mode == 1 ) {
-        RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
-        $response = $hash->{helper}{lng}->{responses}->{ defined $hash->{helper}{'.delayed'} ? 'DefaultCancelConfirmation' : 'SilentCancelConfirmation' };
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
-        #delete $hash->{helper}{'.delayed'};
-        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'false');
-        return $hash->{NAME};
-    }
-    if ( $mode == 2 ) {
-        RemoveInternalTimer( $hash, \&RHASSPY_DialogTimeout );
-        #$hash->{helper}{'.delayed'} = $data;
-        $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
-
-        InternalTimer(time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
-
-        #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
-        my $ca_string = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
-        my $reaction = ref $response eq 'HASH' 
-            ? $response
-            : { text         => $response, 
-                intentFilter => ["$ca_string"],
-                customData => $data
-              };
-
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-        configure_DialogManager($hash, $siteId, 'ConfirmAction', 'true');
-
-        my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
-        delete $hash->{'.toTrigger'};
-
-        return $toTrigger;
-    }
-    
-    return $hash->{NAME};
-}
-=cut
 
 #from https://stackoverflow.com/a/43873983, modified...
 sub get_unique {
@@ -1447,6 +1402,10 @@ sub getAllRhasspyGroups {
         }
     }
     return get_unique(\@groups, 1);
+}
+
+sub getAllRhasspyScenes {
+    return;
 }
 
 # Derive room info from spoken text, siteId or additional logics around siteId
@@ -2301,6 +2260,7 @@ sub updateSlots {
     my @colors    = getAllRhasspyColors($hash);
     my @types     = getAllRhasspyTypes($hash);
     my @groups    = getAllRhasspyGroups($hash);
+    my @scenes    = getAllRhasspyScenes($hash);
     my @shortcuts = keys %{$hash->{helper}{shortcuts}};
 
     if ($noEmpty) { 
@@ -2311,16 +2271,24 @@ sub updateSlots {
         @types     = ('') if !@types;
         @groups    = ('') if !@groups;
         @shortcuts = ('') if !@shortcuts;
+        @scenes    = ('') if !@scenes;
     }
 
-
     my $deviceData;
+    my $url = q{/api/sentences};
 
     if (@shortcuts) {
-        my $url = q{/api/sentences};
         $deviceData =qq({"intents/${language}.${fhemId}.Shortcuts.ini":"[${language}.${fhemId}:Shortcuts]\\n);
-        for (@shortcuts)
-        {
+        for (@shortcuts) {
+            $deviceData = $deviceData . ($_) . '\n';
+        }
+        $deviceData = $deviceData . '"}';
+        Log3($hash->{NAME}, 5, "Updating Rhasspy Sentences with data: $deviceData");
+        _sendToApi($hash, $url, $method, $deviceData);
+    }
+    if (@scenes) {
+        $deviceData =qq({"intents/${language}.${fhemId}.SetScene.ini":"[${language}.${fhemId}:SetScene]\\n);
+        for (@scenes) {
             $deviceData = $deviceData . ($_) . '\n';
         }
         $deviceData = $deviceData . '"}';
@@ -2568,18 +2536,25 @@ sub handleCustomIntent {
     my $cmd = qq{ $subName( $args ) };
     Log3($hash->{NAME}, 5, "Calling sub: $cmd" );
     my $error = AnalyzePerlCommand($hash, $cmd);
+    my $timeout = 20;
+    if ( ref $error eq 'HASH' || ref ${$error}[0] eq 'HASH') {
+        $timeout = $hash->{helper}{tweaks}{timeouts}->{default} 
+            if defined $hash->{helper}->{tweaks} 
+            && defined $hash->{helper}{tweaks}->{timeouts} 
+            && defined $hash->{helper}{tweaks}{timeouts}->{default} 
+            && looks_like_number( $hash->{helper}{tweaks}{timeouts}->{default} );
+    }
+
     if ( ref $error eq 'ARRAY' ) {
         $response = ${$error}[0] // getResponse($hash, 'DefaultConfirmation');
         if ( ref ${$error}[0] eq 'HASH') {
-            my $timeout = ${$error}[1];
-            $timeout = defined $timeout && looks_like_number($timeout) ? $timeout : 20;
-            $hash->{'.toTrigger'} = ${$error}[1] if defined ${$error}[1];
+            $timeout = ${$error}[1] if looks_like_number( ${$error}[1] );
             return setDialogTimeout($hash, $data, $timeout, ${$error}[0]);
         }
         respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
         return ${$error}[1]; #comma separated list of devices to trigger
     } elsif ( ref $error eq 'HASH' ) {
-        return setDialogTimeout($hash, $data, 20, $error);
+        return setDialogTimeout($hash, $data, $timeout, $error);
     } else {
         $response = $error; # if $error && $error !~ m{Please.define.*first}x;
     }
