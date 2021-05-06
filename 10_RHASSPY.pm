@@ -343,7 +343,7 @@ sub Define {
     $hash->{devspec} = $h->{devspec} // q{room=Rhasspy};
     $hash->{fhemId} = $h->{fhemId} // q{fhem};
     #$hash->{baseId} = $h->{baseId} // q{default};
-    initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || $hash->{prefix} ne $h->{prefix};
+    initialize_prefix($hash, $h->{prefix}) if !defined $hash->{prefix} || defined $h->{prefix} && $hash->{prefix} ne $h->{prefix};
     $hash->{prefix} = $h->{prefix} // q{rhasspy};
     $hash->{encoding} = $h->{encoding} // q{utf8};
     $hash->{useGenericAttrs} = $h->{useGenericAttrs} // 1;
@@ -1761,7 +1761,7 @@ sub splitMappingString {
 
         $lastChar = $char;
     }
-    push @tokens, $token if length $token;
+    push @tokens, $token if length $token > 2 && $token =~ m{=}xms;
 
     # Tokens in Keys/Values trennen
     %parsedMapping = map {split m{=}x, $_, 2} @tokens; #Beta-User: Odd number of elements in hash assignment
@@ -1788,7 +1788,7 @@ sub getMapping {
     my $matchedMapping;
 
     if ($fromHash) {
-        $matchedMapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType};
+        $matchedMapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType} if defined $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType};
         return $matchedMapping if $matchedMapping;
         
         for (sort keys %{$hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}}) {
@@ -3089,7 +3089,7 @@ sub handleIntentGetNumeric {
     my $location = $data->{Device};
     if ( !defined $location ) {
         my $rooms = $hash->{helper}{devicemap}{devices}{$device}->{rooms};
-        $location = $data->{Room} if defined $rooms && $rooms =~ m{\b$data->{Room}\b}ix;
+        $location = $data->{Room} if defined $data->{Room} && defined $rooms && $rooms =~ m{\b$data->{Room}\b}ix;
 
         #Beta-User: this might be the place to implement the "no device in room" branch
         ($location, my $nn) = split m{,}x, $rooms if !defined $location;
@@ -3191,7 +3191,7 @@ sub handleIntentMediaControls {
                     stop => 'cmdStop', vor => 'cmdFwd', next => 'cmdFwd',
                     'zurück' => 'cmdBack', previous => 'cmdBack'
                 };
-                $cmd = $mapping->{ $Media->{$command} };
+                $cmd = $mapping->{ $Media->{$command} } if defined $mapping->{ $Media->{$command} };
                 Log3($hash->{NAME}, 4, "MediaControls with outdated mapping $command called. Please change to avoid future problems...");
             }
 
