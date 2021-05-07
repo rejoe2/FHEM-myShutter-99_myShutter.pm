@@ -1429,6 +1429,25 @@ sub getAllRhasspyScenes {
     return (\@sentences, \@names);
 }
 
+
+sub getAllRhasspyNamesAndGroupsByIntent {
+    my $hash = shift // return;
+    my $intent = shift // return;
+
+    my @names;
+    my @groups;
+    for my $device (devspec2array($hash->{devspec})) {
+        next if !defined $hash->{helper}{devicemap}{devices}{$device}{intents}->{$intent};
+        push @names, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{names}; 
+        push @groups, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{groups}; 
+    }
+
+    @names  = uniq(@names);
+    @groups = uniq(@groups);
+    return (\@names, \@groups);
+}
+
+
 # Derive room info from spoken text, siteId or additional logics around siteId
 sub getRoomName {
     my $hash = shift // return;
@@ -2349,6 +2368,12 @@ sub updateSlots {
         @aliases = get_unique(\@aliases);
         @aliases = ('') if !@aliases && $noEmpty;
         $deviceData->{qq(${language}.${fhemId}.Aliases)} = \@aliases if @aliases;
+    }
+
+    for (qw(SetNumeric SetOnOff GetNumeric GetOnOff MediaControls Status)) {
+        my ($alias, $grps) = getAllRhasspyNamesAndGroupsByIntent($hash, $_);
+        $deviceData->{qq(${language}.${fhemId}.Device-$_)} = $alias if @{$alias} || $noEmpty;
+        $deviceData->{qq(${language}.${fhemId}.Group-$_)}  = $grps  if @{$grps}  || $noEmpty;
     }
 
     my @allKeywords = uniq(@groups, @rooms, @devices);
