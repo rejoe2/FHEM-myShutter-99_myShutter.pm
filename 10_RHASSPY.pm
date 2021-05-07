@@ -700,17 +700,7 @@ sub initialize_rhasspyTweaks {
             $hash->{helper}{tweaks}{$tweak} = [@test];
             next;
         }
-=pod
-        if ($line =~ m{\A[\s]*timerSounds[\s]*=}x) {
-            ($tweak, $values) = split m{=}x, $line, 2;
-            $tweak = trim($tweak);
-            return "Error in $line! No content provided!" if !length $values && $init_done;
-            my($unnamedParams, $namedParams) = parseParams($values);
-            return "Error in $line! Provide at least one key-value pair!" if ( @{$unnamedParams} || !keys %{$namedParams} ) && $init_done;
-            $hash->{helper}{tweaks}{$tweak} = $namedParams;
-            next;
-        }
-=cut
+
         if ($line =~ m{\A[\s]*(timeouts|useGenericAttrs|timerSounds)[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
@@ -2373,8 +2363,10 @@ sub updateSlots {
     for (qw(SetNumeric SetOnOff GetNumeric GetOnOff MediaControls GetState)) {
         my ($alias, $grps) = getAllRhasspyNamesAndGroupsByIntent($hash, $_);
         $deviceData->{qq(${language}.${fhemId}.Device-$_)} = $alias if @{$alias} || $noEmpty;
-        $deviceData->{qq(${language}.${fhemId}.Group-$_)}  = $grps  if @{$grps}  || $noEmpty;
+        $deviceData->{qq(${language}.${fhemId}.Group-$_)}  = $grps  if (@{$grps}  || $noEmpty) 
+                                                                        && ( $_ eq 'SetOnOff' || $_ eq 'SetNumeric' );
     }
+
 
     my @allKeywords = uniq(@groups, @rooms, @devices);
 
