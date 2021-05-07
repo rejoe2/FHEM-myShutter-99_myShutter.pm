@@ -946,7 +946,12 @@ sub _analyze_rhassypAttr {
         if ( $key eq 'scenes' && defined $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene} ) {
             my($unnamed, $named) = parseParams($val);
             my $combined = _combineHashes( $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene}, $named);
-            $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene} = $combined;
+            for (keys %{$combined}) {
+                delete $combined->{$_} if $combined->{$_} eq 'none';
+            }
+            keys %{$combined} ?
+                $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene} = $combined
+                : delete $hash->{helper}{devicemap}{devices}{$device}{intents}->{SetScene};
         }
     }
 
@@ -2061,6 +2066,7 @@ my $dispatchFns = {
     MediaChannels   => \&handleIntentMediaChannels,
     SetColor        => \&handleIntentSetColor,
     SetColorGroup   => \&handleIntentSetColorGroup,
+    SetScene        => \&handleIntentSetScene,
     GetTime         => \&handleIntentGetTime,
     GetWeekday      => \&handleIntentGetWeekday,
     SetTimer        => \&handleIntentSetTimer,
@@ -3197,6 +3203,41 @@ sub handleIntentMediaControls {
     return $device;
 }
 
+# Handle incoming "SetScene" intents
+sub handleIntentSetScene{
+    my $hash = shift // return;
+    my $data = shift // return;
+    my ($scene, $device, $room, $siteId, $mapping, $response);
+
+    Log3($hash->{NAME}, 5, "handleIntentSetScene called");
+    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !defined $data->{Scene};
+
+    # Device AND Scene are optimum exist
+    if ( !exists $data->{Device} ) {
+        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound'));
+    } else {
+        $room = getRoomName($hash, $data);
+        $scene = $data->{Scene};
+        $device = getDeviceByName($hash, $room, $data->{Device});
+        $mapping = getMapping($hash, $device, 'SetScene', undef, defined $hash->{helper}{devicemap});
+
+        # Mapping found?
+        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !$device || !defined $mapping;
+        my $cmd = qq(scene $scene);
+
+        # execute Cmd
+        analyzeAndRunCmd($hash, $device, $cmd);
+        Log3($hash->{NAME}, 5, "Running command [$cmd] on device [$device]" );
+
+        # Define response
+        $response = $mapping->{response} // getResponse($hash, 'DefaultConfirmation');
+    }
+
+    # Send response
+    $response = $response  // getResponse($hash, 'DefaultError');
+    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return $device;
+}
 
 # Handle incoming "GetTime" intents
 sub handleIntentGetTime {
