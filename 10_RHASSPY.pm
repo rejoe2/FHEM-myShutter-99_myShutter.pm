@@ -674,9 +674,9 @@ sub init_shortcuts {
         if ( defined $named->{c} ) {
             $hash->{helper}{shortcuts}{$intent}{conf_req} = !looks_like_number($named->{c}) ? $named->{c} : 'default';
             if (defined $named->{ct}) {
-                $hash->{helper}{shortcuts}{$intent}{conf_timeout} = looks_like_number($named->{ct}) ? $named->{ct} : 15;
+                $hash->{helper}{shortcuts}{$intent}{conf_timeout} = looks_like_number($named->{ct}) ? $named->{ct} : _getDialogueTimeout($hash, 'confirm');
             } else {
-                $hash->{helper}{shortcuts}{$intent}{conf_timeout} = looks_like_number($named->{c}) ? $named->{c} : 15;
+                $hash->{helper}{shortcuts}{$intent}{conf_timeout} = looks_like_number($named->{c}) ? $named->{c} : _getDialogueTimeout($hash, 'confirm');
             }
         }
     }
@@ -2370,7 +2370,7 @@ sub updateSlots {
         $deviceData->{qq(${language}.${fhemId}.Aliases)} = \@aliases if @aliases;
     }
 
-    for (qw(SetNumeric SetOnOff GetNumeric GetOnOff MediaControls Status)) {
+    for (qw(SetNumeric SetOnOff GetNumeric GetOnOff MediaControls GetState)) {
         my ($alias, $grps) = getAllRhasspyNamesAndGroupsByIntent($hash, $_);
         $deviceData->{qq(${language}.${fhemId}.Device-$_)} = $alias if @{$alias} || $noEmpty;
         $deviceData->{qq(${language}.${fhemId}.Group-$_)}  = $grps  if @{$grps}  || $noEmpty;
@@ -2578,14 +2578,7 @@ sub handleCustomIntent {
     my $cmd = qq{ $subName( $args ) };
     Log3($hash->{NAME}, 5, "Calling sub: $cmd" );
     my $error = AnalyzePerlCommand($hash, $cmd);
-    my $timeout = 20;
-    if ( ref $error eq 'HASH' || ref ${$error}[0] eq 'HASH') {
-        $timeout = $hash->{helper}{tweaks}{timeouts}->{default} 
-            if defined $hash->{helper}->{tweaks} 
-            && defined $hash->{helper}{tweaks}->{timeouts} 
-            && defined $hash->{helper}{tweaks}{timeouts}->{default} 
-            && looks_like_number( $hash->{helper}{tweaks}{timeouts}->{default} );
-    }
+    my $timeout = _getDialogueTimeout($hash);
 
     if ( ref $error eq 'ARRAY' ) {
         $response = ${$error}[0] // getResponse($hash, 'DefaultConfirmation');
@@ -3078,7 +3071,7 @@ sub handleIntentGetNumeric {
         my $toActivate = $choice eq 'RequestChoiceDevice' ? [qw(ChoiceDevice CancelAction)] : [qw(ChoiceRoom CancelAction)];
         $device = $first;
         Log3($hash->{NAME}, 5, "More than one device possible, response is $response, first is $first, all are $all, type is $choice");
-        return setDialogTimeout($hash, $data, 20, $response, $toActivate);
+        return setDialogTimeout($hash, $data, _getDialogueTimeout($hash), $response, $toActivate);
     }
 
     my $mapping = getMapping($hash, $device, 'GetNumeric', { type => $type, subType => $subType }, defined $hash->{helper}{devicemap}, 0)
@@ -3983,6 +3976,20 @@ sub _readLanguageFromFile {
     return 0, join q{ }, @cleaned;
 }
 
+sub _getDialogueTimeout {
+    my $hash = shift // return;
+    my $type = shift // q{default};
+
+    my $timeout = $type eq 'confirm' ? 15 : 20;
+    $timeout = $hash->{helper}{tweaks}{timeouts}->{$type} 
+        if defined $hash->{helper}->{tweaks} 
+        && defined $hash->{helper}{tweaks}->{timeouts} 
+        && defined $hash->{helper}{tweaks}{timeouts}->{$type} 
+        && looks_like_number( $hash->{helper}{tweaks}{timeouts}->{$type} );
+    return $timeout;
+}
+
+
 # borrowed from Twilight
 ################################################################################
 ################################################################################
@@ -4342,6 +4349,12 @@ i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code><
         <p><code>overwrite_all=false</code></p>
         <p>By default, RHASSPY will overwrite all generated slots. Setting this to <i>false</i> will change this.</p>
       </li>
+      <li><b>timeouts</b>
+        <p>Atm. keywords <i>confirm</i> and/or <i>default</i> can be used to change the corresponding defaults (15 seconds / 20 seconds) used for dialogue timeouts.</p>
+        <p>Example:</p>
+        <p><code>timeouts: confirm=25 default=30</code></p>
+      </li>
+
     </ul>
   </li>
 
