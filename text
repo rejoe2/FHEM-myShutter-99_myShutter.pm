@@ -1,0 +1,63 @@
+"5 Dinge, die ich an FHEM nicht mag" - eine Diskussion
+
+Dies ist der Versuch, die von verschiedenen Seiten geäußerten Kritikpunkte mal zu sammeln und - soweit das möglich ist, es handelt sich ja bei "mögen" teils schlicht um Geschmacksfragen - mal "objektiv" zu bewerten.
+
+Neben den - hoffentlich in der Knappheit korrekt zitierten - besagten "5 Dinge" finden sich hier auch andere Punkte, die von der einen oder anderen Seite immer mal wieder als Kritik oder zumindest mit kritischem Unterton geäußert werden.
+
+Um es vorneweg auch deutlich zu betonen: Das ist - wie die indirekt hier zitierten Stellen auch (!) - eine individuelle Sammlung und Bewertung, die weder für sich in Anspruch nimmt, vollständig zu sein, noch in der fachlichen Bewertung korrekt. Wer es also besser weiß oder andere Meinungen dazu hat, darf diese gerne kundtun. 
+So kann dieser Thread ggf. neben Popcorn ggf. auch helfen, dass der eine oder andere Argumente zur Hand hat, falls er mal wieder gefragt wird, warum er denn noch nicht woandershin gewechselt ist, wie der eine oder andere populäre Videoblogger, über den er vielleicht zur Hausautomatisierung und FHEM gekommen ist... 
+
+Jetzt erst mal die "Dinge" - ich formuliere das mal als "Thesen"
+
+1. These: Das Design ist nicht mehr zeitgemäß
+Sowohl die Präsentation des Projekts auf fhem.de wie auch der default skin einer frischen FHEM-Installation sind wenig ansprechend und auf dem Stand der 90-er Jahre (oder so). 
+
+2. These: Design-Anpassungen sind unmöglich
+Das framework FHEMWEB ist starr, Anpassungen sind nicht oder nur mit großem Aufwand zu machen
+
+3. These: In der Modulentwicklung ist keine Zusammenarbeit erwünscht
+Die Nutzung von svn erschwert die Zusammenarbeit zwischen verschiedenen Entwicklern in der Modulentwicklung, moderne Formen der Zusammenarbeit sind mit mit dem eingesetzten Toolset (svn) nicht möglich.
+
+4. These: FHEM mit seiner Unzahl an Modulen verschwendet Ressourcen
+Alles, was in FHEM und contrib liegt, wird automatisch mit geladen, selbt wenn man nur eine kleine Anzahl der vielen Module nutzt. Das kostet Performance und macht FHEM langsamer.
+
+5. These: svn bringt nur Nachteile 
+Man kocht lieber sein eigenes Süppchen, ein Wechsel zu einer großen Plattform wie github wird das Projekt bereichern. Dann würden mehr Entwickler mitmachen wollen und die Software immer besser.
+ 
+
+Weitere Punkte:
+- Single-Thread ist schlechter als Multi-Thread
+- der Einstieg ist vergleichsweise schwer
+- es fehlt eine Cloud-Anbindung
+- die Community ist arrogant
+- es gibt kein Paketmanagement: Man weiß bei Installation eines Moduls nicht, welche Zusatz-Software benötigt wird.
+
+
+Zur These 1:
+Korrekt, der Web-Auftritt ist ... na ja, nennen wir es "eher informationsorientiert" und beim ersten Aufrufen einer Installation sehen andere Lösungen "luftiger" und irgendwie zeitgemäßer aus. f18 hat an der Stelle zwar einige Verbesserungen gebracht, aber man merkt FHEMWEB an, dass die Webseiten, die es ausliefert in der Tat eher zur Administration gedacht sind und FHEM "solo" im allgemeinen eher dazu gemacht und gedacht ist, im Hintergrund still vor sich hin zu laufen, und weniger als "moderne Fernbedienung" für den Elektrozoo konzipiert ist.
+Sobald es aber daran geht, Dinge zu kofigurieren, sind jedenfalls manche andere "zeitgemäße" Lösungen auch schnell auf dem Boden der Tatsachen. Wer schon mal yaml-Files editiert hat, findet das vermutlich auch nicht besser, als FHEM-defines einzutippen und den Rest via FHEMWEB zu konfigurieren.
+
+Wer auf "hübsche Oberflächen" aus ist, kann das aber durchaus mit FLOORPLAN (na ja, zugegeben: nicht mein Favorit), FTUI bzw. FUIP & Co. und FhemNative oder - seit neuestem - FHEMApp erreichen. FHEM bietet dabei zudem (u.a. für FHMWEB) auch noch sowas wie ein Berechtigungskonzept via allowed, auch wenn das vermutlich eher eine Minderheit nutzt. Keine Ahnung, ob andere da mithalten können? 
+
+Zur 2. These:
+Ähm, wo war nochmal der Unterschied zu Teil 2 von These 1...?
+Na ja, man kann das FHEMWEB-framework mit css etc. in der Tat verbiegen, und vermutlich ist es richtig, dass das nicht so einfach geht. Aber mal ehrlich: wer will das noch, wenn er mal mit FUIP gespielt hat....?
+
+Zur 3. These:
+Ja, diffs im Forum anzuhängen ist gewöhnungsbedürftig. Fand ich schon immer, auch schon zu Zeiten, als ich nicht eine Zeile Perl-Code verstanden habe und keine Ahnung hatte, wie man sowas herstellt. 
+Ich habe mich allerdings als "normaler user" auch nicht darum geschehrt, für meinen eigenen (Arduino-) Kram irgendwo bei github ein Repo aufgemacht und mir dann immer mal wieder was zerschossen, weil ich (natürlich) auch keine Ahnung hatte (und weiter habe), wie es damit richtig geht. Ich habe via github dann bei diversen Projekten in der Tat dann im Verlauf der Zeit auch versucht, das eine oder andere an Patch einzureichen, was aber a) auch schei.. umständlich war, weil ich erst mal eine Unzahl an "Formularen" ausfüllen musste, um die 3 Zeilen Code an den Mann zu bringen und b) habe ich im einen oder anderen Fall das dann schlicht gelassen, weil es mir zu viel war... Kurz: Für "Gelegenheitsweltverbesserer" sind alle Wege steinig, und ein diff anzupinnen ist dabei nicht der schlechteste aller möglichen Wege...
+Das Problem ist mAn. ein anderes, denn wer will, kann ja durchaus außerhalb des svn neue Modulversionen erproben, entwickeln, und mit den von ihm bevorzugten Methoden arbeiten, und dann irgendwann wieder einen hoffentlich funktionalen Zwischenstand ins svn schubsen. (Wer das nicht kennt: Die "fachliche Hürde" zur Anwendung der svn-Tools ist kaum unterschiedlich zu den git-Kommandos.)
+Nein, das Problem ist etwas anders gelagert, und an der Stelle springen wir kurz zu These 5: Jeder Maintainer ist für ein Modul verantwortlich, und "darf" daher auch darüber entscheiden, auf welche Weise er gerne Vorschläge entgegennimmt, und wie aktiv er seine Module pflegt. Wer mehr dazu lesen oder schreiben will, ist vielleicht hier gut aufgehoben: https://forum.fhem.de/index.php/topic,120005.msg1144616.html#msg1144616
+
+Zur 4. These:
+Da wäre zuerst zu fragen, was eigentlich gemeint ist?
+Ja, FHEM bringt im Auslieferungszustand erst mal alle Module mit, das ganze sind aktuell knapp unter 200 MB (meine Testinstallation derzeit z.B. konkret: ca. 193 MB (202.571.776 Bytes)). Früher hätte das "für ein Leben lang" zum Speichern von Daten gereicht, heute ist es eher in der Nähe eines Witzes (für den Funktionsumfang), denn die kleinste handelsübliche SD-Karte gibt es kaum noch unter 16-32 GB... 
+Ergo habe ich Schwierigkeiten zu glauben, dass das gemeint sein soll.
+Na ja, da war auch noch was von "geladen" und "kostet Performance" zu vernehmen. Ah, es geht also um Ressourcen im laufenden Betrieb. Klingt nach Hauptspeicher? 
+Nun weiß ich aber mit einiger Sicherheit, dass fhem.pl beim Starten (fast) nur lädt, was einem bestimmten Dateinamens-Schema entspricht oder per define an Modul ausdrücklich in der Konfiguration genannt ist. Das ist aber sehr viel weniger und nicht "alles". Auch mein Hauptspeicherverbrauch liegt typischerweise unter den 200 MB, was auch "so gut wie nichts" ist (dto. für die Prozessorlast). Das kann also eigentlich auch nicht gemeint sein, oder?
+Na ja, vielleicht kann mir einer erklären, was gemeint ist...
+
+Zurück zur 5. These:
+Zu git vs. svn hatte ich ja schon was geschrieben, und zur Frage, ob es "einladender" wäre, wenn FHEM (ausschließlich) bei einem der großen Hoster laufen würde, kann ich wenig beitragen, ich bin nur "Gelegenheitsmaintainer". Ich habe meine Zweifel, denn wie gesagt - das "Problem" ist ein anderes: Die Weiterentwicklung eines einzelnen Moduls liegt bei FHEM ausdrücklich jeweils in der Verantwortung einer einzelnen Person. Die kann aktiv sein, oder eben im schlimmsten Fall gar nicht erreichbar sein. Aber die Regeln sind klar: Es gibt einen Verantwortlichen, und dessen Module tastet man als anderer Maintainer nicht (ungefragt) im svn an.
+Ich weiß nicht, wie das in anderen Projekten läuft, aber ich habe den dringenden Verdacht, dass es gerade dieses Prinzip ist, das dazu führt, dass FHEM sehr stabil läuft, und es überzeugt mich nicht, wenn es dann im Ausgleich dazu sinngemäß heißt, "na ja, wenn mal ein Adapter abstürzt, ist das nicht so schlimm, der startet sich dann auch wieder automatisch..."
+Von daher bin ich ein 
