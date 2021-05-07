@@ -1405,7 +1405,23 @@ sub getAllRhasspyGroups {
 }
 
 sub getAllRhasspyScenes {
-    return;
+    my $hash = shift // return;
+    
+    my @devices = devspec2array($hash->{devspec});
+    
+    my (@sentences, @names);
+    for my $device (@devices) {
+        next if !defined $hash->{helper}{devicemap}{devices}{$device}{intents}->{SetScene};
+        push @names, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{names}; 
+        my $scenes = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene};
+        for (keys %{$scenes}) {
+            push @sentences, qq{( $scenes->{$_} ){Scence:$_}};
+        }
+    }
+
+    @sentences = get_unique(\@sentences);
+    @names = get_unique(\@names);
+    return (\@sentences, \@names);
 }
 
 # Derive room info from spoken text, siteId or additional logics around siteId
@@ -2260,7 +2276,8 @@ sub updateSlots {
     my @colors    = getAllRhasspyColors($hash);
     my @types     = getAllRhasspyTypes($hash);
     my @groups    = getAllRhasspyGroups($hash);
-    my @scenes    = getAllRhasspyScenes($hash);
+    my ($scenes,
+        $scdevs)  = getAllRhasspyScenes($hash);
     my @shortcuts = keys %{$hash->{helper}{shortcuts}};
 
     if ($noEmpty) { 
@@ -2271,7 +2288,8 @@ sub updateSlots {
         @types     = ('') if !@types;
         @groups    = ('') if !@groups;
         @shortcuts = ('') if !@shortcuts;
-        @scenes    = ('') if !@scenes;
+        #$scenes    = []   if !@{$scenes};
+        #$scdevs    = []   if !@{$scdevs};
     }
 
     my $deviceData;
@@ -2286,23 +2304,14 @@ sub updateSlots {
         Log3($hash->{NAME}, 5, "Updating Rhasspy Sentences with data: $deviceData");
         _sendToApi($hash, $url, $method, $deviceData);
     }
-    if (@scenes) {
-        $deviceData =qq({"intents/${language}.${fhemId}.SetScene.ini":"[${language}.${fhemId}:SetScene]\\n);
-        for (@scenes) {
-            $deviceData = $deviceData . ($_) . '\n';
-        }
-        $deviceData = $deviceData . '"}';
-        Log3($hash->{NAME}, 5, "Updating Rhasspy Sentences with data: $deviceData");
-        _sendToApi($hash, $url, $method, $deviceData);
-    }
-
+    
     # If there are any devices, rooms, etc. found, create JSON structure and send it the the API
     return if !@devices && !@rooms && !@channels && !@types && !@groups;
 
     my $json;
     $deviceData = {};
     my $overwrite = defined $tweaks && defined $tweaks->{overwrite_all} ? $tweaks->{useGenericAttrs}->{overwrite_all} : 'true';
-    my $url = qq{/api/slots?overwrite_all=$overwrite};
+    $url = qq{/api/slots?overwrite_all=$overwrite};
 
     my @gdts = (qw(switch light media blind thermostat thermometer));
     my @aliases = ();
@@ -2344,8 +2353,10 @@ sub updateSlots {
     $deviceData->{qq(${language}.${fhemId}.Color)}         = \@colors if @colors;
     $deviceData->{qq(${language}.${fhemId}.NumericType)}   = \@types if @types;
     $deviceData->{qq(${language}.${fhemId}.Group)}         = \@groups if @groups;
+    $deviceData->{qq(${language}.${fhemId}.Scenes)}        = $scenes if @{$scenes};
+    $deviceData->{qq(${language}.${fhemId}.Device-scene)}  = $scdevs if @{$scdevs};
     $deviceData->{qq(${language}.${fhemId}.AllKeywords)}   = \@allKeywords if @allKeywords;
-
+    
     $json = eval { toJSON($deviceData) };
 
     Log3($hash->{NAME}, 5, "Updating Rhasspy Slots with data ($language): $json");
@@ -4411,3 +4422,4 @@ yellow=rgb FFFF00</code></p>
 
 =end html
 =cut
+    
