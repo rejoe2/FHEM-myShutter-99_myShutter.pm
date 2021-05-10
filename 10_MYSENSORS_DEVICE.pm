@@ -266,12 +266,12 @@ sub Set {
         $hash->{sets}->{$_} ne '' ? "$_:$hash->{sets}->{$_}" 
                                        : $_
                                } sort keys %{$hash->{sets}});
-      $hash->{sets}->{fwType} = "";
+      $hash->{sets}->{fwType} = q{};
       return SetExtensions($hash, $list, $name, $command, @values);
     }
     
     if ($command =~ m{\A(time|reboot|clear|flash|fwType)\z}xms) {
-      if ($command eq "time") {
+      if ($command eq 'time') {
         my $t = timegm_nocheck(localtime(time));
         return sendClientMessage($hash, 
                                  childId => 255, 
@@ -282,8 +282,8 @@ sub Set {
                                  );
       }
       
-      if ($command eq "reboot") {
-        (AttrVal($name, "OTA_BL_Type", 0) or ReadingsVal($name, "BL_VERSION", 0)) 
+      if ($command eq 'reboot') {
+        (AttrVal($name, 'OTA_BL_Type', 0) or ReadingsVal($name, 'BL_VERSION', 0)) 
           ? return sendClientMessage($hash, 
                                      childId => 255, 
                                      cmd => C_INTERNAL, 
@@ -293,7 +293,7 @@ sub Set {
             : return;
       }
       
-      if ($command eq "clear") {
+      if ($command eq 'clear') {
         Log3 ($name,3,"MYSENSORS_DEVICE $name: clear");
         return sendClientMessage($hash, 
                                  childId => 255, 
@@ -304,19 +304,19 @@ sub Set {
                                  );
       }
       
-      if ($command eq "flash") {
-        my $blVersion = ReadingsVal($name, "BL_VERSION", "");
-        my $blType = AttrVal($name, "OTA_BL_Type", "");
-        my $fwType = ReadingsNum($name, "FW_TYPE", -1);
+      if ($command eq 'flash') {
+        my $blVersion = ReadingsVal($name, 'BL_VERSION', '');
+        my $blType = AttrVal($name, 'OTA_BL_Type', '');
+        my $fwType = ReadingsNum($name, 'FW_TYPE', -1);
         if ($fwType == -1) {
           Log3 ($name,3,"Firmware type not defined (FW_TYPE) for $name, update not started");
           return "$name: Firmware type not defined (FW_TYPE)";
         } 
-        if ($blVersion eq "3.0" or $blType eq "Optiboot") {
-          Log3 ($name,4,"Startet flashing Firmware: Optiboot method");
+        if ($blVersion eq '3.0' or $blType eq 'Optiboot') {
+          Log3 ($name,4,'Startet flashing Firmware: Optiboot method');
           return flashFirmware($hash, $fwType);
         } 
-        if ($blType eq "MYSBootloader") {
+        if ($blType eq 'MYSBootloader') {
           $hash->{OTA_requested} = 1;
           Log3 ($name,4,"Send reboot command to MYSBootloader node to start update");
           return sendClientMessage($hash, 
@@ -335,7 +335,8 @@ sub Set {
       if ($command eq 'fwType') {
         my $type = shift @values // return;
         return "fwType must be numeric, but got >$type<." if ($type !~ m{^[0-9]{2,20}$}xms);
-        return readingsSingleUpdate($hash, 'FW_TYPE', $type, 1);
+        readingsSingleUpdate($hash, 'FW_TYPE', $type, 1);
+        return;
       }
     }
     
