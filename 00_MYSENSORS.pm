@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 00_MYSENSORS.pm 23460 2021-01-03 06:29:50Z Beta-User $
+# $Id: 00_MYSENSORS.pm 24385 2021-05-05 06:24:21Z Beta-User $
 #
 ##############################################
 
@@ -40,13 +40,13 @@ use GPUtils qw(:all);
 sub main::MYSENSORS_Initialize { goto &Initialize };
 
 my %sets = (
-  "connect" => [],
-  "disconnect" => [],
-  "inclusion-mode" => [qw(on off)],
+  connect          => [qw(noArg)],
+  disconnect       => [qw(noArg)],
+  'inclusion-mode' => [qw(on off)],
 );
 
 my %gets = (
-  "version"   => ""
+  version   => ''
 );
 
 my @clients = qw(
@@ -58,7 +58,7 @@ sub Initialize {
   my $hash = shift // return;
 
   # Provider
-  $hash->{Clients} = join (':',@clients);
+  $hash->{Clients} = join q{:}, @clients;
   $hash->{ReadyFn} = \&Ready;
   $hash->{ReadFn}  = \&Read;
 
@@ -79,7 +79,7 @@ sub Initialize {
       OTA_firmwareConfig
     )
   );
-  $hash->{AttrList} = $hash->{AttrList} = join(" ", @attrList);
+  $hash->{AttrList} = $hash->{AttrList} = join q{ }, @attrList;
   return;
 }
 
@@ -417,15 +417,15 @@ sub Set {
                       .join ',', @{$sets{$_}} : $_} sort keys %sets)
     if !defined($sets{$command});
 
-  if ($command eq "connect") {
+  if ($command eq 'connect') {
     return Start($hash);
   }
   
-  if ($command eq "disconnect") {
+  if ($command eq 'disconnect') {
     return Stop($hash);
   }
   
-  if ($command eq "inclusion-mode") {
+  if ($command eq 'inclusion-mode') {
     sendMessage($hash,
                 radioId => 0, 
                 childId => 0, 
@@ -447,7 +447,7 @@ sub Attr {
   my $value     = shift;
 
   my $hash = $defs{$name};
-  if ($attribute eq "autocreate" && $init_done) {
+  if ($attribute eq 'autocreate' && $init_done) {
     my $mode = $command eq "set" ? 1 : 0;
     $hash->{'inclusion-mode'} = $mode;
     return sendMessage($hash,
@@ -459,8 +459,8 @@ sub Attr {
     );
   }
   
-  if ($attribute eq "requestAck") {
-    if ($command eq "set") {
+  if ($attribute eq 'requestAck') {
+    if ($command eq 'set') {
       $hash->{ack} = 1;
     } else {
       $hash->{ack} = 0;
@@ -470,12 +470,17 @@ sub Attr {
     return;
   }
 
-  if ($attribute eq "OTA_firmwareConfig") {
-    return;
+  if ($attribute eq 'OTA_firmwareConfig') {
+    if ($command eq 'set') {
+      return getFirmwareTypes($hash, 'set');
+    } else {
+      delete $hash->{'.fwList'};
+      return;
+    }
   }
-  if ($attribute eq "disable") {
-    return Stop($hash) if $command eq "set" && $value;
-    InternalTimer(time(), "MYSENSORS::Start", $hash,0);
+  if ($attribute eq 'disable') {
+    return Stop($hash) if $command eq 'set' && $value;
+    InternalTimer(time, "MYSENSORS::Start", $hash,0);
     return;
   }
   return;
@@ -485,9 +490,10 @@ sub Start {
   my $hash = shift // return;
   my ($dev) = split m{\s+}xms, $hash->{DEF};
   $hash->{DeviceName} = $dev;
-  if (!AttrVal($hash->{NAME},"stateFormat",0)) {
+  if (!AttrVal($hash->{NAME},'stateFormat',0)) {
     CommandAttr(undef, "$hash->{NAME} stateFormat connection")
   }
+  getFirmwareTypes($hash, 'start');
   return if IsDisabled( $hash->{NAME} );
   DevIo_CloseDev($hash);
   return DevIo_OpenDev($hash, 0, "MYSENSORS::Init");
@@ -497,13 +503,13 @@ sub Stop {
   my $hash = shift // return;
   DevIo_CloseDev($hash);
   RemoveInternalTimer($hash);
-  readingsSingleUpdate($hash,"connection","disconnected",1);
+  readingsSingleUpdate($hash,'connection','disconnected',1);
   return;
 }
 
 sub Ready {
   my $hash = shift // return;
-  return DevIo_OpenDev($hash, 1, "MYSENSORS::Init") if($hash->{STATE} eq "disconnected");
+  return DevIo_OpenDev($hash, 1, "MYSENSORS::Init") if($hash->{STATE} eq 'disconnected');
   if(defined($hash->{USBDev})) {
     my $po = $hash->{USBDev};
     my ( $BlockingFlags, $InBytes, $OutBytes, $ErrorFlags ) = $po->status;
@@ -515,8 +521,8 @@ sub Ready {
 sub Init {
   my $hash = shift // return;
   my $name = $hash->{NAME};
-  $hash->{'inclusion-mode'} = AttrVal($name,"autocreate",0);
-  $hash->{ack} = AttrVal($name,"requestAck",0);
+  $hash->{'inclusion-mode'} = AttrVal($name,'autocreate',0);
+  $hash->{ack} = AttrVal($name,'requestAck',0);
   $hash->{outstandingAck} = 0;
   if ($hash->{ack}) {
     GP_ForallClients($hash,sub {
@@ -529,7 +535,7 @@ sub Init {
       };
     });
   }
-  readingsSingleUpdate($hash,"connection","connected",1);
+  readingsSingleUpdate($hash,'connection','connected',1);
   return sendMessage($hash, 
                      radioId => 0, 
                      childId => 0, 
@@ -699,7 +705,7 @@ sub onInternalMsg {
     
     if ($type == I_HEARTBEAT_RESPONSE) {
       RemoveInternalTimer($hash,"MYSENSORS::Start"); ## Reset reconnect because timeout was not reached
-      readingsSingleUpdate($hash, "heartbeat", "alive", 0);
+      readingsSingleUpdate($hash, 'heartbeat', 'alive', 0);
       if ($client = matchClient($hash,$msg)){ 
          return if IsDisabled( $client->{NAME} );
          MYSENSORS::DEVICE::onInternalMessage($client,$msg) 
@@ -794,24 +800,29 @@ sub onAcknowledge {
 
 sub getFirmwareTypes {
   my $hash = shift;
+  my $mode = shift // 0;
   my $name = $hash->{NAME};
+  return $hash->{'.fwList'} if !$mode;
   my @fwTypes = ();
-  my $filename = AttrVal($name, "OTA_firmwareConfig", undef);
+  my $filename = AttrVal($name, 'OTA_firmwareConfig', undef);
   if (defined($filename)) {  
-    my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/" . $filename, 
-                                  ForceType => "file"}); 
-    if (defined($err) && $err) {
+    my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/$filename", 
+                                  ForceType => 'file'}); 
+    if ( defined $err && $err ) {
       Log3($name, 2, "$name: could not read MySensor firmware configuration file - $err");
-    } else {
-      for (my $i = 0; $i < @lines ; $i++) {
-        chomp(my $row = $lines[$i]);
-        if (index($row, "#") != 0) {
-          my @tokens = split(",", $row);
-          push(@fwTypes, $tokens[0]);
-        }
+      return $err if $mode eq 'set' && $init_done;
+      return @fwTypes;
+    } 
+    for (@lines) {
+      chomp($_);
+      if (index($_, "#") != 0) {
+        my @tokens = split m{,}xms, $_;
+        push(@fwTypes, $tokens[0]);
       }
     }
+    $hash->{'.fwList'} = @fwTypes;
   }
+  $hash->{'.fwList'} = 'OTA_firmwareConfig_not_set_in_gateway' if !@fwTypes;
   Log3($name, 5, "$name: getFirmwareTypes - list contains: @fwTypes");
   return @fwTypes;
 }
@@ -820,22 +831,22 @@ sub getLatestFirmware {
   my $hash = shift;
   my $type = shift // return;
   my $name = $hash->{NAME};
-  my $cfgfilename = AttrVal($name, "OTA_firmwareConfig", undef);
+  my $cfgfilename = AttrVal($name, 'OTA_firmwareConfig', undef);
   my $version = undef;
   $name = undef;
   my $filename = undef;
   if (defined($cfgfilename)) {  
-    my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/" . $cfgfilename, 
-                                  ForceType => "file"}); 
+    my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/$cfgfilename", 
+                                  ForceType => 'file'}); 
     if (defined($err) && $err) {
       Log3($name, 2, "$name: could not read MySensor firmware configuration file - $err");
     } else {
-      for (my $i = 0; $i < @lines ; $i++) {
-        chomp(my $row = $lines[$i]);
-        if (index($row, "#") != 0) {
-          my @tokens = split(",", $row);
+      for (@lines) {
+        chomp($_);
+        if (index($_, '#') != 0) {
+          my @tokens = split m{,}xms, $_;
           if ($tokens[0] eq $type) {
-            if ((not defined $version) || ($tokens[2] > $version)) {
+            if ( !defined $version || $tokens[2] > $version ) {
               $name = $tokens[1];
               $version = $tokens[2];
               $filename = $tokens[3];
@@ -916,12 +927,10 @@ sub matchChan76GWClient {
     if ( defined( $defs{$d} )
       && defined( $defs{$d}{radioId} )
       && $defs{$d}{radioId} == $radioId ) {
-        #my $clientname = $defs{$d}->{NAME};
-        #$found = $defs{$d} if AttrVal($clientname,"OTA_Chan76_IODev","") eq 
-        $found = $defs{$d} if AttrVal($d,"OTA_Chan76_IODev","") eq $name;
+        $found = $defs{$d} if AttrVal($d,'OTA_Chan76_IODev','') eq $name;
     }
   }
-  
+
   Log3($hash, 4, "$name: matched firmware config request to IO-name $found->{NAME}") if $found;
   return $found;
 }
@@ -939,6 +948,7 @@ sub parseMsg {
                (?<type>    [0-9]{1,2});
                (?<payload> .*)
                \z}xms);
+    my $payload = $+{payload} // q{};
 
     return {
         radioId => $+{nodeid}, # docs speak of "nodeId"
@@ -946,7 +956,7 @@ sub parseMsg {
         cmd     => $+{command},
         ack     => $+{ack},
         subType => $+{type},
-        payload => $+{payload}
+        payload => $payload
     };
 }
 
@@ -1074,6 +1084,7 @@ __END__
         <dt><code>Comments</code></dt>
         <dd>a description / comment for the firmware</dd>
       </dl>
+      <p>Note: Firmware config file by default only is read at startup. If you change it later, just issue a <i>connect</i> command to update also Internal values.</p>
   </li>
 </ul>
 

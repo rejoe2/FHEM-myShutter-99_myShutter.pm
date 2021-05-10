@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 10_MYSENSORS_DEVICE.pm 23777 2021-02-20 11:03:16Z Beta-User $
+# $Id: 10_MYSENSORS_DEVICE.pm 24385 2021-05-05 06:24:21Z Beta-User $
 #
 ##############################################
 
@@ -231,15 +231,15 @@ sub Define {
     my $hash = shift;
     my $def  = shift // return;
     return $@ unless ( FHEM::Meta::SetInternals($hash) );
-    my ($name, $type, $radioId) = split m{\s+}xms, $def; # split("[ \t]+", $def);
-    return "requires 1 parameter!" if (!defined $radioId || $radioId eq "");
+    my ($name, $type, $radioId) = split m{\s+}xms, $def;
+    return 'requires 1 parameter!' if (!defined $radioId || $radioId eq '');
     $hash->{radioId} = $radioId;
     $hash->{sets} = {
-      'time'   => "noArg",
-      'reboot' => "noArg",
-      'clear'  => "noArg",
-      'flash'  => "noArg",
-      'fwType' => "",
+      time   => 'noArg',
+      reboot => 'noArg',
+      clear  => 'noArg',
+      flash  => 'noArg',
+      fwType => '',
     };
 
     $hash->{ack} = 0;
@@ -261,9 +261,9 @@ sub Set {
     return "At least one parameter is needed!" if !defined $command;
     return "Node is disabled!" if IsDisabled( $hash->{NAME} );
     if(!defined($hash->{sets}->{$command})) {
-      $hash->{sets}->{fwType} = join(",", MYSENSORS::getFirmwareTypes($hash->{IODev}));
-      my $list = join(" ", map {
-        $hash->{sets}->{$_} ne "" ? "$_:$hash->{sets}->{$_}" 
+      $hash->{sets}->{fwType} = join q{,}, MYSENSORS::getFirmwareTypes( $hash->{IODev} );
+      my $list = join( q{ }, map {
+        $hash->{sets}->{$_} ne '' ? "$_:$hash->{sets}->{$_}" 
                                        : $_
                                } sort keys %{$hash->{sets}});
       $hash->{sets}->{fwType} = "";
@@ -1375,7 +1375,7 @@ __END__
     <p><a id="MYSENSORS_DEVICE-set-fwType"></a><b>fwType</b></p>
     <p><code>set &lt;name&gt; fwType &lt;value&gt;</code></p>
     <p>assigns a firmware type to this node (must be a numeric value in the range 0 .. 65536).<br>
-    Should be contained in the <a href="#MYSENSORS-attr-ota_firmwareconfig">FOTA configuration file</a>.</p>
+    Should be contained in the <a href="#MYSENSORS-attr-ota_firmwareconfig">FOTA configuration file</a></p>. <p>Note: Firmware config file by default only is read at startup. If you change it later, just issue a <i>connect</i> command to the GW to update also Internal values.</p>
   </li>
   <li>
     <p><a id="MYSENSORS_DEVICE-set-time"></a><b>time</b></p>
