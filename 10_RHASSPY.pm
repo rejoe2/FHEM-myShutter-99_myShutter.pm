@@ -1410,7 +1410,7 @@ sub getAllRhasspyScenes {
         push @names, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{names}; 
         my $scenes = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene};
         for (keys %{$scenes}) {
-            push @sentences, qq{( $scenes->{$_} ){Scence:$_}};
+            push @sentences, qq{( $scenes->{$_} ){Scene:$_}};
         }
     }
 
@@ -4493,4 +4493,3 @@ yellow=rgb FFFF00</code></p>
 
 =end html
 =cut
-    
