@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 00_MYSENSORS.pm 24385 2021-05-05 06:24:21Z Beta-User $
+# $Id: 00_MYSENSORS.pm 24385 2021-05-10 extended OTA Beta-User $
 #
 ##############################################
 
@@ -1024,18 +1024,18 @@ __END__
 <a id="MYSENSORS-set"></a>
 <h4>Set</h4>
 <ul>
-  <li>
-    <p><a id="MYSENSORS-set-connect"></a><b>connect</b></p>
+  <li><a id="MYSENSORS-set-connect"></a>
+    <p><b>connect</b></p>
     <p><code>set &lt;name&gt; connect</code></p>
     <p>(re-)connects the MYSENSORS-device to the MYSENSORS-gateway</p>
   </li>
-  <li>
-    <p><a id="MYSENSORS-set-disconnect"></a><b>disconnect</b></p>
+  <li><a id="MYSENSORS-set-disconnect"></a>
+    <p><b>disconnect</b></p>
     <p><code>set &lt;name&gt; disconnect</code></p>
     <p>disconnects the MYSENSORS-device from the MYSENSORS-gateway</p>
   </li>
-  <li>
-    <p><a id="MYSENSORS-set-inclusion-mode"></a><b>inclusion-mode</b></p>
+  <li><a id="MYSENSORS-set-inclusion-mode"></a>
+    <p><b>inclusion-mode</b></p>
     <p><code>set &lt;name&gt; inclusion-mode on|off</code></p>
     <p>turns the gateways inclusion-mode on or off</p>
   </li>
@@ -1044,26 +1044,26 @@ __END__
 <a id="MYSENSORS-attr"></a>
 <h4>Attributes</h4>
 <ul>
-  <li>
-    <p><a id="MYSENSORS-attr-autocreate"></a><b>autocreate</b></p>
+  <li><a id="MYSENSORS-attr-autocreate"></a>
+    <p><b>autocreate</b></p>
     <p><code>attr &lt;name&gt; autocreate</code></p>
     <p>enables auto-creation of MYSENSOR_DEVICE-devices on receival of presentation-messages</p>
   </li>
-  <li>
-    <p><a id="MYSENSORS-attr-requestack"></a><b>requestAck</b></p>
+  <li><a id="MYSENSORS-attr-requestAck"></a>
+    <p><b>requestAck</b></p>
     <p><code>attr &lt;name&gt; requestAck</code></p>
     <p>request acknowledge from nodes.</p>
     <p>if set the Readings of nodes are updated not before requested acknowledge is received<br>
       if not set the Readings of nodes are updated immediatly (not awaiting the acknowledge).</p>
     <p>May also be configured for individual nodes if not set for gateway.</p>
   </li>
-  <li>
-    <p><a id="MYSENSORS-attr-first-sensorid"></a><b>first-sensorid</b></p>
+  <li><a id="MYSENSORS-attr-first-sensorid"></a>
+    <p><b>first-sensorid</b></p>
     <p><code>attr &lt;name&gt; first-sensorid &lt;number &lt;h;255&gt;&gt;</code></p>
     <p>configures the lowest node-id assigned to a mysensor-node on request (defaults to 20)</p>
   </li>
-  <li>
-    <p><a id="MYSENSORS-attr-ota_firmwareconfig"></a><b>OTA_firmwareConfig</b></p>
+  <li><a id="MYSENSORS-attr-OTA_firmwareConfig"></a>
+    <p><b>OTA_firmwareConfig</b></p>
     <p><code>attr &lt;name&gt; OTA_firmwareConfig &lt;filename&gt;</code></p>
     <p>specifies a configuration file for the <a href="https://www.mysensors.org/about/fota">FOTA</a> 
       (firmware over the air - wireless programming of the nodes) configuration. It must be stored 
