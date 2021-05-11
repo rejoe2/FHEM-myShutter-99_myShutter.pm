@@ -4351,7 +4351,7 @@ i="i am hungry" f="set Stove on" d="Stove" c="would you like roast pork"</code><
   </li>
 
   <li>
-    <a id="RHASSPY-attr-forceNext"></a><b>forceNEXT</b>
+    <a id="RHASSPY-attr-forceNEXT"></a><b>forceNEXT</b>
     <p>If set to 1, RHASSPY will forward incoming messages also to further MQTT2-IO-client modules like MQTT2_DEVICE, even if the topic matches to one of it's own subscriptions. By default, these messages will not be forwarded for better compability with autocreate feature on MQTT2_DEVICE. See also <a href="#MQTT2_CLIENTclientOrder">clientOrder attribute in MQTT2 IO-type commandrefs</a>; setting this in one instance of RHASSPY might affect others, too.</p>
   </li>
 </ul>
