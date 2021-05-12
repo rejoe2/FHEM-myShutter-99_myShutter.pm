@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 10_MYSENSORS_DEVICE.pm 24385 2021-05-10 extended OTA Beta-User $
+# $Id: 10_MYSENSORS_DEVICE.pm 24385 2021-05-12 extended OTA 2 Beta-User $
 #
 ##############################################
 

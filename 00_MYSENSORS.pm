@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 00_MYSENSORS.pm 24385 2021-05-10 extended OTA Beta-User $
+# $Id: 00_MYSENSORS.pm 24385 2021-05-12 extended OTA 2 Beta-User $
 #
 ##############################################
 
@@ -73,8 +73,8 @@ sub Initialize {
     qw(
       autocreate:1
       requestAck:1
-      first-sensorid
-      last-sensorid
+      first-sensorid:selectnumbers,1,1,255,0,lin
+      last-sensorid:selectnumbers,2,1,255,0,lin
       stateFormat
       OTA_firmwareConfig
     )
@@ -103,6 +103,7 @@ BEGIN { GP_Import(
     Log3
     FileRead
     IsDisabled
+    looks_like_number
   )
   )
 };
@@ -472,7 +473,7 @@ sub Attr {
 
   if ($attribute eq 'OTA_firmwareConfig') {
     if ($command eq 'set') {
-      return getFirmwareTypes($hash, 'set');
+      return getFirmwareTypes($hash, 'set', $value);
     } else {
       delete $hash->{'.fwList'};
       return;
@@ -801,10 +802,12 @@ sub onAcknowledge {
 sub getFirmwareTypes {
   my $hash = shift;
   my $mode = shift // 0;
+  my $filename = shift // AttrVal($hash->{NAME}, 'OTA_firmwareConfig', undef);
+
   my $name = $hash->{NAME};
-  return $hash->{'.fwList'} if !$mode;
+  return @{$hash->{'.fwList'}} if !$mode && defined $hash->{'.fwList'};
+  return 'OTA_firmwareConfig_not_set_in_gateway' if !$mode && !defined $hash->{'.fwList'};
   my @fwTypes = ();
-  my $filename = AttrVal($name, 'OTA_firmwareConfig', undef);
   if (defined($filename)) {  
     my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/$filename", 
                                   ForceType => 'file'}); 
@@ -817,13 +820,15 @@ sub getFirmwareTypes {
       chomp($_);
       if (index($_, "#") != 0) {
         my @tokens = split m{,}xms, $_;
-        push(@fwTypes, $tokens[0]);
+        push @fwTypes, $tokens[0] if looks_like_number($tokens[0]);
       }
     }
-    $hash->{'.fwList'} = @fwTypes;
+    $hash->{'.fwList'} = [@fwTypes];
   }
-  $hash->{'.fwList'} = 'OTA_firmwareConfig_not_set_in_gateway' if !@fwTypes;
+  delete $hash->{'.fwList'} if !@fwTypes;
   Log3($name, 5, "$name: getFirmwareTypes - list contains: @fwTypes");
+  return if $mode eq 'set' && @fwTypes;
+  return 'file contains no valid data' if $mode eq 'set' && !@fwTypes;
   return @fwTypes;
 }
 
@@ -1028,6 +1033,7 @@ __END__
     <p><b>connect</b></p>
     <p><code>set &lt;name&gt; connect</code></p>
     <p>(re-)connects the MYSENSORS-device to the MYSENSORS-gateway</p>
+    <p>Can also be used to reload the <i>OTA_firmwareConfig</i> file after editing.</p>
   </li>
   <li><a id="MYSENSORS-set-disconnect"></a>
     <p><b>disconnect</b></p>
@@ -1059,7 +1065,7 @@ __END__
   </li>
   <li><a id="MYSENSORS-attr-first-sensorid"></a>
     <p><b>first-sensorid</b></p>
-    <p><code>attr &lt;name&gt; first-sensorid &lt;number &lt;h;255&gt;&gt;</code></p>
+    <p><code>attr &lt;name&gt; first-sensorid &lt;number &lt; 255&gt;</code></p>
     <p>configures the lowest node-id assigned to a mysensor-node on request (defaults to 20)</p>
   </li>
   <li><a id="MYSENSORS-attr-OTA_firmwareConfig"></a>
