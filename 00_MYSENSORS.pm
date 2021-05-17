@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 00_MYSENSORS.pm 24385 2021-05-12 extended OTA 2 Beta-User $
+# $Id: 00_MYSENSORS.pm 24446 2021-05-15 14:04:30Z Beta-User $
 #
 ##############################################
 
@@ -806,7 +806,7 @@ sub getFirmwareTypes {
 
   my $name = $hash->{NAME};
   return @{$hash->{'.fwList'}} if !$mode && defined $hash->{'.fwList'};
-  return 'OTA_firmwareConfig_not_set_in_gateway' if !$mode && !defined $hash->{'.fwList'};
+  return 'OTA_firmwareConfig_not_valid_at_GW' if !$mode && !defined $hash->{'.fwList'};
   my @fwTypes = ();
   if (defined($filename)) {  
     my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/$filename", 
@@ -953,7 +953,7 @@ sub parseMsg {
                (?<type>    [0-9]{1,2});
                (?<payload> .*)
                \z}xms);
-    my $payload = $+{payload} // q{};
+    #my $payload = $+{payload} // q{};
 
     return {
         radioId => $+{nodeid}, # docs speak of "nodeId"
@@ -961,7 +961,7 @@ sub parseMsg {
         cmd     => $+{command},
         ack     => $+{ack},
         subType => $+{type},
-        payload => $payload
+        payload => $+{payload}
     };
 }
 
