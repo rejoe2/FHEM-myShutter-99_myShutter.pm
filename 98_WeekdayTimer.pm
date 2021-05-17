@@ -176,7 +176,7 @@ sub WDT_Start {
 
   my $language = getWDTLanguage  ($hash, \@arr);
   
-  WeekdayTimer_GlobalDaylistSpec ($hash, \@arr);
+  _GlobalDaylistSpec ($hash, \@arr);
 
   my @switchingtimes       = gatherSwitchingTimes ($hash, \@arr);
   my $conditionOrCommand   = join q{ }, @arr;
@@ -742,7 +742,7 @@ sub getWDTLanguage {
 }
 
 ################################################################################
-sub WeekdayTimer_GlobalDaylistSpec {
+sub _GlobalDaylistSpec {
   my ($hash, $arr) = @_;
 
   my $daylist = shift @{ $arr };
@@ -870,7 +870,7 @@ sub _SetTimer {
   return if defined $hash->{SETTIMERATMIDNIGHT};
 
   my ($aktIdx,$aktTime,$aktParameter,$nextTime,$nextParameter) =
-    WeekdayTimer_searchAktNext($hash, time + 5);
+    _searchAktNext($hash, time + 5);
   Log3( $hash, 3, "[$name] can not compute past switching time" ) if !defined $aktTime;
 
   readingsBeginUpdate($hash);
@@ -936,7 +936,7 @@ sub WeekdayTimer_delayedTimerInPast {
 }
 
 ################################################################################
-sub WeekdayTimer_searchAktNext {
+sub _searchAktNext {
   my ($hash, $now) = @_;
   my $name = $hash->{NAME};
 
@@ -1041,7 +1041,7 @@ sub WeekdayTimer_Update {
   #Log3 $hash, 3, "activeTimer------------>$activeTimer";
   #Log3 $hash, 3, "activeTimerState------->$activeTimerState";
   my ($aktIdx, $aktTime,  $aktParameter, $nextTime, $nextParameter) =
-    WeekdayTimer_searchAktNext($hash, time + 5);
+    _searchAktNext($hash, time + 5);
 
   my $device   = $hash->{DEVICE};
   my $disabled = AttrVal($hash->{NAME}, 'disable', 0);
