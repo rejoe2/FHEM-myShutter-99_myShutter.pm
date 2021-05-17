@@ -680,11 +680,15 @@ E:  while ( @{ $arr } > 0 ) {
     } elsif ($element =~ m{\Aweekprofile}xms ) {
       my @wprof = split m{:}xms, $element;
       my $wp_name = $wprof[1];
-      my ($unused,$wp_profile) = split m{:}xms, getWeekprofileReadingTriplett($hash, $wp_name, $wprof[2]),2;
-      
-      ($unused,$wp_profile) = split m{:}xms, getWeekprofileReadingTriplett($hash, $wp_name, 'default'),2 if !$wp_profile && $wprof[2] ne 'default';
-      
+      my $triplett = getWeekprofileReadingTriplett($hash, $wp_name, $wprof[2]);
+      my ($unused,$wp_profile);
+      ($unused,$wp_profile) = split m{:}xms, $triplett,2 if defined $triplett;
+      $triplett = getWeekprofileReadingTriplett($hash, $wp_name, 'default');
+
+      ($unused,$wp_profile) = split m{:}xms, $triplett,2 if defined $triplett && !$wp_profile && $wprof[2] ne 'default';
+
       return if !$wp_profile;
+
       my $wp_sunaswe = $wprof[2] // 0;
       my $wp_profile_data = CommandGet(undef,"$wp_name profile_data $wp_profile 0");
       if ($wp_profile_data =~ m{(profile.*not.found|usage..profile_data..name)}xms ) {
