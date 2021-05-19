@@ -97,6 +97,7 @@ sub Initialize {
   $hash->{SetFn}   = \&Set;
   $hash->{DefFn}   = \&Define;
   $hash->{UndefFn} = \&Undef;
+  $hash->{DeleteFn}    = \&Delete;
   $hash->{GetFn}   = \&Get;
   $hash->{AttrFn}  = \&Attr;
   $hash->{UpdFn}   = \&WeekdayTimer_Update;
@@ -156,9 +157,10 @@ sub Undef {
   my $hash = shift;
   my $arg = shift // return;
 
-  for my $idx (keys %{$hash->{profil}}) {
-     deleteSingleRegisteredInternalTimer($idx, $hash);
-  }
+  #for my $idx (keys %{$hash->{profil}}) {
+  #   deleteSingleRegisteredInternalTimer($idx, $hash);
+  #}
+  deleteAllRegisteredInternalTimer($hash);
   deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined $hash->{VERZOEGRUNG_IDX}; 
 
   #delete $modules{$hash->{TYPE}}{defptr}{$hash->{NAME}};
@@ -221,6 +223,15 @@ sub WDT_Start {
 
   return if !$init_done;
   return join('\n', @errors) if (@errors); 
+  return;
+}
+
+sub Delete {
+  my $hash = shift // return;
+
+  deleteAllRegisteredInternalTimer($hash);
+  RemoveInternalTimer($hash);
+  deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined $hash->{VERZOEGRUNG_IDX}; 
   return;
 }
 
