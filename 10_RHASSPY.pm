@@ -360,18 +360,20 @@ sub Define {
 
 sub firstInit {
     my $hash = shift // return;
-  
-    # IO    
+
+    my $name = $hash->{NAME};
+
+    # IO
     AssignIoPort($hash);
-    my $IODev = AttrVal($hash->{NAME},'IODev',undef);
+    my $IODev = AttrVal( $name, 'IODev', ReadingsVal( $name, 'IODev', InternalVal($name, 'IODev', undef )));
 
     return if !$init_done || !defined $IODev;
     RemoveInternalTimer($hash);
 
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
 
-    fetchSiteIds($hash) if !ReadingsVal( $hash->{NAME}, 'siteIds', 0 );
-    initialize_rhasspyTweaks($hash, AttrVal($hash->{NAME},'rhasspyTweaks', undef ));
+    fetchSiteIds($hash) if !ReadingsVal( $name, 'siteIds', 0 );
+    initialize_rhasspyTweaks($hash, AttrVal($name,'rhasspyTweaks', undef ));
     configure_DialogManager($hash);
     initialize_devicemap($hash);
 
@@ -1777,7 +1779,7 @@ sub getMapping {
     my $matchedMapping;
 
     if ( $fromHash ) {
-        $matchedMapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType} if defined $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType} && defined $subType;
+        $matchedMapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType} if  defined $subType && defined $hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}{$subType};
         return $matchedMapping if $matchedMapping;
         
         for (sort keys %{$hash->{helper}{devicemap}{devices}{$device}{intents}{$intent}}) {
@@ -2025,7 +2027,7 @@ sub Parse {
     for my $dev (@instances) {
         my $hash = $defs{$dev};
         # Name mit IODev vergleichen
-        next if $ioname ne AttrVal($hash->{NAME}, 'IODev', undef);
+        next if $ioname ne AttrVal($hash->{NAME}, 'IODev', ReadingsVal($hash->{NAME}, 'IODev', InternalVal($hash->{NAME}, 'IODev', 'none')));
         next if IsDisabled( $hash->{NAME} );
         my $topicpart = qq{/$hash->{LANGUAGE}\.$hash->{fhemId}\[._]|hermes/dialogueManager};
         next if $topic !~ m{$topicpart}x;
@@ -4131,6 +4133,17 @@ attr rhasspyMQTT2 clientOrder RHASSPY MQTT_GENERIC_BRIDGE MQTT2_DEVICE<br>
 attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionStarted hermes/dialogueManager/sessionEnded</code></p>
 <p><code>define Rhasspy RHASSPY devspec=room=Rhasspy defaultRoom=Livingroom language=en</code></p>
 
+<p><b>Additionals remarks on MQTT2-IOs:</b></p>
+<p>Using a separate MQTT server (and not the internal MQTT2_SERVER) is highly recommended, as the Rhasspy scripts also use the MQTT protocol for internal (sound!) data transfers. Best way is to either use MQTT2_CLIENT (see above) or bridge only the relevant topics from mosquitto to MQTT2_SERVER (see e.g. <a href="http://www.steves-internet-guide.com/mosquitto-bridge-configuration/">http://www.steves-internet-guide.com/mosquitto-bridge-configuration</a> for the principles). When using MQTT2_CLIENT, it's necessary to set <code>clientOrder</code> to include RHASSPY (as most likely it's the only module listening to the CLIENT it could be just set to <code>attr &lt;m2client&gt; clientOrder RHASSPY</code>)</p>
+<p>Furthermore, you are highly encouraged to restrict subscriptions only to the relevant topics:</p>
+<p><code>attr &lt;m2client&gt; subscriptions setByTheProgram</code></p>
+<p>In case you are using the MQTT server also for other purposes than Rhasspy, you have to set <code>subscriptions</code> manually to at least include the following topics additionally to the other subscriptions desired for other purposes.</p>
+<p><code>hermes/intent/+<br>
+hermes/dialogueManager/sessionStarted<br>
+hermes/dialogueManager/sessionEnded</code></p>
+
+<p><b>Important</b>: After defining the RHASSPY module, you are supposed to manually set the attribute <i>IODev</i> to force a non-dynamic IO assignement. Use e.g. <code>attr &lt;deviceName&gt; IODev &lt;m2client&gt;</code>.</p>
+
 <p><a id="RHASSPY-list"></a><b>Note:</b> RHASSPY consolidates a lot of data from different sources. The <b>final data structure RHASSPY uses</b> at runtime can be viewed using the <a href="#list">list command</a>. It's highly recommended to have a close look at this data structure, especially when starting with RHASSPY or in case something doesn't work as expected!<br> 
 When changing something relevant within FHEM for either the data structure in</p>
 <ul>
@@ -4138,15 +4151,6 @@ When changing something relevant within FHEM for either the data structure in</p
   <li><b>Rhasspy</b> (this form is used when reffering to the remote service), </li>
 </ul>
 <p>these changes must be get to known to RHASSPY and (often, but not allways) to Rhasspy. See the different versions provided by the <a href="#RHASSPY-set-update">update command</a>.</p>
-
-<p><b>Additionals remarks on MQTT2-IOs:</b></p>
-<p>Using a separate MQTT server (and not the internal MQTT2_SERVER) is highly recommended, as the Rhasspy scripts also use the MQTT protocol for internal (sound!) data transfers. Best way is to either use MQTT2_CLIENT (see below) or bridge only the relevant topics from mosquitto to MQTT2_SERVER (see e.g. <a href="http://www.steves-internet-guide.com/mosquitto-bridge-configuration/">http://www.steves-internet-guide.com/mosquitto-bridge-configuration</a> for the principles). When using MQTT2_CLIENT, it's necessary to set <code>clientOrder</code> to include RHASSPY (as most likely, it's the only module listening to the CLIENT). It could be just set to <code>attr &lt;m2client&gt; clientOrder RHASSPY</code></p>
-<p>Furthermore, you are highly encouraged to restrict subscriptions only to the relevant topics:</p>
-<p><code>attr &lt;m2client&gt; subscriptions setByTheProgram</code></p>
-<p>In case you are using the MQTT server also for other purposes than Rhasspy, you have to set <code>subscriptions</code> manually to at least include the following topics additionally to the other subscriptions desired for other purposes.</p>
-<p><code>hermes/intent/+<br>
-hermes/dialogueManager/sessionStarted<br>
-hermes/dialogueManager/sessionEnded</code></p>
 
 <a id="RHASSPY-set"></a>
 <h4>Set</h4>
