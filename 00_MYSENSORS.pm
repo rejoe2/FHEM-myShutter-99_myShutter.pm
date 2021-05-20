@@ -70,11 +70,11 @@ sub Initialize {
 
    my @attrList = (
     'disable:0,1',
+    'first-sensorid:selectnumbers,1,1,255,0,lin',
+    'last-sensorid:selectnumbers,2,1,255,0,lin',
     qw(
       autocreate:1
       requestAck:1
-      first-sensorid:selectnumbers,1,1,255,0,lin
-      last-sensorid:selectnumbers,2,1,255,0,lin
       stateFormat
       OTA_firmwareConfig
     )
@@ -117,7 +117,7 @@ my %sensorAttr = (
 sub Define {
   my $hash = shift // return;
 
-  InternalTimer(time(), "MYSENSORS::Start", $hash,0); 
+  InternalTimer(time, 'MYSENSORS::Start', $hash,0); 
   return;
 }
 
@@ -806,7 +806,7 @@ sub getFirmwareTypes {
 
   my $name = $hash->{NAME};
   return @{$hash->{'.fwList'}} if !$mode && defined $hash->{'.fwList'};
-  return 'OTA_firmwareConfig_not_valid_at_GW' if !$mode && !defined $hash->{'.fwList'};
+  return 'OTA_firmwareConfig_not_set_in_gateway' if !$mode && !defined $hash->{'.fwList'};
   my @fwTypes = ();
   if (defined($filename)) {  
     my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/$filename", 

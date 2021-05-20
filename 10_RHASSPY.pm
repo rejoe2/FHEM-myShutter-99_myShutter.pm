@@ -333,9 +333,18 @@ sub Define {
     my $type = shift @{$anon};
     my $Rhasspy  = $h->{baseUrl} // shift @{$anon} // q{http://127.0.0.1:12101};
     my $defaultRoom = $h->{defaultRoom} // shift @{$anon} // q{default}; 
+
+    my @unknown;
+    for (keys %{$h}) {
+        push @unknown, $_ if $_ !~ m{\A(baseUrl|defaultRoom|language|devspec|fhemId|prefix|encoding|useGenericAttrs)\z}xm;
+    }
+    my $err = join q{, }, @unknown;
+    return "unknown key(s) in DEF: $err" if @unknown && $init_done;
+    Log3( $hash, 1, "[$name] unknown key(s) in DEF: $err") if @unknown;
+
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.14';
+    $hash->{MODULE_VERSION} = '0.4.15';
     $hash->{baseUrl} = $Rhasspy;
     #$hash->{helper}{defaultRoom} = $defaultRoom;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
@@ -2304,7 +2313,7 @@ sub updateSlots {
         @colors    = ('') if !@colors;
         @types     = ('') if !@types;
         @groups    = ('') if !@groups;
-        @shortcuts = ('') if !@shortcuts;
+        #@shortcuts = ('') if !@shortcuts; # forum: https://forum.fhem.de/index.php/topic,119447.msg1157700.html#msg1157700
         #$scenes    = []   if !@{$scenes};
         #$scdevs    = []   if !@{$scdevs};
     }
@@ -4067,7 +4076,6 @@ __END__
 # "rhasspySpecials" bzw. rhasspyTweaks als weitere Attribute
 Denkbare Verwendung:
 - siteId2room für mobile Geräte (Denkbare Anwendungsfälle: Auswertung BT-RSSI per Perl, aktives Setzen über ein Reading? Oder einen intent? (tweak)
-- Ansteuerung von Lamellenpositionen (auch an anderem Device?) (special) (erledigt?)
 - Bestätigungs-Mapping (special)
 
 # Sonstiges, siehe insbes. https://forum.fhem.de/index.php/topic,119447.msg1148832.html#msg1148832
@@ -4078,6 +4086,10 @@ Denkbare Verwendung:
 - Farbe und Farbtemperatur (fast fertig?)
 - Hat man in einem Raum einen Satelliten aber kein Device mit der siteId/Raum, kann man den Satelliten bei z.B. dem Timer nicht ansprechen, weil der Raum nicht in den Slots ist.
   Irgendwie müssen wir die neue siteId in den Slot Rooms bringen
+
+# Parameter-Check für define? Anregung DrBasch aus https://forum.fhem.de/index.php/topic,119447.msg1157700.html#msg1157700
+
+# Keine shortcuts-Intents, wenn Attribut nicht gesetzt: Anregung DrBasch aus https://forum.fhem.de/index.php/topic,119447.msg1157700.html#msg1157700
 
 =end ToDo
 
