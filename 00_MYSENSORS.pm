@@ -806,7 +806,7 @@ sub getFirmwareTypes {
 
   my $name = $hash->{NAME};
   return @{$hash->{'.fwList'}} if !$mode && defined $hash->{'.fwList'};
-  return 'OTA_firmwareConfig_not_set_in_gateway' if !$mode && !defined $hash->{'.fwList'};
+  return 'OTA_firmwareConfig_not_valid_at_GW' if !$mode && !defined $hash->{'.fwList'};
   my @fwTypes = ();
   if (defined($filename)) {  
     my ($err, @lines) = FileRead({FileName => "./FHEM/firmware/$filename", 
