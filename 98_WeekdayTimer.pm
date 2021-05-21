@@ -95,14 +95,14 @@ sub Initialize {
   my $hash = shift // return;
 
 # Consumer
-  $hash->{SetFn}   = \&Set;
-  $hash->{DefFn}   = \&Define;
-  $hash->{UndefFn} = \&Undef;
-  $hash->{DeleteFn}    = \&Delete;
-  $hash->{GetFn}   = \&Get;
-  $hash->{AttrFn}  = \&Attr;
-  $hash->{UpdFn}   = \&WeekdayTimer_Update;
-  $hash->{AttrList}= "disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap:textField-long WDT_sendDelay:slider,0,1,300,1 $readingFnAttributes";
+  $hash->{SetFn}    = \&Set;
+  $hash->{DefFn}    = \&Define;
+  $hash->{UndefFn}  = \&Undef;
+  $hash->{DeleteFn} = \&Delete;
+  $hash->{GetFn}    = \&Get;
+  $hash->{AttrFn}   = \&Attr;
+  $hash->{UpdFn}    = \&WeekdayTimer_Update;
+  $hash->{AttrList} = "disable:0,1 delayedExecutionCond WDT_delayedExecutionDevices WDT_Group switchInThePast:0,1 commandTemplate WDT_eventMap:textField-long WDT_sendDelay:slider,0,1,300,1 $readingFnAttributes";
   return;
 }
 
@@ -853,8 +853,10 @@ sub _SetTimer {
     #$modules{WeekdayTimer}{timerInThePastHash} = $tipHash;
     #$tipHash = $hash->{helper}{timerInThePastHash} = $tipHash;
     $hash->{helper}{timerInThePastHash} = $tipHash;
+    
 
     resetRegIntTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
+    
 
   return;
 }
@@ -885,6 +887,7 @@ sub WeekdayTimer_delayedTimerInPast {
   #delete $modules{WeekdayTimer}{timerInThePastHash};
   delete $hash->{helper}{timerInThePast};
   delete $hash->{helper}{timerInThePastHash};
+  deleteSingleRegIntTimer('delayed', $hash, 1);
   return;
 }
 
@@ -955,7 +958,6 @@ sub WeekdayTimer_Update {
   return if (!defined($hash));
 
   my $name     = $hash->{NAME};
-  #my $idx      = $myHash->{MODIFIER};
   my $idx      = $fnHash->{MODIFIER};
   my $now      = time;
 
@@ -971,25 +973,24 @@ sub WeekdayTimer_Update {
   # Fenserkontakte abfragen - wenn einer im Status closed, dann Schaltung um 60 Sekunden verzögern
   my $winopen = checkDelayedExecution($hash, $newParam, $idx);
   if ($winopen) {
-    readingsSingleUpdate ($hash,  "state", ($winopen eq "1" or lc($winopen) eq "true") ? "open window" : $winopen, 1);
+    readingsSingleUpdate ($hash,  "state", ($winopen eq "1" or lc($winopen) eq "true") ? 'open window' : $winopen, 1);
     return;
   }
 
   my $dieGanzeWoche = $hash->{helper}{WEDAYS}{0} ? [7]:[8];
 
   my ($activeTimer, $activeTimerState);
-  #if (defined $myHash->{forceSwitch}) {
-  if (defined $fnHash->{forceSwitch}) {
-      
+  if (defined $fnHash->{forceSwitch}) { #timer is delayed
     $activeTimer      = isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
-    resetRegIntTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
+    resetRegIntTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if $timToSwitch > $now && ($activeTimerState || $activeTimer );
   } else {
     $activeTimer = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     $activeTimerState = $activeTimer;
     Log3( $hash, 4, "[$name] Update   - timer seems to be active today: ".join(q{},@{$tage})."|$time|$newParam" ) if ( $activeTimer && (@{$tage}) );
     Log3( $hash, 2, "[$name] Daylist is missing!") if !(@{$tage});
+    deleteSingleRegIntTimer($idx, $hash, 1);
   }
   #Log3 $hash, 3, "activeTimer------------>$activeTimer";
   #Log3 $hash, 3, "activeTimerState------->$activeTimerState";
