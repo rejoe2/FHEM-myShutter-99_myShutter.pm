@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 24466 2021-05-18 05:26:03Z Beta-User $
+# $Id: 98_WeekdayTimer.pm 24476 2021-05-20 + Register version Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -34,6 +34,7 @@ use Time::Local qw( timelocal_nocheck );
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use Scalar::Util qw( weaken );
+use FHEM::Core::Timer::Register qw(:ALL);
 
 use GPUtils qw(GP_Import);
 
@@ -157,14 +158,11 @@ sub Undef {
   my $hash = shift;
   my $arg = shift // return;
 
-  #for my $idx (keys %{$hash->{profil}}) {
-  #   deleteSingleRegisteredInternalTimer($idx, $hash);
-  #}
-  deleteAllRegisteredInternalTimer($hash);
-  deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined $hash->{VERZOEGRUNG_IDX}; 
+  deleteAllRegIntTimer($hash);
+  deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined $hash->{VERZOEGRUNG_IDX}; 
 
   #delete $modules{$hash->{TYPE}}{defptr}{$hash->{NAME}};
-  return deleteSingleRegisteredInternalTimer('SetTimerOfDay', $hash);
+  return deleteSingleRegIntTimer('SetTimerOfDay', $hash);
 }
 
 ################################################################################
@@ -172,7 +170,7 @@ sub WDT_Start {
   my $hash = shift // return;
   my $name = $hash->{NAME};
   my $def = $hash->{DEF};
-  deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined ($hash->{VERZOEGRUNG_IDX}); 
+  deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined ($hash->{VERZOEGRUNG_IDX}); 
   my @arr = split m{\s+}xms, $def;
   my $device   = shift @arr;
 
@@ -229,9 +227,9 @@ sub WDT_Start {
 sub Delete {
   my $hash = shift // return;
 
-  deleteAllRegisteredInternalTimer($hash);
+  deleteAllRegIntTimer($hash);
   RemoveInternalTimer($hash);
-  deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined $hash->{VERZOEGRUNG_IDX}; 
+  deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash) if defined $hash->{VERZOEGRUNG_IDX}; 
   return;
 }
 
@@ -297,65 +295,6 @@ sub Get {
     return "no such reading: $reading";
   }
   return "$arr[0] $reading => $value";
-}
-
-################################################################################
-sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
-    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
-    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
-}
-
-################################################################################
-sub setRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
-
-    my $timerName = "$hash->{NAME}_$modifier";
-    my $fnHash     = {
-        HASH     => $hash,
-        NAME     => $timerName,
-        MODIFIER => $modifier
-    };
-    weaken($fnHash->{HASH});
-
-    if ( defined $hash->{TIMER}{$timerName} ) {
-        Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
-        stacktrace();
-    }
-    else {
-        $hash->{TIMER}{$timerName} = $fnHash;
-    }
-
-    Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
-    return $fnHash;
-}
-
-
-################################################################################
-sub deleteSingleRegisteredInternalTimer {
-    my $modifier = shift;
-    my $hash     = shift // return;
-    my $callback = shift;
-
-    my $timerName = "$hash->{NAME}_$modifier";
-    my $fnHash    = $hash->{TIMER}{$timerName};
-    if ( defined $fnHash ) {
-        Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        RemoveInternalTimer($fnHash);
-        delete $hash->{TIMER}{$timerName};
-    }
-    return;
-}
-
-################################################################################
-sub deleteAllRegisteredInternalTimer {
-    my $hash = shift // return;
-
-    for my $key ( keys %{ $hash->{TIMER} } ) {
-        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
-    }
-    return;
 }
 
 
@@ -779,8 +718,8 @@ sub _SetTimerForMidnightUpdate {
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now);
 
   my $midnightPlus5Seconds = getSwitchtimeEpoch  ($now, 0, 0, 5, 1);
-  deleteSingleRegisteredInternalTimer('midnight', $hash,\&WeekdayTimer_SetTimerOfDay);
-  $fnHash = setRegisteredInternalTimer('midnight', $midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $hash, 0) if !AttrVal($hash->{NAME},'disable',0);
+  deleteSingleRegIntTimer('midnight', $hash,\&WeekdayTimer_SetTimerOfDay);
+  $fnHash = setRegIntTimer('midnight', $midnightPlus5Seconds, \&WeekdayTimer_SetTimerOfDay, $hash, 0) if !AttrVal($hash->{NAME},'disable',0);
   $fnHash->{SETTIMERATMIDNIGHT} = 1;
 
   return;
@@ -873,10 +812,10 @@ sub _SetTimer {
     if ( $timToSwitch - $now > -5 || defined $hash->{SETTIMERATMIDNIGHT} ) {
       if($isActiveTimer) {
         Log3( $hash, 4, "[$name] setTimer - timer seems to be active today: ".join( q{},@{$tage})."|$time|$para" );
-        resetRegisteredInternalTimer("$idx", $timToSwitch + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_Update, $hash, 0);
+        resetRegIntTimer("$idx", $timToSwitch + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_Update, $hash, 0);
       } else {
         Log3( $hash, 4, "[$name] setTimer - timer seems to be NOT active today: ".join(q{},@{$tage})."|$time|$para ". $hash->{CONDITION} );
-        deleteSingleRegisteredInternalTimer("$idx", $hash);
+        deleteSingleRegIntTimer("$idx", $hash);
       }
     }
   }
@@ -915,7 +854,7 @@ sub _SetTimer {
     #$tipHash = $hash->{helper}{timerInThePastHash} = $tipHash;
     $hash->{helper}{timerInThePastHash} = $tipHash;
 
-    resetRegisteredInternalTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
+    resetRegIntTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
 
   return;
 }
@@ -937,7 +876,7 @@ sub WeekdayTimer_delayedTimerInPast {
       Log3( $hash, 4, "[$hash->{NAME}] $device ".FmtDateTime($time)." ".($tim-$time)."s " );
 
       for my $para ( @{$tipIpHash->{$device}{$time}} ) {
-        my $mHash = resetRegisteredInternalTimer(@{$para}[0],@{$para}[1],@{$para}[2],@{$para}[3],@{$para}[4]);
+        my $mHash = resetRegIntTimer(@{$para}[0],@{$para}[1],@{$para}[2],@{$para}[3],@{$para}[4]);
         $mHash->{forceSwitch} = 1;
       }
     }
@@ -1005,7 +944,7 @@ sub _searchAktNext {
 ################################################################################
 sub _DeleteTimer {
   my $hash = shift // return;
-  map {deleteSingleRegisteredInternalTimer($_, $hash)} keys %{$hash->{profil}};
+  map {deleteSingleRegIntTimer($_, $hash)} keys %{$hash->{profil}};
   return;
 }
 
@@ -1045,7 +984,7 @@ sub WeekdayTimer_Update {
     $activeTimer      = isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
-    resetRegisteredInternalTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
+    resetRegIntTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if ($timToSwitch > $now && ($activeTimerState||$activeTimer));
   } else {
     $activeTimer = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     $activeTimerState = $activeTimer;
@@ -1174,10 +1113,10 @@ sub checkDelayedExecution {
       #Prüfen, ob der nächste Timer überhaupt für den aktuellen Tag relevant ist!
 
       Log3( $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$time}{TIME}, delayedExecutionCond returned $verzoegerteAusfuehrung" );
-      deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash);
+      deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash);
     }
     $hash->{VERZOEGRUNG_IDX} = $time;
-    resetRegisteredInternalTimer("$time", $nextRetry, \&WeekdayTimer_Update, $hash, 0);
+    resetRegIntTimer("$time", $nextRetry, \&WeekdayTimer_Update, $hash, 0);
     $hash->{VERZOEGRUNG} = 1;
     return $verzoegerteAusfuehrung;
   }
@@ -1230,10 +1169,10 @@ sub checkDelayedExecution {
           }
           if ( defined $hash->{VERZOEGRUNG_IDX} && $hash->{VERZOEGRUNG_IDX} != $time ) {
               Log3( $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$time}{TIME} while window contact returned open state");
-              deleteSingleRegisteredInternalTimer($hash->{VERZOEGRUNG_IDX},$hash);
+              deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash);
           }
           $hash->{VERZOEGRUNG_IDX} = $time;
-          resetRegisteredInternalTimer("$time", $nextRetry, \&WeekdayTimer_Update, $hash, 0);
+          resetRegIntTimer("$time", $nextRetry, \&WeekdayTimer_Update, $hash, 0);
           $hash->{VERZOEGRUNG} = 1;
           return 1
       }
