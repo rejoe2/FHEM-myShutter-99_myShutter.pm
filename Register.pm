@@ -43,7 +43,7 @@ sub setRegIntTimer {
         $hash->{TIMER}{$timerName} = $fnHash;
     }
 
-    ::Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . ::FmtDateTime($time) );
+    ::Log3( $hash, '5', "[$hash->{NAME}] setting  Timer: $timerName " . ::FmtDateTime($time) );
     ::InternalTimer( $time, $callback, $fnHash, $initFlag );
     return $fnHash;
 }
@@ -55,9 +55,9 @@ sub deleteSingleRegIntTimer {
 
     my $timerName = "$hash->{NAME}_$modifier";
     my $fnHash    = $hash->{TIMER}{$timerName};
-    if ( defined($fnHash) ) {
-        ::Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        ::RemoveInternalTimer($fnHash) if !$regonly;
+    if ( defined $fnHash ) {
+        ::Log3( $hash, '5', "[$hash->{NAME}] removing Timer: $timerName" );
+        if ( !$regonly ) { ::RemoveInternalTimer($fnHash) };
         delete $hash->{TIMER}{$timerName};
     }
     return;
@@ -129,27 +129,8 @@ This function will renew an registered timer set elswhere by setRegIntTimer
 
 =head1 DESCRIPTION
 
-setRegIntTimer 
-Function to set an registered InternalTimer. Needs the following arguments: 
-$modifier: a unique identifier, that also will be used to label the timer (in combination with device instance name derived from $hash->{NAME}. For $hash see 4th argument)
-$time: endtime for InternalTimer (seconds since 1970/1/1) - as ususally used in direct InternalTimer calls 
-$callback: Function to be called by InternalTimer
-$hash: Instance hash for the module instance - as usual within FHEM
-
-Notes:
-Using the register provided by this lib ONLY makes sense, if you have the need to often call the same $callback, but in parallel and with different parameters, and/or you want to add or change additional parameters in between setting the timer and callback time.
+Using the register provided by this lib ONLY makes sense, if you have the need to often call the same $callback (see function description of setRegIntTimer(), but in parallel and with different parameters, and/or you want to add or change additional parameters in between setting the timer and callback time.
 If you have different requirements, it's recommended to use other means, e.g. separate callback functions for different purposes, as this method here causes some overhead. Du to the later, using this lib also is not recommended, if you have to often change timers
-
-Will return a reference to a fnhash, which may be used to add further arguments to later function call.
-
-deleteSingleRegIntTimer
-Function to remove an registered InternalTimer. Needs $modifier and $hash as arguments as described above. Optionally accepts $regonly as argument, in case you just want to delete the timer hash from the register (in $hash->{TIMER}). Usefull to do some cleanup in $callback function.
-
-resetRegIntTimer
-Needs the same arguments like, setRegIntTimer, and will remove the already set InternalTimer with the same modifier (if set). 
-
-deleteAllRegIntTimer
-Needs just $hash as argument and will savely remove all registered InternalTimer set up with the above mentionned functions.
 
 =head1 EXPORT
 
@@ -166,11 +147,42 @@ C<setRegIntTimer>,C<deleteSingleRegIntTimer>, C<resetRegIntTimer>, C<deleteAllRe
 
 =head1 BUGS AND LIMITATIONS
 
+See DESCRIPTION for details on whether you really will have any benefit from thi piece of code. In most cases you will not...
+
+=head1 INCOMPATIBILITIES
+
+=head1 DEPENDENCIES
+
+=head1 CONFIGURATION AND ENVIRONMENT
+Obviously needs fhem.pl and it's InternalTimer functions to run.
+
+=head1 DIAGNOSTICS
+
+=head1 SUBROUTINES/METHODS
+
+setRegIntTimer 
+Function to set an registered InternalTimer. Needs the following arguments: 
+$modifier: a unique identifier, that also will be used to label the timer (in combination with device instance name derived from $hash->{NAME}. For $hash see 4th argument)
+$time: endtime for InternalTimer (seconds since 1970/1/1) - as ususally used in direct InternalTimer calls 
+$callback: Function to be called by InternalTimer
+$hash: Instance hash for the module instance - as usual within FHEM
+
+Will return a reference to a fnhash, which may be used to add further arguments to later function call.
+
+deleteSingleRegIntTimer
+Function to remove an registered InternalTimer. Needs $modifier and $hash as arguments as described above. Optionally accepts $regonly as argument, in case you just want to delete the timer hash from the register (in $hash->{TIMER}). Usefull to do some cleanup in $callback function.
+
+resetRegIntTimer
+Needs the same arguments like, setRegIntTimer, and will remove the already set InternalTimer with the same modifier (if set). 
+
+deleteAllRegIntTimer
+Needs just $hash as argument and will savely remove all registered InternalTimer set up with the above mentionned functions.
+
 =head1 AUTHOR
 
 Beta-User <lt>Beta-User AT fhem DOT de<gt>
 
-=head1 LICENSE
+=head1 LICENSE AND COPYRIGHT
 
 FHEM::Core::Timer::Register is released under the same license as FHEM.
 
