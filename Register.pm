@@ -1,4 +1,4 @@
-# $Id$
+# $Id: Register.pm 24486 2021-05-22 03:55:44Z Beta-User $
 package FHEM::Core::Timer::Register;
 use strict;
 use warnings;
@@ -70,7 +70,16 @@ sub resetRegIntTimer {
     my $hash     = shift // carp q[No hash reference specified] && return;
     my $initFlag = shift // 0;
 
-    deleteSingleRegIntTimer( $modifier, $hash );
+    my $timerName = "$hash->{NAME}_$modifier";
+    my $fnHash    = $hash->{TIMER}{$timerName};
+
+    if ( defined $fnHash ) {
+        ::Log3( $hash, '5', "[$hash->{NAME}] resetting Timer: $timerName" );
+        ::RemoveInternalTimer($fnHash);
+        ::InternalTimer( $time, $callback, $fnHash, $initFlag );
+        return $fnHash;
+    } 
+
     return setRegIntTimer ( $modifier, $time, $callback, $hash, $initFlag );
 }
 

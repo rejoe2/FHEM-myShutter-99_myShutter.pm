@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 24476 2021-05-20 + Register version Beta-User $
+# $Id: 98_WeekdayTimer.pm 24498 2021-05-24 06:12:31Z Beta-User $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -33,7 +33,6 @@ use warnings;
 use Time::Local qw( timelocal_nocheck );
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
-use Scalar::Util qw( weaken );
 use FHEM::Core::Timer::Register qw(:ALL);
 
 use GPUtils qw(GP_Import);
@@ -123,7 +122,8 @@ sub Define {
   my $type     = shift @arr;
   my $device   = shift @arr;
 
-  _DeleteTimer($hash);
+  #_DeleteTimer($hash);
+  deleteAllRegIntTimer($hash);
   my $delVariables = "(CONDITION|COMMAND|profile|Profil)";
   map { delete $hash->{$_} if m{\A$delVariables.*}xms }  keys %{$hash};
 
@@ -134,7 +134,7 @@ sub Define {
   my $idx = 0;
   
   $hash->{'.dayNumber'}    = {map {$_ => $idx++}     @{$hash->{'.shortDays'}{$language}}};
-  $hash->{helper}{daysRegExp}        = '(' . join (q{|},        @{$hash->{'.shortDays'}{$language}}) . ")";
+  $hash->{helper}{daysRegExp}        = '(' . join (q{|},        @{$hash->{'.shortDays'}{$language}}) . ')';
   $hash->{helper}{daysRegExpMessage} = $hash->{helper}{daysRegExp};
 
   $hash->{helper}{daysRegExp}   =~ s{\$}{\\\$}gxms;
@@ -853,10 +853,8 @@ sub _SetTimer {
     #$modules{WeekdayTimer}{timerInThePastHash} = $tipHash;
     #$tipHash = $hash->{helper}{timerInThePastHash} = $tipHash;
     $hash->{helper}{timerInThePastHash} = $tipHash;
-    
 
     resetRegIntTimer('delayed', time + 5 + AttrVal($name,'WDT_sendDelay',0), \&WeekdayTimer_delayedTimerInPast, $tipHash, 0);
-    
 
   return;
 }
@@ -875,7 +873,7 @@ sub WeekdayTimer_delayedTimerInPast {
 
   for my $device ( keys %{$tipIpHash} ) {
     for my $time ( sort keys %{$tipIpHash->{$device}} ) {
-      Log3( $hash, 4, "[$hash->{NAME}] $device ".FmtDateTime($time)." ".($tim-$time)."s " );
+      Log3( $hash, 4, "[$hash->{NAME}] $device ".FmtDateTime($time).' '.($tim-$time).'s ' );
 
       for my $para ( @{$tipIpHash->{$device}{$time}} ) {
         my $mHash = resetRegIntTimer(@{$para}[0],@{$para}[1],@{$para}[2],@{$para}[3],@{$para}[4]);
@@ -888,6 +886,18 @@ sub WeekdayTimer_delayedTimerInPast {
   delete $hash->{helper}{timerInThePast};
   delete $hash->{helper}{timerInThePastHash};
   deleteSingleRegIntTimer('delayed', $hash, 1);
+  return;
+}
+
+sub _checkTimerReset {
+  my $hash = shift // return;
+  my $idx  = shift // return;
+
+  return if $hash->{profil}{$idx}{EPOCH} <= time;
+  return if 
+    !isAnActiveTimer ($hash, $hash->{profil}{$idx}{TAGE}, $hash->{profil}{$idx}{PARA}, $hash->{profil}{$idx}{WE_Override}) 
+    && !isAnActiveTimer ($hash, $hash->{helper}{WEDAYS}{0} ? [7]:[8], $hash->{profil}{$idx}{PARA}, $hash->{profil}{$idx}{WE_Override});
+  resetRegIntTimer($idx, $hash->{profil}{$idx}{EPOCH}, \&WeekdayTimer_Update, $hash, 0); 
   return;
 }
 
@@ -973,7 +983,7 @@ sub WeekdayTimer_Update {
   # Fenserkontakte abfragen - wenn einer im Status closed, dann Schaltung um 60 Sekunden verzögern
   my $winopen = checkDelayedExecution($hash, $newParam, $idx);
   if ($winopen) {
-    readingsSingleUpdate ($hash,  "state", ($winopen eq "1" or lc($winopen) eq "true") ? 'open window' : $winopen, 1);
+    readingsSingleUpdate ($hash,  'state', ($winopen eq '1' or lc($winopen) eq 'true') ? 'open window' : $winopen, 1);
     return;
   }
 
@@ -984,7 +994,8 @@ sub WeekdayTimer_Update {
     $activeTimer      = isAnActiveTimer ($hash, $dieGanzeWoche, $newParam, $overrulewday);
     $activeTimerState = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     Log3( $hash, 4, "[$name] Update   - past timer activated" );
-    resetRegIntTimer("$idx", $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if $timToSwitch > $now && ($activeTimerState || $activeTimer );
+    deleteSingleRegIntTimer($idx, $hash, 1);
+    setRegIntTimer($idx, $timToSwitch, \&WeekdayTimer_Update, $hash, 0) if $timToSwitch > $now && ($activeTimerState || $activeTimer );
   } else {
     $activeTimer = isAnActiveTimer ($hash, $tage, $newParam, $overrulewday);
     $activeTimerState = $activeTimer;
@@ -1064,34 +1075,34 @@ sub checkIfDeviceIsHeatingType {
 
 ################################################################################
 sub checkDelayedExecution {
-  my ($hash, $event, $time) = @_;
+  my ($hash, $event, $idx) = @_;
   my $name = $hash->{NAME};
 
   my %specials = (
          '%WEEKDAYTIMER'     => $hash->{NAME},
          '%NAME'             => $hash->{DEVICE},
          '%EVENT'            => $event,
-         '%TIME'             => $hash->{profil}{$time}{TIME},
+         '%TIME'             => $hash->{profil}{$idx}{TIME},
          '$WEEKDAYTIMER'     => $hash->{NAME},
          '$NAME'             => $hash->{DEVICE},
          '$EVENT'            => $event,
-         '$TIME'             => $hash->{profil}{$time}{TIME},
+         '$TIME'             => $hash->{profil}{$idx}{TIME},
   );
 
   my $verzoegerteAusfuehrungCond = AttrVal($hash->{NAME}, 'delayedExecutionCond', 0);
 
   my $nextRetry = time + 55 + int(rand(10));
-  my $epoch = $hash->{profil}{$time}{EPOCH};
+  my $epoch = $hash->{profil}{$idx}{EPOCH};
   if (!$epoch) {                             #prevent FHEM crashing when profile is somehow damaged or incomlete, forum #109164
     my $actual_wp_reading = ReadingsVal($name,'weekprofiles','none');
-    Log3( $hash, 0, "[$name] profile $actual_wp_reading, item $time seems to be somehow damaged or incomplete!" );
+    Log3( $hash, 0, "[$name] profile $actual_wp_reading, item $idx seems to be somehow damaged or incomplete!" );
     $epoch = int(time) - 10*MINUTESECONDS;
     readingsSingleUpdate( $hash, 'corrupt_wp_count', ReadingsNum($name,'corrupt_wp_count', 0) + 1, 1 );
   }
   my $delay = int(time) - $epoch;
   my $nextDelay = int($delay/60.+1.5)*60;  # round to multiple of 60sec
   $nextRetry = $epoch + $nextDelay + AttrVal($name,'WDT_sendDelay',0);
-  Log3( $hash, 4, "[$name] time=".$hash->{profil}{$time}{TIME}."/$epoch delay=$delay, nextDelay=$nextDelay, nextRetry=$nextRetry" );
+  Log3( $hash, 4, "[$name] time=".$hash->{profil}{$idx}{TIME}."/$epoch delay=$delay, nextDelay=$nextDelay, nextRetry=$nextRetry" );
 
   for my $key (keys %specials) {
     my $val = $specials{$key};
@@ -1100,7 +1111,6 @@ sub checkDelayedExecution {
   }
   Log3( $hash, 4, "[$name] delayedExecutionCond:$verzoegerteAusfuehrungCond" );
 
-#  my $verzoegerteAusfuehrung = eval($verzoegerteAusfuehrungCond);
   my $verzoegerteAusfuehrung = AnalyzePerlCommand( $hash, $verzoegerteAusfuehrungCond );
 
   my $logtext = $verzoegerteAusfuehrung // 'no condition attribute set';
@@ -1110,14 +1120,15 @@ sub checkDelayedExecution {
     if ( !defined $hash->{VERZOEGRUNG} ) {
       Log3( $hash, 3, "[$name] switch of $hash->{DEVICE} delayed - delayedExecutionCond: '$verzoegerteAusfuehrungCond' is TRUE" );
     }
-    if ( defined $hash->{VERZOEGRUNG_IDX} && $hash->{VERZOEGRUNG_IDX}!=$time) {
+    if ( defined $hash->{VERZOEGRUNG_IDX} && $hash->{VERZOEGRUNG_IDX}!=$idx) {
       #Prüfen, ob der nächste Timer überhaupt für den aktuellen Tag relevant ist!
 
-      Log3( $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$time}{TIME}, delayedExecutionCond returned $verzoegerteAusfuehrung" );
+      Log3( $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$idx}{TIME}, delayedExecutionCond returned $verzoegerteAusfuehrung" );
       deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash);
+      _checkTimerReset($hash, $idx); 
     }
-    $hash->{VERZOEGRUNG_IDX} = $time;
-    resetRegIntTimer("$time", $nextRetry, \&WeekdayTimer_Update, $hash, 0);
+    $hash->{VERZOEGRUNG_IDX} = $idx;
+    resetRegIntTimer($idx, $nextRetry, \&WeekdayTimer_Update, $hash, 0);
     $hash->{VERZOEGRUNG} = 1;
     return $verzoegerteAusfuehrung;
   }
@@ -1168,12 +1179,14 @@ sub checkDelayedExecution {
           if ( !defined $hash->{VERZOEGRUNG} ) {
               Log3( $hash, 3, "[$name] switch of $hash->{DEVICE} delayed - sensor '$fk' Reading/Attribute '$reading' is '$windowStatus'" );
           }
-          if ( defined $hash->{VERZOEGRUNG_IDX} && $hash->{VERZOEGRUNG_IDX} != $time ) {
-              Log3( $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$time}{TIME} while window contact returned open state");
+          if ( defined $hash->{VERZOEGRUNG_IDX} && $hash->{VERZOEGRUNG_IDX} != $idx ) {
+              Log3( $hash, 3, "[$name] timer at $hash->{profil}{$hash->{VERZOEGRUNG_IDX}}{TIME} skipped by new timer at $hash->{profil}{$idx}{TIME} while window contact returned open state");
               deleteSingleRegIntTimer($hash->{VERZOEGRUNG_IDX},$hash);
+              #xxxxx add logic for last timer of day
+              _checkTimerReset($hash, $idx); 
           }
-          $hash->{VERZOEGRUNG_IDX} = $time;
-          resetRegIntTimer("$time", $nextRetry, \&WeekdayTimer_Update, $hash, 0);
+          $hash->{VERZOEGRUNG_IDX} = $idx;
+          resetRegIntTimer($idx, $nextRetry, \&WeekdayTimer_Update, $hash, 0);
           $hash->{VERZOEGRUNG} = 1;
           return 1
       }
@@ -1183,6 +1196,7 @@ sub checkDelayedExecution {
   }
   delete $hash->{VERZOEGRUNG};
   delete $hash->{VERZOEGRUNG_IDX} if defined $hash->{VERZOEGRUNG_IDX};
+  _checkTimerReset($hash, $idx); 
   return 0;
 }
 
