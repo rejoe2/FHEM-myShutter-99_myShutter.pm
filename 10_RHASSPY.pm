@@ -337,7 +337,7 @@ sub Define {
 
     my @unknown;
     for (keys %{$h}) {
-        push @unknown, $_ if $_ !~ m{\A(baseUrl|defaultRoom|language|devspec|fhemId|prefix|encoding|useGenericAttrs)\z}xm;
+        push @unknown, $_ if $_ !~ m{\A(?:baseUrl|defaultRoom|language|devspec|fhemId|prefix|encoding|useGenericAttrs)\z}xm;
     }
     my $err = join q{, }, @unknown;
     return "unknown key(s) in DEF: $err" if @unknown && $init_done;
@@ -1607,8 +1607,8 @@ sub getDeviceByIntentAndType {
                 } else {
                     push @{$device}, join q{,}, @rooms;
                     $last_item = pop @rooms;
-                    my $first_items = join q{ }, @rooms;
-                    my $response = getResponse ($hash, 'RequestChoiceRoom');
+                    $first_items = join q{ }, @rooms;
+                    $response = getResponse ($hash, 'RequestChoiceRoom');
                     $response =~ s{(\$\w+)}{$1}eegx;
                     unshift @{$device}, $response;
                     unshift @{$device}, $matchesOutsideRoom->[0];
@@ -2791,7 +2791,7 @@ sub handleIntentSetTimedOnOff {
             $cmd .= "-for-timer";
 
             my $allset = getAllSets($device);
-            return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoTimedOnDeviceFound')) if $allset !~ m{\b$cmd([\b:\s]|\Z)}xms;
+            return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoTimedOnDeviceFound')) if $allset !~ m{\b$cmd(?:[\b:\s]|\Z)}xms;
 
             my $hour = 0;
             my $now1 = time;
@@ -2893,7 +2893,7 @@ sub handleIntentSetTimedOnOffGroup {
         my $cmd = $value eq 'on' ? $cmdOn : $cmdOff;
         $cmd .= "-for-timer";
         my $allset = getAllSets($device);
-        if ($allset !~ m{\b$cmd([\b:\s]|\Z)}xms) {
+        if ($allset !~ m{\b$cmd(?:[\b:\s]|\Z)}xms) {
             Log3($hash->{NAME}, 3, "Running command [$cmd] on device [$device] is not possible!");
             next;
         }
