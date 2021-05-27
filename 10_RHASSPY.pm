@@ -1457,9 +1457,12 @@ sub getRoomName {
     $siteId =~ s{\A([^.]+).*}{$1}xms;
     utf8::downgrade($siteId, 1);
     $room = ReadingsVal($hash->{NAME}, $rreading, lc $siteId);
-    #$room = ReadingsVal($hash->{NAME}, $rreading, $siteId);
-    $room = $hash->{defaultRoom} if $room eq 'default' || !(length $room);
-    Log3($hash->{NAME}, 5, "room is identified using siteId as $room");
+    if ($room eq 'default' || !(length $room)) {
+        $room = $hash->{defaultRoom};
+        Log3($hash->{NAME}, 5, "default room used");
+    } else {
+        Log3($hash->{NAME}, 5, "room is identified using siteId as $room");
+    }
 
     return $room;
 }
@@ -1699,7 +1702,8 @@ sub getDevicesByGroup {
     my $data = shift // return;
 
     my $group = $data->{Group} // return;
-    my $room  = $data->{Room}  // return;
+    #my $room  = $data->{Room}  // return;
+    my $room  = getRoomName($hash, $data);
 
     my $devices = {};
 
