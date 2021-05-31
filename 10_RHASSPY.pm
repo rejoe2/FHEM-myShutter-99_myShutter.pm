@@ -109,7 +109,7 @@ my $languagevars = {
     },
     'timerCancellation' => '$label for $room deleted',
     'timeRequest' => 'it is $hour o clock $min minutes',
-    'weekdayRequest' => 'today it is $weekDay',
+    'weekdayRequest' => 'today is $weekDay, $month the $day., $year',
     'duration_not_understood'   => "Sorry I could not understand the desired duration",
     'reSpeak_failed'   => 'i am sorry i can not remember',
     'Change' => {
@@ -1145,7 +1145,7 @@ sub _analyze_genDevType_setter {
         for my $scname (split m{,}xms, $+{scnames}) {
             my $clscene = $scname;
             # cleanup HUE scenes
-            $clscene = (split m{[#]\[id}xms, $clscene)[0] if $clscene =~ m{#\[id}xms; 
+            $clscene = (split m{[#]\[id}xms, $clscene)[0] if $clscene =~ m{[#]\[id}xms; 
             $clscene =~ s{[#]}{ }gxm;
             $mapping->{SetScene}->{SetScene}->{$scname} = $clscene;
         }
@@ -3436,6 +3436,10 @@ sub handleIntentGetWeekday {
 
     my $weekDay  = strftime( '%A', localtime );
     $weekDay  = $hash->{helper}{lng}{words}->{$weekDay} if defined $hash->{helper}{lng}{words}->{$weekDay};
+    my $month = strftime( '%B', localtime );
+    $month  = $hash->{helper}{lng}{words}->{$month} if defined $hash->{helper}{lng}{words}->{$month};
+    my $year = strftime( '%G', localtime );
+    my $day = strftime( '%e', localtime );
     my $response = $hash->{helper}{lng}->{responses}->{weekdayRequest};
     $response =~ s{(\$\w+)}{$1}eegx;
 
