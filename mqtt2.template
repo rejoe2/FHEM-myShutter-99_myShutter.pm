@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 24494 2021-05-23 11:48:51Z Beta-User $
+# $Id: mqtt2.template 24516 2021-05-26 16:41:16Z Beta-User $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -3995,7 +3995,6 @@ par:BASE_ID;BASE_ID typically is home;{ AttrVal("DEVICE","readingList","") =~ m,
 par:DEVNAME;BASE_ID typically is home;{ AttrVal("DEVICE","readingList","") =~ m,([^:]+)[/](O[^/]*M[^/]*G[^/]*)[/].*:, ? $2 : undef }
 par:DEVCID;CID of the new device - try to read the last RF value; { ReadingsVal("DEVICE","value","unknown") }
 par:NEWDEVROOM;Room of the calling device; {AttrVal("DEVICE","room","MQTT2_\DEVICE" )}
-defmod OMG_DEVCID MQTT2_\DEVICE DEVCID
 deletereading -q OMG_DEVCID (?!associatedWith).*
 defmod OMG_DEVCID MQTT2_\DEVICE DEVCID
 attr OMG_DEVCID autocreate 0
