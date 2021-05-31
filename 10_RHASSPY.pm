@@ -3435,9 +3435,10 @@ sub handleIntentGetWeekday {
     Log3($hash->{NAME}, 5, "handleIntentGetWeekday called");
 
     my $weekDay  = strftime( '%A', localtime );
+    $weekDay  = $hash->{helper}{lng}{words}->{$weekDay} if defined $hash->{helper}{lng}{words}->{$weekDay};
     my $response = $hash->{helper}{lng}->{responses}->{weekdayRequest};
     $response =~ s{(\$\w+)}{$1}eegx;
-    
+
     Log3($hash->{NAME}, 5, "Response: $response");
 
     # Send voice reponse
