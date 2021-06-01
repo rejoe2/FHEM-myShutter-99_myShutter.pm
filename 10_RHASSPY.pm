@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.19';
+    $hash->{MODULE_VERSION} = '0.4.20';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -1145,10 +1145,12 @@ sub _analyze_genDevType_setter {
         for my $scname (split m{,}xms, $+{scnames}) {
             my $clscene = $scname;
             # cleanup HUE scenes
-            if ($clscene =~ m{[#]\[id}xms) {
+            if ($clscene =~ m{[#]}xms) {
+                #next if $clscene =~ m{[#]\[id}xms;
                 $clscene = (split m{[#]\[id}xms, $clscene)[0] if $clscene =~ m{[#]\[id}xms; 
                 $clscene =~ s{[#]}{ }gxm;
-                $scname =~ s{.*[#]\[(id=.+)]}{$1}xms;
+                $scname =~ s{.*[#]\[(id=.+)]}{$1}xms if $scname =~ m{[#]\[id}xms;
+                $scname =~ s{[#]}{ }gxm;
             }
             $mapping->{SetScene}->{SetScene}->{$scname} = $clscene;
         }
@@ -3396,17 +3398,21 @@ sub handleIntentSetScene{
         $device = getDeviceByName($hash, $room, $data->{Device});
         $mapping = getMapping($hash, $device, 'SetScene', undef, defined $hash->{helper}{devicemap});
         # restore HUE scenes
+        $scene = qq([$scene]) if $scene =~ m{id=.+}xms;
+=pod
         if ($scene =~ m{id=.+}xms) {
             my $allset = getAllSets($device);
             if ($allset =~ m{\bscene:(?<scnames>[\S]+)}xm) {
                 for my $scname (split m{,}xms, $+{scnames}) {
                     if ($scname =~ m{$scene}xms) {
                         $scene = $scname;
+                        $scene =~ s{[#]}{ }gxm;
                         last $scname;
                     }
                 }
             }
         }
+=cut
 
         # Mapping found?
         return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !$device || !defined $mapping;
