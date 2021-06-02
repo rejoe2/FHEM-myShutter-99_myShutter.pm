@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.20';
+    $hash->{MODULE_VERSION} = '0.4.21';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -940,7 +940,7 @@ sub _analyze_rhassypAttr {
             my($unnamed, $named) = parseParams($val);
             my $combined = _combineHashes( $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene}, $named);
             for (keys %{$combined}) {
-                delete $combined->{$_} if $combined->{$_} eq 'none' || $named->{all} eq 'none';
+                delete $combined->{$_} if $combined->{$_} eq 'none' || defined $named->{all} && $named->{all} eq 'none';
             }
             keys %{$combined} ?
                 $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene} = $combined
@@ -1439,7 +1439,7 @@ sub getAllRhasspyNamesAndGroupsByIntent {
     for my $device (devspec2array($hash->{devspec})) {
         next if !defined $hash->{helper}{devicemap}{devices}{$device}{intents}->{$intent};
         push @names, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{names}; 
-        push @groups, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{groups}; 
+        push @groups, split m{,}x, $hash->{helper}{devicemap}{devices}{$device}->{groups} if defined $hash->{helper}{devicemap}{devices}{$device}->{groups}; 
     }
 
     @names  = uniq(@names);
@@ -1711,7 +1711,6 @@ sub getDevicesByGroup {
     my $data = shift // return;
 
     my $group = $data->{Group} // return;
-    #my $room  = $data->{Room}  // return;
     my $room  = getRoomName($hash, $data);
 
     my $devices = {};
@@ -1721,7 +1720,7 @@ sub getDevicesByGroup {
         next if $room ne 'global' && $allrooms !~ m{\b$room(?:[\b:\s]|\Z)}x;
 
         my $allgroups = $hash->{helper}{devicemap}{devices}{$dev}->{groups} // next;
-        next if $allgroups !~ m{\b$group(?:[\b:\s]|\Z)}x;
+        next if $allgroups !~ m{\b$group\b}x;
 
         my $specials = $hash->{helper}{devicemap}{devices}{$dev}{group_specials};
         my $label = $specials->{partOf} // $dev;
