@@ -3885,7 +3885,7 @@ sub handleIntentCancelAction {
 
     Log3($hash->{NAME}, 5, 'handleIntentCancelAction called');
 
-    my $toDisable = defined $data->{customData} && defined $data->{customData}->{'.ENABLED'} ? $data->{customData}->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
 
     my $response = $hash->{helper}{lng}->{responses}->{ 'SilentCancelConfirmation' };
 
