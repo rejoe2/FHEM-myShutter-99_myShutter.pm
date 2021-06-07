@@ -1,4 +1,4 @@
-# $Id: 59_Twilight.pm 24411 2021-05-11 05:35:24Z Beta-User $
+# $Id: 59_Twilight.pm 24496 2021-05-24 "use" cleanup Beta-User $
 ##############################################################################
 #
 #     59_Twilight.pm
@@ -40,10 +40,11 @@ use warnings;
 use Math::Trig;
 use Time::Local qw(timelocal_nocheck);
 use List::Util qw(max min);
-use Scalar::Util qw( weaken );
-use GPUtils qw(GP_Import GP_Export);
-#eval { use FHEM::Core::Timer::Helper qw( addTimer removeTimer optimizeLOT ); 1 };
+use Scalar::Util qw(looks_like_number);
+use GPUtils qw(GP_Import);
+#use POSIX qw(strftime);
 use FHEM::Meta;
+use FHEM::Core::Timer::Register qw(:ALL);
 
 #-- Run before package compilation
 BEGIN {
@@ -57,10 +58,8 @@ BEGIN {
           DAYSECONDS
           HOURSECONDS
           MINUTESECONDS
-          sr_alt
           CommandAttr
           CommandModify
-          looks_like_number
           devspec2array
           notifyRegexpChanged
           deviceEvents
@@ -77,17 +76,16 @@ BEGIN {
           IsDisabled
           Log3
           InternalTimer
-          RemoveInternalTimer
-          hms2h
-          h2hms_fmt
           FmtTime
           FmtDateTime
-          strftime
           perlSyntaxCheck
           EvalSpecials
           AnalyzePerlCommand
           AnalyzeCommandChain
           stacktrace
+          sr_alt
+          hms2h
+          h2hms_fmt
           )
     );
 }
@@ -177,7 +175,7 @@ sub Twilight_Undef {
     my $hash = shift;
     my $arg = shift // return;
 
-    deleteAllRegisteredInternalTimer($hash);
+    deleteAllRegIntTimer($hash);
 
     notifyRegexpChanged( $hash, "" );
     for my $key ( keys %{ $hash->{helper}{extWeather} } ) {
@@ -195,7 +193,7 @@ sub Twilight_Change_DEF {
     my $name = $hash->{NAME};
     my $newdef = "";
     my $weather = $hash->{DEFINE};
-    $weather = "" if $weather eq "none";
+    $weather = "" if $weather eq 'none';
     if (looks_like_number($weather)) {
         my @wd = devspec2array("TYPE=Weather|PROPLANTA");
         my ($err, $wreading);
@@ -221,7 +219,7 @@ sub Twilight_Notify {
     my $wname = $whash->{NAME};
     my $events = deviceEvents( $whash, 1 );
 
-    my $re = $hash->{helper}{extWeather}{regexp} // "unknown";
+    my $re = $hash->{helper}{extWeather}{regexp} // q{unknown};
 
     return if(!$events); # Some previous notify deleted the array.
     my $max = int(@{$events});
@@ -318,21 +316,21 @@ sub Twilight_HandleWeatherData {
     }
 
     #renew dates and timers?, fire events?
-    my $nextevent = ReadingsVal($name,"nextEvent","none");            
+    my $nextevent = ReadingsVal($name,'nextEvent','none');            
     my $nextEventTime = FmtTime( $sr );
 
     readingsBeginUpdate( $hash );
-    readingsBulkUpdate( $hash, "cloudCover", $extWeather );
-    readingsBulkUpdate( $hash, "cloudCover_sr", $sr_extWeather ) if $sr_wh && $now < $sr;
-    readingsBulkUpdate( $hash, "cloudCover_ss", $ss_extWeather ) if $ss_wh && $now < $ss;
+    readingsBulkUpdate( $hash, 'cloudCover', $extWeather );
+    readingsBulkUpdate( $hash, 'cloudCover_sr', $sr_extWeather ) if $sr_wh && $now < $sr;
+    readingsBulkUpdate( $hash, 'cloudCover_ss', $ss_extWeather ) if $ss_wh && $now < $ss;
 
     if ( $now < $sr ) {
         $hash->{TW}{sr_weather}{TIME} = $sr;
-        resetRegisteredInternalTimer( 'sr_weather', $sr, \&Twilight_fireEvent, $hash, 0 );
+        resetRegIntTimer( 'sr_weather', $sr, \&Twilight_fireEvent, $hash, 0 );
         readingsBulkUpdate( $hash, 'sr_weather', $nextEventTime ) if $inNotify;
         readingsBulkUpdate( $hash, 'nextEventTime', $nextEventTime ) if $nextevent eq 'sr_weather';
     } elsif ( $sr_passed ) {
-        deleteSingleRegisteredInternalTimer( 'sr_weather', $hash, \&Twilight_fireEvent);
+        deleteSingleRegIntTimer( 'sr_weather', $hash, \&Twilight_fireEvent);
         readingsBulkUpdate( $hash, 'sr_weather', $nextEventTime );
         if ( $nextevent eq 'sr_weather' ) {
             readingsBulkUpdate( $hash, 'nextEvent', 'ss_weather' ) ;
@@ -340,18 +338,18 @@ sub Twilight_HandleWeatherData {
             readingsBulkUpdate( $hash, 'state', '6' );
             readingsBulkUpdate( $hash, 'light', '6' );
             readingsBulkUpdate( $hash, 'aktEvent', 'sr_weather' );
-            resetRegisteredInternalTimer( 'ss_weather', $ss, \&Twilight_fireEvent, $hash, 0 );
+            resetRegIntTimer( 'ss_weather', $ss, \&Twilight_fireEvent, $hash, 0 );
         }
     } 
 
     if ( $now < $ss ) {
         $nextEventTime = FmtTime( $ss );
         $hash->{TW}{ss_weather}{TIME} = $ss;
-        resetRegisteredInternalTimer( 'ss_weather', $ss, \&Twilight_fireEvent, $hash, 0 );
+        resetRegIntTimer( 'ss_weather', $ss, \&Twilight_fireEvent, $hash, 0 );
         readingsBulkUpdate( $hash, 'ss_weather', $nextEventTime ) if $inNotify;
         readingsBulkUpdate( $hash, 'nextEventTime', $nextEventTime ) if $nextevent eq 'ss_weather' && !$ss_passed;
     } elsif ( $ss_passed ) {
-        deleteSingleRegisteredInternalTimer( 'ss_weather', $hash, \&Twilight_fireEvent );
+        deleteSingleRegIntTimer( 'ss_weather', $hash, \&Twilight_fireEvent );
         readingsBulkUpdate( $hash, 'ss_weather', $nextEventTime );
         if ( $nextevent eq 'ss_weather' ) {
             readingsBulkUpdate( $hash, 'nextEvent', 'ss_indoor' ) ;
@@ -363,7 +361,7 @@ sub Twilight_HandleWeatherData {
     }
 
     readingsEndUpdate( $hash, defined( $hash->{LOCAL} ? 0 : 1 ) );
-    resetRegisteredInternalTimer('sunpos', $now+1, \&Twilight_sunpos, $hash, 0);
+    resetRegIntTimer('sunpos', $now+1, \&Twilight_sunpos, $hash, 0);
     return;
 }
 
@@ -506,63 +504,6 @@ sub Twilight_Get {
     return "@$aref[0] $reading => $value";
 }
 
-################################################################################
-sub resetRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
-    deleteSingleRegisteredInternalTimer( $modifier, $hash, $callback );
-    return setRegisteredInternalTimer ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone );
-}
-
-################################################################################
-sub setRegisteredInternalTimer {
-    my ( $modifier, $tim, $callback, $hash, $waitIfInitNotDone ) = @_;
-
-    my $timerName = "$hash->{NAME}_$modifier";
-    my $fnHash     = {
-        HASH     => $hash,
-        NAME     => $timerName,
-        MODIFIER => $modifier
-    };
-    weaken($fnHash->{HASH});
-
-    if ( defined( $hash->{TIMER}{$timerName} ) ) {
-        Log3( $hash, 1, "[$hash->{NAME}] possible overwriting of timer $timerName - please delete it first" );
-        stacktrace();
-    }
-    else {
-        $hash->{TIMER}{$timerName} = $fnHash;
-    }
-
-    Log3( $hash, 5, "[$hash->{NAME}] setting  Timer: $timerName " . FmtDateTime($tim) );
-    InternalTimer( $tim, $callback, $fnHash, $waitIfInitNotDone );
-    return $fnHash;
-}
-
-################################################################################
-sub deleteSingleRegisteredInternalTimer {
-    my $modifier = shift;
-    my $hash = shift // return;
-
-    my $timerName = "$hash->{NAME}_$modifier";
-    my $fnHash    = $hash->{TIMER}{$timerName};
-    if ( defined($fnHash) ) {
-        Log3( $hash, 5, "[$hash->{NAME}] removing Timer: $timerName" );
-        RemoveInternalTimer($fnHash);
-        delete $hash->{TIMER}{$timerName};
-    }
-    return;
-}
-
-################################################################################
-sub deleteAllRegisteredInternalTimer {
-    my $hash = shift // return;
-
-    for my $key ( keys %{ $hash->{TIMER} } ) {
-        deleteSingleRegisteredInternalTimer( $hash->{TIMER}{$key}{MODIFIER}, $hash );
-    }
-    return;
-}
-
 
 ################################################################################
 sub secondsSinceMidnight {
@@ -679,10 +620,10 @@ sub Twilight_TwilightTimes {
     for my $ereignis ( sort keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq 'weather' && $ereignis !~ m{weather}x );
 
-        deleteSingleRegisteredInternalTimer( $ereignis, $hash, \&Twilight_fireEvent );
+        deleteSingleRegIntTimer( $ereignis, $hash, \&Twilight_fireEvent );
         
         if ( defined $hash->{TW}{$ereignis}{TIME} && ($hash->{TW}{$ereignis}{TIME} > $now || $firstrun) ) { # had been > 0
-            setRegisteredInternalTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
+            setRegIntTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
                 \&Twilight_fireEvent, $hash, 0 );
         }
     }
@@ -718,7 +659,7 @@ sub Twilight_fireEvent {
     my $nextEventTime =
       ( $hash->{TW}{$nextEvent}{TIME} > 0 )
       ? FmtTime( $hash->{TW}{$nextEvent}{TIME} )
-      : "undefined";
+      : 'undefined';
 
     my $doTrigger = !( defined( $hash->{LOCAL} ) )
       && ( abs($delta) < 6 || $swip && $state gt $oldState );
@@ -730,6 +671,7 @@ sub Twilight_fireEvent {
           . sprintf( "(%2d/$light/%+5.1f°/$doTrigger)   ", $state, $deg )
           . sprintf( "===> %-10s %-19s  ", $nextEvent, $nextEventTime )
     );
+    deleteSingleRegIntTimer($modifier, $hash, 1);
 
     readingsBeginUpdate($hash);
     readingsBulkUpdate( $hash, 'state',         $state );
@@ -765,7 +707,7 @@ sub Twilight_Midnight {
     $midnight -= 19 * HOURSECONDS if $daylightsavingdelta == 1 && (localtime)[2] < 2;
     $midnight -= 20 * HOURSECONDS if $daylightsavingdelta == -1 && (localtime)[2] < 3;
     
-    return resetRegisteredInternalTimer( 'Midnight', $midnight, \&Twilight_Midnight, $hash, 0 );
+    return resetRegIntTimer( 'Midnight', $midnight, \&Twilight_Midnight, $hash, 0 );
 
 }
 
@@ -775,7 +717,7 @@ sub Twilight_Midnight {
 sub Twilight_sunposTimerSet {
     my $hash = shift // return;
 
-    return resetRegisteredInternalTimer( 'sunpos', time + $hash->{SUNPOS_OFFSET}, \&Twilight_sunpos, $hash, 0 );
+    return resetRegIntTimer( 'sunpos', time + $hash->{SUNPOS_OFFSET}, \&Twilight_sunpos, $hash, 0 );
 }
 
 ################################################################################
@@ -788,7 +730,8 @@ sub Twilight_getWeatherHorizon {
     my $weather_horizon = $result / 12.5; 
     $hash->{WEATHER_CORRECTION} = $weather_horizon if $setInternal;
     $weather_horizon += $hash->{INDOOR_HORIZON};
-    my $doy = strftime("%j",localtime);
+    #my $doy = strftime("%j",localtime);
+    my $doy = (localtime)[7]+1;
     my $declination =  0.4095*sin(0.016906*($doy-80.086));
     
     $weather_horizon = min( 89-$hash->{helper}{'.LATITUDE'}+$declination, $weather_horizon );
