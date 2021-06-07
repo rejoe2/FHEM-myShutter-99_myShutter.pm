@@ -1,4 +1,4 @@
-# $Id: 10_RHASSPY.pm 24348 + Register.pm Beta-User $
+# $Id: 10_RHASSPY.pm 24573 + modified ConfirmAction $
 ###########################################################################
 #
 # FHEM RHASSPY modul  (https://github.com/rhasspy)
@@ -3911,16 +3911,13 @@ sub handleIntentConfirmAction {
 
     #confirmed case
     my $identiy = qq($data->{sessionId});
-    my $data_saved = $hash->{helper}{'.delayed'}->{$identiy};
-    delete $hash->{helper}{'.delayed'}{$identiy};
-    deleteSingleRegIntTimer($identiy, $hash);
 
-    my $data_old = $data_saved;
+    deleteSingleRegIntTimer($identiy, $hash);
+    my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
+    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
 
     my $toDisable = defined $data_old && defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
     configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
-
-    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
 
     $data_old->{siteId} = $data->{siteId};
     $data_old->{sessionId} = $data->{sessionId};
@@ -3934,6 +3931,7 @@ sub handleIntentConfirmAction {
     if (ref $dispatchFns->{$intent} eq 'CODE') {
         $device = $dispatchFns->{$intent}->($hash, $data_old);
     }
+    delete $hash->{helper}{'.delayed'}{$identiy};
 
     return $device;
 }
