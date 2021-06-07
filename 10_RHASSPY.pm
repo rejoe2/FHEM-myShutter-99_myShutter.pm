@@ -38,6 +38,8 @@ use Encode;
 use HttpUtils;
 use utf8;
 use List::Util 1.45 qw(max min uniq);
+use Scalar::Util qw(looks_like_number);
+use POSIX qw(strftime);
 use Data::Dumper;
 use FHEM::Core::Timer::Register qw(:ALL);
 
@@ -286,15 +288,13 @@ BEGIN {
     parseParams
     ResolveDateWildcards
     HttpUtils_NonblockingGet
-    round
-    strftime
     FmtDateTime
     makeReadingName
     FileRead
-    trim
-    looks_like_number
     getAllSets
+    trim
   ))
+    #round
 
 };
 

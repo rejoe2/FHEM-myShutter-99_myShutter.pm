@@ -1,4 +1,4 @@
-# $Id: 98_WeekdayTimer.pm 24513 2021-05-26 03:53:53Z Beta-User $
+# $Id: 98_WeekdayTimer.pm 24521 2021-05-27 use cleanup $
 #############################################################################
 #
 #     98_WeekdayTimer.pm
@@ -31,10 +31,11 @@ use strict;
 use warnings;
 
 use Time::Local qw( timelocal_nocheck );
+use Scalar::Util qw(looks_like_number);
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use FHEM::Core::Timer::Register qw(:ALL);
-
+use JSON qw(decode_json);
 use GPUtils qw(GP_Import);
 
 ## Import der FHEM Funktionen
@@ -75,12 +76,8 @@ BEGIN {
           devspec2array
           addToDevAttrList
           FmtDateTime
-          sunrise_abs
-          sunset_abs
-          trim
           stacktrace
-          decode_json
-          looks_like_number
+          trim
           )
     );
 }
@@ -373,7 +370,7 @@ sub _Profile {
     $hash->{profil}{$idx}{WE_Override} = $overrulewday;
   }
 # ---- Texte Readings aufbauen -----------------------------------------
-  Log3( $hash, 4,  "[$hash->{NAME}] " . sunrise_abs() . " " . sunset_abs() . " " . $longDays{$language}[$wday] );
+  #Log3( $hash, 4,  "[$hash->{NAME}] " . sunrise_abs() . " " . sunset_abs() . " " . $longDays{$language}[$wday] );
   for  my $d (sort keys %{$hash->{profile}}) {
     my $profiltext = q{};
     for  my $t (sort keys %{$hash->{profile}{$d}}) {
