@@ -3887,13 +3887,14 @@ sub handleIntentCancelAction {
 
     #dialog my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
 
-    my $response = $hash->{helper}{lng}->{responses}->{ 'SilentCancelConfirmation' };
-
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{customData};
+    my $identiy = qq($data->{sessionId});
+    my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
+    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'SilentCancelConfirmation')) if !defined $data_old;
 
     my $identiy = qq($data->{sessionId});
     deleteSingleRegIntTimer($identiy, $hash);
-    $response = $hash->{helper}{lng}->{responses}->{ 'DefaultCancelConfirmation' };
+    delete $hash->{helper}{'.delayed'}->{$identiy};
+    respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultCancelConfirmation' ) );
     #dialog configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
 
     return $hash->{NAME};
