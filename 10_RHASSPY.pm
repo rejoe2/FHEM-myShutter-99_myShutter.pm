@@ -1232,6 +1232,7 @@ sub setDialogTimeout {
         ? $response
         : { text         => $response, 
             intentFilter => [@ca_strings],
+            sendIntentNotRecognized => 'false'
             #customData => $data
           };
 
@@ -2137,6 +2138,14 @@ sub analyzeMQTTmessage {
             readingsSingleUpdate($hash, "listening_" . makeReadingName($room), 1, 1);
         } elsif ( $topic =~ m{sessionEnded}x ) {
             readingsSingleUpdate($hash, 'listening_' . makeReadingName($room), 0, 1);
+            my $identiy = qq($data->{sessionId});
+            my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
+            if (defined $data_old) {
+                $data->{text} = getResponse( $hash, 'DefaultCancelConfirmation' );
+                sendTextCommand( $hash, $data );
+                delete $hash->{helper}{'.delayed'}{$identiy};
+                deleteSingleRegIntTimer($identiy, $hash);
+            }
         }
         push @updatedList, $hash->{NAME};
         return \@updatedList;
