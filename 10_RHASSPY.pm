@@ -1,4 +1,4 @@
-# $Id: 10_RHASSPY.pm 24573 + modified ConfirmAction $
+# $Id: 10_RHASSPY.pm 24573 + no configure_DialogManager in dialogues $
 ###########################################################################
 #
 # FHEM RHASSPY modul  (https://github.com/rhasspy)
@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.21';
+    $hash->{MODULE_VERSION} = '0.4.22';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -1192,11 +1192,11 @@ sub RHASSPY_DialogTimeout {
     deleteSingleRegIntTimer($identiy, $hash, 1); 
 
     my $siteId = $data->{siteId};
-    my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    #dialog my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
 
     my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
     respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
-    configure_DialogManager($hash, $siteId, $toDisable, 'false');
+    #dialog configure_DialogManager($hash, $siteId, $toDisable, 'false');
 
     return;
 }
@@ -1209,7 +1209,7 @@ sub setDialogTimeout {
     my $toEnable = shift // [qw(ConfirmAction CancelAction)];
 
     my $siteId = $data->{siteId};
-    $data->{'.ENABLED'} = $toEnable;
+    #dialog $data->{'.ENABLED'} = $toEnable;
     my $identiy = qq($data->{sessionId});
 
     $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
@@ -1235,7 +1235,7 @@ sub setDialogTimeout {
             #customData => $data
           };
 
-    configure_DialogManager($hash, $siteId, $toEnable, 'true');
+    #dialog configure_DialogManager($hash, $siteId, $toEnable, 'true');
     respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
     
     my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
@@ -3885,7 +3885,7 @@ sub handleIntentCancelAction {
 
     Log3($hash->{NAME}, 5, 'handleIntentCancelAction called');
 
-    my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    #dialog my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
 
     my $response = $hash->{helper}{lng}->{responses}->{ 'SilentCancelConfirmation' };
 
@@ -3894,7 +3894,7 @@ sub handleIntentCancelAction {
     my $identiy = qq($data->{sessionId});
     deleteSingleRegIntTimer($identiy, $hash);
     $response = $hash->{helper}{lng}->{responses}->{ 'DefaultCancelConfirmation' };
-    configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
+    #dialog configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
 
     return $hash->{NAME};
 }
@@ -3916,8 +3916,8 @@ sub handleIntentConfirmAction {
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
     return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
 
-    my $toDisable = defined $data_old && defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
-    configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
+    #dialog my $toDisable = defined $data_old && defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
+    #dialog configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false');
 
     $data_old->{siteId} = $data->{siteId};
     $data_old->{sessionId} = $data->{sessionId};
