@@ -225,9 +225,9 @@ sub Twilight_Notify {
     my $max = int(@{$events});
     my $ret = "";
     for (my $i = 0; $i < $max; $i++) {
-        my $s = $events->[$i];
-        $s = "" if(!defined($s));
-        my $found = ($wname =~ m/^$re$/x || "$wname:$s" =~ m/^$re$/sx);
+        my $s = $events->[$i] // q{''};
+        #$s = "" if(!defined($s));
+        my $found = ($wname =~ m{\A$re\z}x || "$wname:$s" =~ m{\A$re\z}sx);
 
         return Twilight_HandleWeatherData( $hash, 1) if $found;
     }
@@ -330,7 +330,7 @@ sub Twilight_HandleWeatherData {
         readingsBulkUpdate( $hash, 'sr_weather', $nextEventTime ) if $inNotify;
         readingsBulkUpdate( $hash, 'nextEventTime', $nextEventTime ) if $nextevent eq 'sr_weather';
     } elsif ( $sr_passed ) {
-        deleteSingleRegIntTimer( 'sr_weather', $hash, \&Twilight_fireEvent);
+        deleteSingleRegIntTimer( 'sr_weather', $hash );
         readingsBulkUpdate( $hash, 'sr_weather', $nextEventTime );
         if ( $nextevent eq 'sr_weather' ) {
             readingsBulkUpdate( $hash, 'nextEvent', 'ss_weather' ) ;
@@ -349,7 +349,7 @@ sub Twilight_HandleWeatherData {
         readingsBulkUpdate( $hash, 'ss_weather', $nextEventTime ) if $inNotify;
         readingsBulkUpdate( $hash, 'nextEventTime', $nextEventTime ) if $nextevent eq 'ss_weather' && !$ss_passed;
     } elsif ( $ss_passed ) {
-        deleteSingleRegIntTimer( 'ss_weather', $hash, \&Twilight_fireEvent );
+        deleteSingleRegIntTimer( 'ss_weather', $hash );
         readingsBulkUpdate( $hash, 'ss_weather', $nextEventTime );
         if ( $nextevent eq 'ss_weather' ) {
             readingsBulkUpdate( $hash, 'nextEvent', 'ss_indoor' ) ;
