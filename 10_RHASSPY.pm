@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.22';
+    $hash->{MODULE_VERSION} = '0.4.23';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -764,7 +764,7 @@ hermes/dialogueManager/configure (JSON)
 
     my $json = toJSON($sendData);
 
-    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure $json});
+    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure:r $json});
     return;
 }
 
@@ -1188,14 +1188,15 @@ sub RHASSPY_DialogTimeout {
     my $identiy = $fnHash->{MODIFIER};
 
     my $data     = shift // $hash->{helper}{'.delayed'}->{$identiy};
-    delete $hash->{helper}{'.delayed'}{$identiy};
-    deleteSingleRegIntTimer($identiy, $hash, 1); 
-
     my $siteId = $data->{siteId};
     #dialog my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)];
 
-    my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, $response);
+    delete $hash->{helper}{'.delayed'}{$identiy};
+    deleteSingleRegIntTimer($identiy, $hash, 1); 
+
+
+    #my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
+    respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, getResponse( $hash, 'DefaultConfirmationTimeout' ));
     #dialog configure_DialogManager($hash, $siteId, $toDisable, 'false');
 
     return;
@@ -1212,7 +1213,7 @@ sub setDialogTimeout {
     #dialog $data->{'.ENABLED'} = $toEnable;
     my $identiy = qq($data->{sessionId});
 
-    $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationReceived} if $response eq 'default';
+    $response = getResponse($hash, 'DefaultConfirmationReceived') if $response eq 'default';
     $hash->{helper}{'.delayed'}{$identiy} = $data;
 
     resetRegIntTimer( $identiy, time + $timeout, \&RHASSPY_DialogTimeout, $hash, 0);
@@ -1223,11 +1224,7 @@ sub setDialogTimeout {
         my $id = qq{$hash->{LANGUAGE}.$hash->{fhemId}:$_};
         push @ca_strings, $id;
     }
-    
-    #my $ca_part = qq{$hash->{LANGUAGE}.$hash->{fhemId}:ConfirmAction};
-    #push @ca_strings, $ca_part;
-    #$ca_part = qq{$hash->{LANGUAGE}.$hash->{fhemId}:CancelAction};
-    #push @ca_strings, $ca_part;
+
     my $reaction = ref $response eq 'HASH' 
         ? $response
         : { text         => $response, 
@@ -1238,14 +1235,13 @@ sub setDialogTimeout {
 
     #dialog configure_DialogManager($hash, $siteId, $toEnable, 'true');
     respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
-    
+
     my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
     delete $hash->{'.toTrigger'};
 
     return $toTrigger;
 }
 
-#from https://stackoverflow.com/a/43873983, modified...
 sub get_unique {
     my $arr    = shift;
     my $sorted = shift; #true if shall be sorted (longest first!)
@@ -1344,7 +1340,8 @@ sub getAllRhasspyNames {
     return get_unique(\@devices, 1 );
 }
 
-# Alle Raumbezeichnungen sammeln
+
+# Get all room names with Rhasspy relevance
 sub getAllRhasspyRooms {
     my $hash = shift // return;
     return keys %{$hash->{helper}{devicemap}{rhasspyRooms}} if defined $hash->{helper}{devicemap};
@@ -1410,6 +1407,7 @@ sub getAllRhasspyGroups {
     return get_unique(\@groups, 1);
 }
 
+# get a list of all used scenes
 sub getAllRhasspyScenes {
     my $hash = shift // return;
     
