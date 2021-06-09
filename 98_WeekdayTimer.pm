@@ -179,7 +179,9 @@ sub WDT_Start {
   my $conditionOrCommand   = join q{ }, @arr;
   my @errors;
   # test if device is defined
-  if ( !$defs{$device} ) { 
+  #if ( !$defs{$device} ) { 
+  my @devices = devspec2array($device);
+  if ( !$defs{$devices[0]} ) { 
     Log3( $hash, 3, "[$name] device <$device> in fhem not defined, but accepted") ;
     if ( $init_done ) { push @errors, qq(device <$device> in fhem not defined) };
   }
@@ -217,7 +219,7 @@ sub WDT_Start {
   WDT_SetTimerOfDay({ HASH => $hash});
 
   return if !$init_done;
-  return join('\n', @errors) if (@errors); 
+  return join '\n', @errors if (@errors); 
   return;
 }
 
