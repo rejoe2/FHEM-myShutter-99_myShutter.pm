@@ -620,7 +620,7 @@ sub Twilight_TwilightTimes {
     for my $ereignis ( sort keys %{ $hash->{TW} } ) {
         next if ( $whitchTimes eq 'weather' && $ereignis !~ m{weather}x );
 
-        deleteSingleRegIntTimer( $ereignis, $hash, \&Twilight_fireEvent );
+        deleteSingleRegIntTimer( $ereignis, $hash );
         
         if ( defined $hash->{TW}{$ereignis}{TIME} && ($hash->{TW}{$ereignis}{TIME} > $now || $firstrun) ) { # had been > 0
             setRegIntTimer( $ereignis, $hash->{TW}{$ereignis}{TIME},
