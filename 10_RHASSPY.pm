@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.23';
+    $hash->{MODULE_VERSION} = '0.4.24';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -373,17 +373,16 @@ sub firstInit {
 
     # IO
     AssignIoPort($hash);
-    my $IODev = AttrVal( $name, 'IODev', ReadingsVal( $name, 'IODev', InternalVal($name, 'IODev', undef )));
+    my $IODev = AttrVal( $name, 'IODev', ReadingsVal( $name, 'IODev', InternalVal($name, 'IODev', undef )->{NAME}));
 
     return if !$init_done || !defined $IODev;
     RemoveInternalTimer($hash);
     deleteAllRegIntTimer($hash);
-  
-    IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
 
     fetchSiteIds($hash) if !ReadingsVal( $name, 'siteIds', 0 );
     initialize_rhasspyTweaks($hash, AttrVal($name,'rhasspyTweaks', undef ));
     configure_DialogManager($hash);
+    IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
     initialize_devicemap($hash);
 
     return;
@@ -720,18 +719,22 @@ sub initialize_rhasspyTweaks {
 
 sub configure_DialogManager {
     my $hash      = shift // return;
-    my $siteId    = shift;
+    Log3($hash,3,"R-DM for $hash->{NAME} called");
+    my $siteId    = shift // ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) // return;
     my $toDisable = shift // [qw(ConfirmAction CancelAction ChoiceRoom ChoiceDevice)];
     my $enable    = shift // q{false};
     #return if !$hash->{testing};
 
     #loop for global initialization or for several siteId's
-    if (!defined $siteId || $siteId =~ m{,}xms) {
-        $siteId = ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) if !defined $siteId;
+    #Log3($hash,3,"R-DM - $siteId $toDisable $enable");
+    if ( $siteId =~ m{,}xms ) {
+    #if (!defined $siteId || $siteId =~ m{,}xms) {
+        #$siteId = ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) if !defined $siteId;
         my @siteIds = split m{,}xms, $siteId;
         for (@siteIds) {
             configure_DialogManager($hash, $_, $toDisable, $enable);
         }
+        return;
     }
 
     my $language = $hash->{LANGUAGE};
@@ -763,8 +766,9 @@ hermes/dialogueManager/configure (JSON)
     };
 
     my $json = toJSON($sendData);
+    #Log3($hash,3,qq{hermes/dialogueManager/configure $json});
 
-    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure:r $json});
+    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure $json});
     return;
 }
 
@@ -3900,7 +3904,6 @@ sub handleIntentCancelAction {
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
     return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'SilentCancelConfirmation')) if !defined $data_old;
 
-    my $identiy = qq($data->{sessionId});
     deleteSingleRegIntTimer($identiy, $hash);
     delete $hash->{helper}{'.delayed'}->{$identiy};
     respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultCancelConfirmation' ) );
