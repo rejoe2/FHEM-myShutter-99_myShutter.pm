@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 00_MYSENSORS.pm 24446 2021-05-15 14:04:30Z Beta-User $
+# $Id: 00_MYSENSORS.pm 24446 + small bugfixes Beta-User $
 #
 ##############################################
 
@@ -36,6 +36,8 @@ use Exporter ('import');
 
 use DevIo;
 use GPUtils qw(:all);
+use Scalar::Util qw(looks_like_number);
+use Time::HiRes qw(gettimeofday);
 
 sub main::MYSENSORS_Initialize { goto &Initialize };
 
@@ -91,7 +93,6 @@ BEGIN { GP_Import(
     CommandDefine
     CommandModify
     CommandAttr
-    gettimeofday
     readingsSingleUpdate
     DevIo_OpenDev
     DevIo_SimpleWrite
@@ -103,7 +104,6 @@ BEGIN { GP_Import(
     Log3
     FileRead
     IsDisabled
-    looks_like_number
   )
   )
 };
