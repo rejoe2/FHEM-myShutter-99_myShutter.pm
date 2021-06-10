@@ -1,4 +1,4 @@
-# $Id: 10_RHASSPY.pm 24573 + switchable configure_DialogManager $
+# $Id: 10_RHASSPY.pm 24573 + switchable configure_DialogManager + $
 ###########################################################################
 #
 # FHEM RHASSPY modul  (https://github.com/rhasspy)
@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.24';
+    $hash->{MODULE_VERSION} = '0.4.25';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -1234,8 +1234,8 @@ sub setDialogTimeout {
         ? $response
         : { text         => $response, 
             intentFilter => [@ca_strings],
-            sendIntentNotRecognized => 'false'
-            #customData => $data
+            sendIntentNotRecognized => 'false',
+            customData => $data->{customData}
           };
 
     configure_DialogManager($hash, $siteId, $toEnable, 'true') if $hash->{switchDM}; #dialog 
@@ -3240,6 +3240,7 @@ sub handleIntentGetNumeric {
         my $response = $device->[1];
         my $all = $device->[2];
         my $choice = $device->[3];
+        $data->{customData} = $all;
         my $toActivate = $choice eq 'RequestChoiceDevice' ? [qw(ChoiceDevice CancelAction)] : [qw(ChoiceRoom CancelAction)];
         $device = $first;
         Log3($hash->{NAME}, 5, "More than one device possible, response is $response, first is $first, all are $all, type is $choice");
