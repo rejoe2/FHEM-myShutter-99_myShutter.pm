@@ -33,7 +33,7 @@ use strict;
 use warnings;
 use Carp qw(carp);
 use GPUtils qw(:all);
-use JSON;
+use JSON qw(decode_json);
 use Encode;
 use HttpUtils;
 use utf8;
@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.25';
+    $hash->{MODULE_VERSION} = '0.4.26';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -729,8 +729,6 @@ sub configure_DialogManager {
     #loop for global initialization or for several siteId's
     #Log3($hash,3,"R-DM - $siteId $toDisable $enable");
     if ( $siteId =~ m{,}xms ) {
-    #if (!defined $siteId || $siteId =~ m{,}xms) {
-        #$siteId = ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) if !defined $siteId;
         my @siteIds = split m{,}xms, $siteId;
         for (@siteIds) {
             configure_DialogManager($hash, $_, $toDisable, $enable);
@@ -766,7 +764,7 @@ hermes/dialogueManager/configure (JSON)
         intents => [@disabled]
     };
 
-    my $json = toJSON($sendData);
+    my $json = _toCleanJSON($sendData);
     #Log3($hash,3,qq{hermes/dialogueManager/configure $json});
 
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure $json});
@@ -1199,8 +1197,6 @@ sub RHASSPY_DialogTimeout {
     delete $hash->{helper}{'.delayed'}{$identiy};
     deleteSingleRegIntTimer($identiy, $hash, 1); 
 
-
-    #my $response = $hash->{helper}{lng}->{responses}->{DefaultConfirmationTimeout};
     respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, getResponse( $hash, 'DefaultConfirmationTimeout' ));
     configure_DialogManager($hash, $siteId, $toDisable, 'false') if $hash->{switchDM}; #dialog
 
@@ -2224,7 +2220,7 @@ sub respond {
         $sendData->{text} = $response
     }
 
-    my $json = toJSON($sendData);
+    my $json = _toCleanJSON($sendData);
     $response = $response->{response} if ref $response eq 'HASH' && defined $response->{response};
     readingsBeginUpdate($hash);
     $type eq 'voice' ?
@@ -2258,7 +2254,7 @@ sub sendTextCommand {
          input => $text,
          sessionId => "$hash->{fhemId}.textCommand"
     };
-    my $message = toJSON($data);
+    my $message = _toCleanJSON($data);
 
     # Send fake command, so it's forwarded to NLU
     # my $topic2 = "hermes/intent/FHEM:TextCommand";
@@ -2293,7 +2289,7 @@ sub sendSpeakCommand {
             return 'speak needs siteId and text as arguments!';
         }
     }
-    my $json = toJSON($sendData);
+    my $json = _toCleanJSON($sendData);
     return IOWrite($hash, 'publish', qq{hermes/tts/say $json});
 }
 
@@ -4168,6 +4164,18 @@ sub _getDialogueTimeout {
         && defined $hash->{helper}{tweaks}{timeouts}->{$type} 
         && looks_like_number( $hash->{helper}{tweaks}{timeouts}->{$type} );
     return $timeout;
+}
+
+sub _toCleanJSON {
+    my $data = shift // return;
+    
+    return $data if ref $data ne 'HASH';
+    my $json = toJSON($data);
+    
+    $json =~ s{(":"(true|false)")}{": $2}gms;
+    $json =~ s{":"}{": "}gms;
+    $json =~ s{("enable": (?:false|true)),("intentId": "[^"]+")}{$2,$1}gms;
+    return $json;
 }
 
 
