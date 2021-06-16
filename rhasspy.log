@@ -1,0 +1,262 @@
+sudo rhasspy -p de --user-profiles /opt/rhasspy/profiles
+Starting up...
+DEBUG:rhasspysupervisor:Namespace(debug=True, docker_compose='', local_mqtt_port=12183, mosquitto_path='mosquitto', profile='de', supervisord_conf='supervisord.conf', system_profiles=None, user_profiles=PosixPath('/opt/rhasspy/profiles'))
+DEBUG:rhasspysupervisor:Loading profile de (user=/opt/rhasspy/profiles, system=None)
+DEBUG:rhasspyprofile.profile:Loading /usr/lib/rhasspy/rhasspy-profile/rhasspyprofile/profiles/de/profile.json
+DEBUG:rhasspyprofile.profile:Loading /opt/rhasspy/profiles/de/profile.json
+DEBUG:rhasspysupervisor:Generating supervisord conf
+DEBUG:rhasspysupervisor:Microphone disabled (system=dummy)
+DEBUG:rhasspysupervisor:Speakers disabled (system=dummy)
+DEBUG:rhasspysupervisor:Intent handling disabled (system=dummy)
+DEBUG:rhasspysupervisor:Wrote /opt/rhasspy/profiles/de/supervisord.conf
+Starting services...
+2021-06-16 07:46:05,365 CRIT Supervisor is running as root.  Privileges were not dropped because no user is specified in the config file.  If you intend to run as root, you can set user=root in the config file to avoid this message.
+2021-06-16 07:46:05,372 INFO supervisord started with pid 24059
+2021-06-16 07:46:06,378 INFO spawned: 'intent_recognition' with pid 24066
+2021-06-16 07:46:06,384 INFO spawned: 'dialogue' with pid 24067
+2021-06-16 07:46:06,408 INFO spawned: 'speech_to_text' with pid 24068
+2021-06-16 07:46:06,413 INFO spawned: 'text_to_speech' with pid 24069
+2021-06-16 07:46:06,444 INFO spawned: 'wake_word' with pid 24072
+2021-06-16 07:46:07,446 INFO success: intent_recognition entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2021-06-16 07:46:07,446 INFO success: dialogue entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2021-06-16 07:46:07,447 INFO success: speech_to_text entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2021-06-16 07:46:07,447 INFO success: text_to_speech entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2021-06-16 07:46:07,447 INFO success: wake_word entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+[DEBUG:2021-06-16 07:46:10,236] rhasspytts_cli_hermes: Namespace(debug=True, host='192.168.2.72', language='de-DE', log_format='[%(levelname)s:%(asctime)s] %(name)s: %(message)s', password='password', play_command=None, port=1884, site_id=['base', 'motox', 'buero', 'büro', 'Küche'], temporary_wav=True, text_on_stdin=True, tls=False, tls_ca_certs=None, tls_cert_reqs='CERT_REQUIRED', tls_certfile=None, tls_ciphers=None, tls_keyfile=None, tls_version=None, tts_command='nanotts -v {lang} -o {file}', use_jinja2=False, username='joerg', voices_command=None, volume=2.0)
+[DEBUG:2021-06-16 07:46:10,242] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:10,250] rhasspytts_cli_hermes: Connecting to 192.168.2.72:1884
+[DEBUG:2021-06-16 07:46:10,354] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:10,356] rhasspytts_cli_hermes: Connected to MQTT broker
+[DEBUG:2021-06-16 07:46:10,357] rhasspytts_cli_hermes: Subscribed to hermes/audioServer/motox/playFinished
+[DEBUG:2021-06-16 07:46:10,357] rhasspytts_cli_hermes: Subscribed to hermes/audioServer/Küche/playFinished
+[DEBUG:2021-06-16 07:46:10,360] rhasspytts_cli_hermes: Subscribed to hermes/tts/say
+[DEBUG:2021-06-16 07:46:10,361] rhasspytts_cli_hermes: Subscribed to rhasspy/tts/getVoices
+[DEBUG:2021-06-16 07:46:10,363] rhasspytts_cli_hermes: Subscribed to hermes/audioServer/büro/playFinished
+[DEBUG:2021-06-16 07:46:10,364] rhasspytts_cli_hermes: Subscribed to hermes/audioServer/buero/playFinished
+[DEBUG:2021-06-16 07:46:10,364] rhasspytts_cli_hermes: Subscribed to hermes/audioServer/base/playFinished
+[DEBUG:2021-06-16 07:46:10,414] rhasspydialogue_hermes: Namespace(debug=True, group_separator=None, host='192.168.2.72', log_format='[%(levelname)s:%(asctime)s] %(name)s: %(message)s', min_asr_confidence=0.0, no_sound=['base'], password='password', port=1884, say_chars_per_second=33.0, session_timeout=30.0, site_id=['base', 'motox', 'buero', 'büro', 'Küche'], sound=[['wake', '/opt/rhasspy/profiles/de/sounds/start_of_input.wav'], ['recorded', '/opt/rhasspy/profiles/de/sounds/end_of_input.wav'], ['error', '/opt/rhasspy/profiles/de/sounds/error.wav']], tls=False, tls_ca_certs=None, tls_cert_reqs='CERT_REQUIRED', tls_certfile=None, tls_ciphers=None, tls_keyfile=None, tls_version=None, username='joerg', volume=1.0, wakeword_id=None)
+[DEBUG:2021-06-16 07:46:10,420] rhasspydialogue_hermes: Sound is disabled for sites ['base']
+[DEBUG:2021-06-16 07:46:10,423] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:10,429] rhasspydialogue_hermes: Connecting to 192.168.2.72:1884
+[DEBUG:2021-06-16 07:46:10,464] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:10,466] rhasspydialogue_hermes: Connected to MQTT broker
+[DEBUG:2021-06-16 07:46:10,467] rhasspydialogue_hermes: Subscribed to hermes/dialogueManager/startSession
+[DEBUG:2021-06-16 07:46:10,471] rhasspydialogue_hermes: Subscribed to hermes/tts/sayFinished
+[DEBUG:2021-06-16 07:46:10,473] rhasspydialogue_hermes: Subscribed to hermes/audioServer/base/playFinished
+[DEBUG:2021-06-16 07:46:10,480] rhasspydialogue_hermes: Subscribed to hermes/audioServer/buero/playFinished
+[DEBUG:2021-06-16 07:46:10,481] rhasspydialogue_hermes: Subscribed to hermes/intent/#
+[DEBUG:2021-06-16 07:46:10,488] rhasspydialogue_hermes: Subscribed to hermes/dialogueManager/continueSession
+[DEBUG:2021-06-16 07:46:10,489] rhasspydialogue_hermes: Subscribed to hermes/audioServer/büro/playFinished
+[DEBUG:2021-06-16 07:46:10,490] rhasspydialogue_hermes: Subscribed to hermes/audioServer/motox/playFinished
+[DEBUG:2021-06-16 07:46:10,490] rhasspywake_porcupine_hermes: Namespace(debug=True, host='192.168.2.72', keyword=['bumblebee_linux.ppn'], keyword_dir=['/opt/rhasspy/profiles/de/porcupine'], lang=None, library=None, log_format='[%(levelname)s:%(asctime)s] %(name)s: %(message)s', model=None, password='password', port=1884, sensitivity=['0.5'], site_id=['base', 'motox', 'buero', 'büro', 'Küche'], stdin_audio=False, tls=False, tls_ca_certs=None, tls_cert_reqs='CERT_REQUIRED', tls_certfile=None, tls_ciphers=None, tls_keyfile=None, tls_version=None, udp_audio=[['0.0.0.0', '12199', 'motox']], username='joerg', wakeword_id=None)
+[DEBUG:2021-06-16 07:46:10,492] rhasspydialogue_hermes: Subscribed to hermes/audioServer/Küche/playFinished
+[DEBUG:2021-06-16 07:46:10,493] rhasspydialogue_hermes: Subscribed to hermes/dialogueManager/configure
+[DEBUG:2021-06-16 07:46:10,494] rhasspydialogue_hermes: Subscribed to hermes/dialogueManager/endSession
+[DEBUG:2021-06-16 07:46:10,494] rhasspywake_porcupine_hermes: Keyword dirs: [PosixPath('/opt/rhasspy/profiles/de/porcupine'), PosixPath('/usr/lib/rhasspy/usr/local/lib/python3.7/site-packages/pvporcupine/resources/keyword_files/linux')]
+[DEBUG:2021-06-16 07:46:10,496] rhasspydialogue_hermes: Subscribed to hermes/asr/textCaptured
+[DEBUG:2021-06-16 07:46:10,500] rhasspywake_porcupine_hermes: Loading porcupine (kw=['/usr/lib/rhasspy/usr/local/lib/python3.7/site-packages/pvporcupine/resources/keyword_files/linux/bumblebee_linux.ppn'], kwdirs=['/opt/rhasspy/profiles/de/porcupine', '/usr/lib/rhasspy/usr/local/lib/python3.7/site-packages/pvporcupine/resources/keyword_files/linux'], sensitivity=[0.5])
+[DEBUG:2021-06-16 07:46:10,501] rhasspydialogue_hermes: Subscribed to hermes/nlu/intentNotRecognized
+[DEBUG:2021-06-16 07:46:10,504] rhasspydialogue_hermes: Subscribed to hermes/hotword/+/detected
+[DEBUG:2021-06-16 07:46:10,519] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:10,531] rhasspywake_porcupine_hermes: Connecting to 192.168.2.72:1884
+[DEBUG:2021-06-16 07:46:10,544] rhasspywake_porcupine_hermes: Listening for audio on UDP 0.0.0.0:12199
+[DEBUG:2021-06-16 07:46:10,583] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:10,585] rhasspywake_porcupine_hermes: Connected to MQTT broker
+[DEBUG:2021-06-16 07:46:10,586] rhasspywake_porcupine_hermes: Subscribed to hermes/audioServer/buero/audioFrame
+[DEBUG:2021-06-16 07:46:10,587] rhasspywake_porcupine_hermes: Subscribed to hermes/audioServer/büro/audioFrame
+[DEBUG:2021-06-16 07:46:10,588] rhasspywake_porcupine_hermes: Subscribed to hermes/audioServer/Küche/audioFrame
+[DEBUG:2021-06-16 07:46:10,590] rhasspywake_porcupine_hermes: Subscribed to hermes/audioServer/base/audioFrame
+[DEBUG:2021-06-16 07:46:10,592] rhasspywake_porcupine_hermes: Subscribed to rhasspy/hotword/getHotwords
+[DEBUG:2021-06-16 07:46:10,592] rhasspywake_porcupine_hermes: Subscribed to hermes/hotword/toggleOff
+[DEBUG:2021-06-16 07:46:10,595] rhasspywake_porcupine_hermes: Subscribed to hermes/hotword/toggleOn
+[DEBUG:2021-06-16 07:46:10,598] rhasspywake_porcupine_hermes: Subscribed to hermes/audioServer/motox/audioFrame
+[DEBUG:2021-06-16 07:46:14,059] rhasspynlu_hermes: Namespace(casing='lower', converters_dir='/opt/rhasspy/profiles/de/converters', debug=True, host='192.168.2.72', intent_graph='/opt/rhasspy/profiles/de/intent_graph.pickle.gz', lang=None, language='de_DE', log_format='[%(levelname)s:%(asctime)s] %(name)s: %(message)s', no_fuzzy=False, password='password', port=1884, replace_numbers=True, site_id=['base', 'motox', 'buero', 'büro', 'Küche'], tls=False, tls_ca_certs=None, tls_cert_reqs='CERT_REQUIRED', tls_certfile=None, tls_ciphers=None, tls_keyfile=None, tls_version=None, username='joerg')
+[DEBUG:2021-06-16 07:46:14,065] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:14,073] rhasspynlu_hermes: Connecting to 192.168.2.72:1884
+[DEBUG:2021-06-16 07:46:14,108] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:14,116] rhasspynlu_hermes: Connected to MQTT broker
+[DEBUG:2021-06-16 07:46:14,117] rhasspynlu_hermes: Subscribed to rhasspy/nlu/büro/train
+[DEBUG:2021-06-16 07:46:14,117] rhasspynlu_hermes: Subscribed to rhasspy/nlu/motox/train
+[DEBUG:2021-06-16 07:46:14,118] rhasspynlu_hermes: Subscribed to rhasspy/nlu/Küche/train
+[DEBUG:2021-06-16 07:46:14,118] rhasspynlu_hermes: Subscribed to hermes/nlu/query
+[DEBUG:2021-06-16 07:46:14,119] rhasspynlu_hermes: Subscribed to rhasspy/nlu/buero/train
+[DEBUG:2021-06-16 07:46:14,119] rhasspynlu_hermes: Subscribed to rhasspy/nlu/base/train
+[DEBUG:2021-06-16 07:46:15,049] rhasspyasr_kaldi_hermes: Namespace(base_dictionary=['/opt/rhasspy/profiles/de/kaldi/base_dictionary.txt', '/opt/rhasspy/profiles/de/kaldi_custom_words.txt'], base_language_model_fst='/opt/rhasspy/profiles/de/kaldi/base_language_model.fst', base_language_model_weight=0.0, debug=True, dictionary='/opt/rhasspy/profiles/de/kaldi/dictionary.txt', dictionary_casing='lower', g2p_casing='ignore', g2p_model='/opt/rhasspy/profiles/de/kaldi/g2p.fst', graph_dir='/opt/rhasspy/profiles/de/kaldi/model/graph', host='192.168.2.72', lang=None, language_model='/opt/rhasspy/profiles/de/kaldi/language_model.txt', language_model_type='text_fst', log_format='[%(levelname)s:%(asctime)s] %(name)s: %(message)s', mixed_language_model_fst='/opt/rhasspy/profiles/de/kaldi/mixed.fst', model_dir='/opt/rhasspy/profiles/de/kaldi/model', model_type='nnet3', no_overwrite_train=False, password='password', port=1884, reuse_transcribers=False, site_id=['base', 'motox', 'buero', 'büro', 'Küche'], spn_phone='SPN', tls=False, tls_ca_certs=None, tls_cert_reqs='CERT_REQUIRED', tls_certfile=None, tls_ciphers=None, tls_keyfile=None, tls_version=None, unknown_words='/opt/rhasspy/profiles/de/kaldi_unknown_words.txt', username='joerg', voice_before_seconds=0.5, voice_current_energy_threshold=None, voice_max_current_energy_ratio_threshold=None, voice_max_energy=None, voice_max_seconds=20.0, voice_min_seconds=1.0, voice_sensitivity=1, voice_silence_method='vad_only', voice_silence_seconds=0.5, voice_skip_seconds=0.0, voice_speech_seconds=0.3)
+[DEBUG:2021-06-16 07:46:15,051] rhasspyasr_kaldi_hermes: Loading Kaldi model from /opt/rhasspy/profiles/de/kaldi/model (graph=/opt/rhasspy/profiles/de/kaldi/model/graph)
+[DEBUG:2021-06-16 07:46:15,053] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:15,065] rhasspyasr_kaldi_hermes: Connecting to 192.168.2.72:1884
+[DEBUG:2021-06-16 07:46:15,085] asyncio: Using selector: EpollSelector
+[DEBUG:2021-06-16 07:46:15,086] rhasspyasr_kaldi_hermes: Connected to MQTT broker
+[DEBUG:2021-06-16 07:46:15,086] rhasspyasr_kaldi_hermes: Subscribed to hermes/asr/stopListening
+[DEBUG:2021-06-16 07:46:15,087] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/base/audioFrame
+[DEBUG:2021-06-16 07:46:15,089] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/Küche/+/audioSessionFrame
+[DEBUG:2021-06-16 07:46:15,090] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/base/+/audioSessionFrame
+[DEBUG:2021-06-16 07:46:15,091] rhasspyasr_kaldi_hermes: Subscribed to rhasspy/asr/motox/train
+[DEBUG:2021-06-16 07:46:15,092] rhasspyasr_kaldi_hermes: Subscribed to rhasspy/asr/büro/train
+[DEBUG:2021-06-16 07:46:15,092] rhasspyasr_kaldi_hermes: Subscribed to hermes/asr/toggleOff
+[DEBUG:2021-06-16 07:46:15,095] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/buero/audioFrame
+[DEBUG:2021-06-16 07:46:15,095] rhasspyasr_kaldi_hermes: Subscribed to rhasspy/asr/Küche/train
+[DEBUG:2021-06-16 07:46:15,096] rhasspyasr_kaldi_hermes: Subscribed to hermes/asr/startListening
+[DEBUG:2021-06-16 07:46:15,096] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/motox/+/audioSessionFrame
+[DEBUG:2021-06-16 07:46:15,097] rhasspyasr_kaldi_hermes: Subscribed to hermes/asr/toggleOn
+[DEBUG:2021-06-16 07:46:15,097] rhasspyasr_kaldi_hermes: Subscribed to rhasspy/asr/base/train
+[DEBUG:2021-06-16 07:46:15,098] rhasspyasr_kaldi_hermes: Subscribed to rhasspy/g2p/pronounce
+[DEBUG:2021-06-16 07:46:15,098] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/büro/audioFrame
+[DEBUG:2021-06-16 07:46:15,099] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/Küche/audioFrame
+[DEBUG:2021-06-16 07:46:15,099] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/motox/audioFrame
+[DEBUG:2021-06-16 07:46:15,099] rhasspyasr_kaldi_hermes: Subscribed to rhasspy/asr/buero/train
+[DEBUG:2021-06-16 07:46:15,100] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/buero/+/audioSessionFrame
+[DEBUG:2021-06-16 07:46:15,100] rhasspyasr_kaldi_hermes: Subscribed to hermes/audioServer/büro/+/audioSessionFrame
+[DEBUG:2021-06-16 07:46:16,658] rhasspyserver_hermes: Namespace(certfile=None, host='0.0.0.0', keyfile=None, local_mqtt_port=12183, log_format='[%(levelname)s:%(asctime)s] %(name)s: %(message)s', log_level='DEBUG', mqtt_host=None, mqtt_password=None, mqtt_port=None, mqtt_username=None, port=12101, profile='de', set=[], system_profiles=None, url_root='', user_profiles='/opt/rhasspy/profiles', web_dir='/usr/lib/rhasspy/rhasspy-server-hermes/web')
+[DEBUG:2021-06-16 07:46:17,058] rhasspyprofile.profile: Loading /usr/lib/rhasspy/rhasspy-profile/rhasspyprofile/profiles/de/profile.json
+[DEBUG:2021-06-16 07:46:17,061] rhasspyprofile.profile: Loading /opt/rhasspy/profiles/de/profile.json
+[DEBUG:2021-06-16 07:46:17,062] rhasspyprofile.profile: Loading default profile settings from /usr/lib/rhasspy/rhasspy-profile/rhasspyprofile/profiles/defaults.json
+[DEBUG:2021-06-16 07:46:17,066] rhasspyserver_hermes: Starting core
+[DEBUG:2021-06-16 07:46:17,066] rhasspyserver_hermes: Connecting to 192.168.2.72:1884 (retries: 0/10)
+[DEBUG:2021-06-16 07:46:17,073] rhasspyserver_hermes: Connected to MQTT broker
+[DEBUG:2021-06-16 07:46:17,074] rhasspyserver_hermes: Subscribed to hermes/hotword/+/detected
+[DEBUG:2021-06-16 07:46:17,075] rhasspyserver_hermes: Subscribed to hermes/asr/textCaptured
+[DEBUG:2021-06-16 07:46:17,076] rhasspyserver_hermes: Subscribed to hermes/intent/#
+[DEBUG:2021-06-16 07:46:17,076] rhasspyserver_hermes: Subscribed to hermes/nlu/intentNotRecognized
+[DEBUG:2021-06-16 07:46:17,077] rhasspyserver_hermes: Subscribed to rhasspy/asr/base/base/audioCaptured
+[DEBUG:2021-06-16 07:46:17,078] rhasspyserver_hermes: Subscribed to hermes/audioServer/base/audioSummary
+[DEBUG:2021-06-16 07:46:17,078] rhasspyserver_hermes: Subscribed to hermes/audioServer/base/audioSummary
+[DEBUG:2021-06-16 07:46:17,079] rhasspyserver_hermes: Subscribed to rhasspy/asr/base/base/audioCaptured
+[DEBUG:2021-06-16 07:46:17,080] rhasspyserver_hermes: Subscribed to hermes/hotword/+/detected
+[DEBUG:2021-06-16 07:46:17,080] rhasspyserver_hermes: Subscribed to hermes/nlu/intentNotRecognized
+[DEBUG:2021-06-16 07:46:17,081] rhasspyserver_hermes: Subscribed to hermes/asr/textCaptured
+[DEBUG:2021-06-16 07:46:17,081] rhasspyserver_hermes: Subscribed to hermes/intent/#
+[INFO:2021-06-16 07:46:17,082] rhasspyserver_hermes: Started
+[DEBUG:2021-06-16 07:46:17,082] rhasspyserver_hermes: Starting web server at http://0.0.0.0:12101
+Running on 0.0.0.0:12101 over http (CTRL + C to quit)
+[DEBUG:2021-06-16 07:46:49,076] rhasspydialogue_hermes: <- DialogueConfigure(intents=[DialogueConfigureIntent(intent_id='de.fhem:ConfirmAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:CancelAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceRoom', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceDevice', enable=False)], site_id='motox')
+[DEBUG:2021-06-16 07:46:49,090] rhasspydialogue_hermes: <- DialogueConfigure(intents=[DialogueConfigureIntent(intent_id='de.fhem:ConfirmAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:CancelAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceRoom', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceDevice', enable=False)], site_id='buero')
+[DEBUG:2021-06-16 07:46:49,103] rhasspydialogue_hermes: <- DialogueConfigure(intents=[DialogueConfigureIntent(intent_id='de.fhem:ConfirmAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:CancelAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceRoom', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceDevice', enable=False)], site_id='büro')
+[DEBUG:2021-06-16 07:46:49,107] rhasspydialogue_hermes: Removed default intent filter
+[DEBUG:2021-06-16 07:46:49,109] rhasspydialogue_hermes: Removed default intent filter
+[DEBUG:2021-06-16 07:46:49,111] rhasspydialogue_hermes: Removed default intent filter
+[DEBUG:2021-06-16 07:46:49,124] rhasspydialogue_hermes: <- DialogueConfigure(intents=[DialogueConfigureIntent(intent_id='de.fhem:ConfirmAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:CancelAction', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceRoom', enable=False), DialogueConfigureIntent(intent_id='de.fhem:ChoiceDevice', enable=False)], site_id='Küche')
+[DEBUG:2021-06-16 07:46:49,127] rhasspydialogue_hermes: Removed default intent filter
+[DEBUG:2021-06-16 07:47:40,319] rhasspyasr_kaldi_hermes: Receiving audio
+[DEBUG:2021-06-16 07:47:40,322] rhasspywake_porcupine_hermes: Receiving audio
+[DEBUG:2021-06-16 07:47:40,506] rhasspyasr_kaldi_hermes: <- AsrToggleOn(site_id='motox', reason=<AsrToggleReason.PLAY_AUDIO: 'playAudio'>)
+[DEBUG:2021-06-16 07:47:40,507] rhasspyasr_kaldi_hermes: Enabled
+[DEBUG:2021-06-16 07:47:40,515] rhasspyasr_kaldi_hermes: <- AsrStartListening(site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', lang=None, stop_on_silence=True, send_audio_captured=True, wakeword_id=None, intent_filter=None)
+[DEBUG:2021-06-16 07:47:40,517] rhasspyasr_kaldi_hermes: Creating new transcriber session e5e7accc-ac46-9dd1-772b-375d4d18eba4
+[DEBUG:2021-06-16 07:47:40,519] rhasspyasr_kaldi.transcribe: Using kaldi at /usr/lib/rhasspy/lib/kaldi
+[DEBUG:2021-06-16 07:47:40,521] rhasspyasr_kaldi_hermes: Starting listening (session_id=e5e7accc-ac46-9dd1-772b-375d4d18eba4)
+[DEBUG:2021-06-16 07:47:40,526] rhasspyasr_kaldi.transcribe: Creating FIFO at /tmp/tmp_wljguu9/chunks.fifo
+[DEBUG:2021-06-16 07:47:40,528] rhasspyasr_kaldi.transcribe: ['/usr/lib/rhasspy/lib/kaldi/online2-cli-nnet3-decode-faster-confidence', '--config=/opt/rhasspy/profiles/de/kaldi/model/online/conf/online.conf', '--frame-subsampling-factor=3', '--max-active=7000', '--lattice-beam=8.0', '--acoustic-scale=1.0', '--beam=24.0', '/opt/rhasspy/profiles/de/kaldi/model/model/final.mdl', '/opt/rhasspy/profiles/de/kaldi/model/graph/HCLG.fst', '/opt/rhasspy/profiles/de/kaldi/model/graph/words.txt', '/tmp/tmp_wljguu9/chunks.fifo']
+[DEBUG:2021-06-16 07:47:40,543] rhasspyasr_kaldi_hermes: Receiving audio
+/usr/lib/rhasspy/lib/kaldi/online2-cli-nnet3-decode-faster-confidence --config=/opt/rhasspy/profiles/de/kaldi/model/online/conf/online.conf --frame-subsampling-factor=3 --max-active=7000 --lattice-beam=8.0 --acoustic-scale=1.0 --beam=24.0 /opt/rhasspy/profiles/de/kaldi/model/model/final.mdl /opt/rhasspy/profiles/de/kaldi/model/graph/HCLG.fst /opt/rhasspy/profiles/de/kaldi/model/graph/words.txt /tmp/tmp_wljguu9/chunks.fifo 
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:ComputeDerivedVars():ivector-extractor.cc:183) Computing derived variables for iVector extractor
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:ComputeDerivedVars():ivector-extractor.cc:204) Done.
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:RemoveOrphanNodes():nnet-nnet.cc:948) Removed 1 orphan nodes.
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:RemoveOrphanComponents():nnet-nnet.cc:847) Removing 2 orphan components.
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:Collapse():nnet-utils.cc:1488) Added 1 components, removed 2
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:CompileLooped():nnet-compile-looped.cc:345) Spent 0.0358882 seconds in looped compilation.
+[DEBUG:2021-06-16 07:47:41,304] rhasspyasr_kaldi.transcribe: ready
+[DEBUG:2021-06-16 07:47:41,304] rhasspyasr_kaldi.transcribe: Decoder started
+[DEBUG:2021-06-16 07:47:42,470] rhasspyasr_kaldi_hermes: -> AsrRecordingFinished(site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:42,473] rhasspyasr_kaldi_hermes: Publishing 72 bytes(s) to rhasspy/asr/recordingFinished
+[DEBUG:2021-06-16 07:47:42,475] rhasspyasr_kaldi.transcribe: Finished stream. Getting transcription.
+[DEBUG:2021-06-16 07:47:42,527] rhasspyasr_kaldi.transcribe: 0.0707423 warm 0.972215 0 0.6 ist 1 0.601667 0.695001 es 0.992238 0.695039 0.695039 im 0.992589 0.695039 0.8178 wohnzimmer 1 0.819533 2.04
+[DEBUG:2021-06-16 07:47:42,528] rhasspyasr_kaldi_hermes: Transcription result: Transcription(text='warm ist es im wohnzimmer', likelihood=0.9292577, transcribe_seconds=1.2230689683929086, wav_seconds=2.048, tokens=[TranscriptionToken(token='warm', start_time=0.0, end_time=0.6, likelihood=0.972215), TranscriptionToken(token='ist', start_time=0.601667, end_time=0.695001, likelihood=1.0), TranscriptionToken(token='es', start_time=0.695039, end_time=0.695039, likelihood=0.992238), TranscriptionToken(token='im', start_time=0.695039, end_time=0.8178, likelihood=0.992589), TranscriptionToken(token='wohnzimmer', start_time=0.819533, end_time=2.04, likelihood=1.0)])
+[DEBUG:2021-06-16 07:47:42,546] rhasspyasr_kaldi_hermes: -> AsrTextCaptured(text='warm ist es im wohnzimmer', likelihood=0.9292577, seconds=1.2230689683929086, site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', wakeword_id=None, asr_tokens=[[AsrToken(value='warm', confidence=0.972215, range_start=0, range_end=5, time=AsrTokenTime(start=0.0, end=0.6)), AsrToken(value='ist', confidence=1.0, range_start=5, range_end=9, time=AsrTokenTime(start=0.601667, end=0.695001)), AsrToken(value='es', confidence=0.992238, range_start=9, range_end=12, time=AsrTokenTime(start=0.695039, end=0.695039)), AsrToken(value='im', confidence=0.992589, range_start=12, range_end=15, time=AsrTokenTime(start=0.695039, end=0.8178)), AsrToken(value='wohnzimmer', confidence=1.0, range_start=15, range_end=26, time=AsrTokenTime(start=0.819533, end=2.04))]], lang=None)
+[DEBUG:2021-06-16 07:47:42,548] rhasspyasr_kaldi_hermes: Publishing 801 bytes(s) to hermes/asr/textCaptured
+[DEBUG:2021-06-16 07:47:42,549] rhasspyasr_kaldi_hermes: -> AsrAudioCaptured(56684 byte(s)) to rhasspy/asr/motox/motox/audioCaptured
+[DEBUG:2021-06-16 07:47:42,570] rhasspydialogue_hermes: <- AsrTextCaptured(text='warm ist es im wohnzimmer', likelihood=0.9292577, seconds=1.2230689683929086, site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', wakeword_id=None, asr_tokens=[[AsrToken(value='warm', confidence=0.972215, range_start=0, range_end=5, time=AsrTokenTime(start=0.0, end=0.6)), AsrToken(value='ist', confidence=1.0, range_start=5, range_end=9, time=AsrTokenTime(start=0.601667, end=0.695001)), AsrToken(value='es', confidence=0.992238, range_start=9, range_end=12, time=AsrTokenTime(start=0.695039, end=0.695039)), AsrToken(value='im', confidence=0.992589, range_start=12, range_end=15, time=AsrTokenTime(start=0.695039, end=0.8178)), AsrToken(value='wohnzimmer', confidence=1.0, range_start=15, range_end=26, time=AsrTokenTime(start=0.819533, end=2.04))]], lang=None)
+[WARNING:2021-06-16 07:47:42,571] rhasspydialogue_hermes: Ignoring unknown session e5e7accc-ac46-9dd1-772b-375d4d18eba4
+[DEBUG:2021-06-16 07:47:42,596] rhasspyasr_kaldi_hermes: <- AsrStopListening(site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:42,597] rhasspyasr_kaldi_hermes: Stopping listening (session_id=e5e7accc-ac46-9dd1-772b-375d4d18eba4)
+[DEBUG:2021-06-16 07:47:42,606] rhasspynlu_hermes: <- NluQuery(input='warm ist es im wohnzimmer', site_id='motox', id=None, intent_filter=None, session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', wakeword_id=None, lang=None, custom_data=None, asr_confidence=None, custom_entities=None)
+[DEBUG:2021-06-16 07:47:42,608] rhasspynlu_hermes: Loading /opt/rhasspy/profiles/de/intent_graph.pickle.gz
+[DEBUG:2021-06-16 07:47:42,736] rhasspynlu_hermes: -> NluIntentParsed(input='temperature ist es im wohnzimmer', intent=Intent(intent_name='de.fhem:GetNumeric', confidence_score=1.0), site_id='motox', id=None, slots=[Slot(entity='Type', value={'kind': 'Unknown', 'value': 'temperature'}, slot_name='Type', raw_value='warm', confidence=1.0, range=SlotRange(start=0, end=11, raw_start=0, raw_end=4)), Slot(entity='de.fhem.Room', value={'kind': 'Unknown', 'value': 'wohnzimmer'}, slot_name='Room', raw_value='wohnzimmer', confidence=1.0, range=SlotRange(start=22, end=32, raw_start=15, raw_end=25))], session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:42,737] rhasspynlu_hermes: Publishing 618 bytes(s) to hermes/nlu/intentParsed
+[DEBUG:2021-06-16 07:47:42,751] rhasspynlu_hermes: -> NluIntent(input='temperature ist es im wohnzimmer', intent=Intent(intent_name='de.fhem:GetNumeric', confidence_score=1.0), site_id='motox', id=None, slots=[Slot(entity='Type', value={'kind': 'Unknown', 'value': 'temperature'}, slot_name='Type', raw_value='warm', confidence=1.0, range=SlotRange(start=0, end=11, raw_start=0, raw_end=4)), Slot(entity='de.fhem.Room', value={'kind': 'Unknown', 'value': 'wohnzimmer'}, slot_name='Room', raw_value='wohnzimmer', confidence=1.0, range=SlotRange(start=22, end=32, raw_start=15, raw_end=25))], session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', custom_data=None, asr_tokens=[[AsrToken(value='temperature', confidence=1.0, range_start=0, range_end=11, time=None), AsrToken(value='ist', confidence=1.0, range_start=12, range_end=15, time=None), AsrToken(value='es', confidence=1.0, range_start=16, range_end=18, time=None), AsrToken(value='im', confidence=1.0, range_start=19, range_end=21, time=None), AsrToken(value='wohnzimmer', confidence=1.0, range_start=22, range_end=32, time=None)]], asr_confidence=None, raw_input='warm ist es im wohnzimmer', wakeword_id=None, lang=None)
+[DEBUG:2021-06-16 07:47:42,751] rhasspynlu_hermes: Publishing 1190 bytes(s) to hermes/intent/de.fhem:GetNumeric
+[DEBUG:2021-06-16 07:47:42,801] rhasspydialogue_hermes: <- NluIntent(input='temperature ist es im wohnzimmer', intent=Intent(intent_name='de.fhem:GetNumeric', confidence_score=1.0), site_id='motox', id=None, slots=[Slot(entity='Type', value={'kind': 'Unknown', 'value': 'temperature'}, slot_name='Type', raw_value='warm', confidence=1.0, range=SlotRange(start=0, end=11, raw_start=0, raw_end=4)), Slot(entity='de.fhem.Room', value={'kind': 'Unknown', 'value': 'wohnzimmer'}, slot_name='Room', raw_value='wohnzimmer', confidence=1.0, range=SlotRange(start=22, end=32, raw_start=15, raw_end=25))], session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', custom_data=None, asr_tokens=[[AsrToken(value='temperature', confidence=1.0, range_start=0, range_end=11, time=None), AsrToken(value='ist', confidence=1.0, range_start=12, range_end=15, time=None), AsrToken(value='es', confidence=1.0, range_start=16, range_end=18, time=None), AsrToken(value='im', confidence=1.0, range_start=19, range_end=21, time=None), AsrToken(value='wohnzimmer', confidence=1.0, range_start=22, range_end=32, time=None)]], asr_confidence=None, raw_input='warm ist es im wohnzimmer', wakeword_id=None, lang=None)
+[WARNING:2021-06-16 07:47:42,803] rhasspydialogue_hermes: No session for id e5e7accc-ac46-9dd1-772b-375d4d18eba4. Dropping recognition.
+[DEBUG:2021-06-16 07:47:42,830] rhasspydialogue_hermes: <- DialogueConfigure(intents=[DialogueConfigureIntent(intent_id='de.fhem:ChoiceDevice', enable=True), DialogueConfigureIntent(intent_id='de.fhem:CancelAction', enable=True)], site_id='motox')
+[DEBUG:2021-06-16 07:47:42,832] rhasspydialogue_hermes: Default intent filter set: ['de.fhem:ChoiceDevice', 'de.fhem:CancelAction']
+[DEBUG:2021-06-16 07:47:42,838] rhasspydialogue_hermes: <- DialogueContinueSession(session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', custom_data='heizkörper südwest,heizkörper südost,raumfühler', text='Es kommen mehrere Geräte in Frage, bitte wähle zwischen heizkörper südwest heizkörper südost oder raumfühler', intent_filter=['de.fhem:ChoiceDevice', 'de.fhem:CancelAction'], send_intent_not_recognized=False, slot=None, lang=None)
+[WARNING:2021-06-16 07:47:42,840] rhasspydialogue_hermes: No session for id e5e7accc-ac46-9dd1-772b-375d4d18eba4. Cannot continue.
+[DEBUG:2021-06-16 07:47:42,902] rhasspytts_cli_hermes: <- TtsSay(text='Es kommen mehrere Geräte in Frage, bitte wähle zwischen heizkörper südwest heizkörper südost oder raumfühler', site_id='motox', lang=None, id='40798866-34ad-6f37-c4c2-c60eff70ca19', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', volume=None)
+[DEBUG:2021-06-16 07:47:42,905] rhasspytts_cli_hermes: ['nanotts', '-v', 'de-DE', '-o', '/tmp/tmpc9jnbq44.wav']
+Using Lingware directory: /usr/lib/rhasspy/lib/nanotts/pico/lang
+read: 115 bytes from stdin
+using lang: de-DE
+[DEBUG:2021-06-16 07:47:42,938] rhasspyasr_kaldi_hermes: <- AsrStopListening(site_id='motox', session_id='null')
+[DEBUG:2021-06-16 07:47:42,939] rhasspyasr_kaldi_hermes: Stopping listening (session_id=null)
+[DEBUG:2021-06-16 07:47:42,941] rhasspyasr_kaldi_hermes: <- AsrToggleOff(site_id='motox', reason=<AsrToggleReason.TTS_SAY: 'ttsSay'>)
+[DEBUG:2021-06-16 07:47:42,942] rhasspyasr_kaldi_hermes: Disabled (AsrToggleReason.TTS_SAY)
+wrote "/tmp/tmpc9jnbq44.wav" (230572 bytes)
+[DEBUG:2021-06-16 07:47:43,083] rhasspytts_cli_hermes: Got 230572 byte(s) of WAV data
+[DEBUG:2021-06-16 07:47:43,090] rhasspytts_cli_hermes: -> AudioPlayBytes(230572 byte(s)) to hermes/audioServer/motox/playBytes/40798866-34ad-6f37-c4c2-c60eff70ca19
+[DEBUG:2021-06-16 07:47:43,092] rhasspytts_cli_hermes: Waiting for play finished (timeout=7.454)
+[WARNING:2021-06-16 07:47:50,554] rhasspytts_cli_hermes: Did not receive playFinished before timeout
+[DEBUG:2021-06-16 07:47:50,557] rhasspytts_cli_hermes: -> TtsSayFinished(site_id='motox', id='40798866-34ad-6f37-c4c2-c60eff70ca19', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:50,558] rhasspytts_cli_hermes: Publishing 118 bytes(s) to hermes/tts/sayFinished
+[DEBUG:2021-06-16 07:47:50,562] rhasspydialogue_hermes: <- TtsSayFinished(site_id='motox', id='40798866-34ad-6f37-c4c2-c60eff70ca19', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:51,021] rhasspytts_cli_hermes: <- AudioPlayFinished(id='40798866-34ad-6f37-c4c2-c60eff70ca19', session_id='')
+[DEBUG:2021-06-16 07:47:51,021] rhasspydialogue_hermes: <- AudioPlayFinished(id='40798866-34ad-6f37-c4c2-c60eff70ca19', session_id='')
+[DEBUG:2021-06-16 07:47:51,028] rhasspyasr_kaldi_hermes: <- AsrToggleOn(site_id='motox', reason=<AsrToggleReason.TTS_SAY: 'ttsSay'>)
+[DEBUG:2021-06-16 07:47:51,032] rhasspyasr_kaldi_hermes: Enabled
+[DEBUG:2021-06-16 07:47:51,035] rhasspyasr_kaldi_hermes: <- AsrStartListening(site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', lang=None, stop_on_silence=True, send_audio_captured=True, wakeword_id=None, intent_filter=None)
+[DEBUG:2021-06-16 07:47:51,036] rhasspyasr_kaldi_hermes: Creating new transcriber session e5e7accc-ac46-9dd1-772b-375d4d18eba4
+[DEBUG:2021-06-16 07:47:51,037] rhasspyasr_kaldi.transcribe: Using kaldi at /usr/lib/rhasspy/lib/kaldi
+[DEBUG:2021-06-16 07:47:51,037] rhasspyasr_kaldi_hermes: Starting listening (session_id=e5e7accc-ac46-9dd1-772b-375d4d18eba4)
+[DEBUG:2021-06-16 07:47:51,039] rhasspyasr_kaldi_hermes: Receiving audio
+[DEBUG:2021-06-16 07:47:51,039] rhasspyasr_kaldi.transcribe: Creating FIFO at /tmp/tmp3kjanxbu/chunks.fifo
+[DEBUG:2021-06-16 07:47:51,041] rhasspyasr_kaldi.transcribe: ['/usr/lib/rhasspy/lib/kaldi/online2-cli-nnet3-decode-faster-confidence', '--config=/opt/rhasspy/profiles/de/kaldi/model/online/conf/online.conf', '--frame-subsampling-factor=3', '--max-active=7000', '--lattice-beam=8.0', '--acoustic-scale=1.0', '--beam=24.0', '/opt/rhasspy/profiles/de/kaldi/model/model/final.mdl', '/opt/rhasspy/profiles/de/kaldi/model/graph/HCLG.fst', '/opt/rhasspy/profiles/de/kaldi/model/graph/words.txt', '/tmp/tmp3kjanxbu/chunks.fifo']
+/usr/lib/rhasspy/lib/kaldi/online2-cli-nnet3-decode-faster-confidence --config=/opt/rhasspy/profiles/de/kaldi/model/online/conf/online.conf --frame-subsampling-factor=3 --max-active=7000 --lattice-beam=8.0 --acoustic-scale=1.0 --beam=24.0 /opt/rhasspy/profiles/de/kaldi/model/model/final.mdl /opt/rhasspy/profiles/de/kaldi/model/graph/HCLG.fst /opt/rhasspy/profiles/de/kaldi/model/graph/words.txt /tmp/tmp3kjanxbu/chunks.fifo 
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:ComputeDerivedVars():ivector-extractor.cc:183) Computing derived variables for iVector extractor
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:ComputeDerivedVars():ivector-extractor.cc:204) Done.
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:RemoveOrphanNodes():nnet-nnet.cc:948) Removed 1 orphan nodes.
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:RemoveOrphanComponents():nnet-nnet.cc:847) Removing 2 orphan components.
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:Collapse():nnet-utils.cc:1488) Added 1 components, removed 2
+LOG (online2-cli-nnet3-decode-faster-confidence[5.5]:CompileLooped():nnet-compile-looped.cc:345) Spent 0.039757 seconds in looped compilation.
+[DEBUG:2021-06-16 07:47:51,732] rhasspyasr_kaldi.transcribe: ready
+[DEBUG:2021-06-16 07:47:51,733] rhasspyasr_kaldi.transcribe: Decoder started
+[DEBUG:2021-06-16 07:47:52,714] rhasspyasr_kaldi_hermes: -> AsrRecordingFinished(site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:52,717] rhasspyasr_kaldi_hermes: Publishing 72 bytes(s) to rhasspy/asr/recordingFinished
+[DEBUG:2021-06-16 07:47:52,718] rhasspyasr_kaldi.transcribe: Finished stream. Getting transcription.
+[DEBUG:2021-06-16 07:47:52,832] rhasspyasr_kaldi.transcribe: 0.654803 mach 0.672026 0 0.479009 das 0.992737 0.479009 0.690026 radio 1 0.690186 0.990489 on 0.680434 0.990489 1.77
+[DEBUG:2021-06-16 07:47:52,832] rhasspyasr_kaldi_hermes: Transcription result: Transcription(text='mach das radio on', likelihood=0.345197, transcribe_seconds=1.0986130237579346, wav_seconds=1.792, tokens=[TranscriptionToken(token='mach', start_time=0.0, end_time=0.479009, likelihood=0.672026), TranscriptionToken(token='das', start_time=0.479009, end_time=0.690026, likelihood=0.992737), TranscriptionToken(token='radio', start_time=0.690186, end_time=0.990489, likelihood=1.0), TranscriptionToken(token='on', start_time=0.990489, end_time=1.77, likelihood=0.680434)])
+[DEBUG:2021-06-16 07:47:52,843] rhasspyasr_kaldi_hermes: -> AsrTextCaptured(text='mach das radio on', likelihood=0.345197, seconds=1.0986130237579346, site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', wakeword_id=None, asr_tokens=[[AsrToken(value='mach', confidence=0.672026, range_start=0, range_end=5, time=AsrTokenTime(start=0.0, end=0.479009)), AsrToken(value='das', confidence=0.992737, range_start=5, range_end=9, time=AsrTokenTime(start=0.479009, end=0.690026)), AsrToken(value='radio', confidence=1.0, range_start=9, range_end=15, time=AsrTokenTime(start=0.690186, end=0.990489)), AsrToken(value='on', confidence=0.680434, range_start=15, range_end=18, time=AsrTokenTime(start=0.990489, end=1.77))]], lang=None)
+[DEBUG:2021-06-16 07:47:52,845] rhasspyasr_kaldi_hermes: Publishing 678 bytes(s) to hermes/asr/textCaptured
+[DEBUG:2021-06-16 07:47:52,860] rhasspyasr_kaldi_hermes: -> AsrAudioCaptured(46124 byte(s)) to rhasspy/asr/motox/motox/audioCaptured
+[DEBUG:2021-06-16 07:47:52,882] rhasspyasr_kaldi_hermes: <- AsrStopListening(site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:52,884] rhasspyasr_kaldi_hermes: Stopping listening (session_id=e5e7accc-ac46-9dd1-772b-375d4d18eba4)
+[DEBUG:2021-06-16 07:47:52,884] rhasspydialogue_hermes: <- AsrTextCaptured(text='mach das radio on', likelihood=0.345197, seconds=1.0986130237579346, site_id='motox', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', wakeword_id=None, asr_tokens=[[AsrToken(value='mach', confidence=0.672026, range_start=0, range_end=5, time=AsrTokenTime(start=0.0, end=0.479009)), AsrToken(value='das', confidence=0.992737, range_start=5, range_end=9, time=AsrTokenTime(start=0.479009, end=0.690026)), AsrToken(value='radio', confidence=1.0, range_start=9, range_end=15, time=AsrTokenTime(start=0.690186, end=0.990489)), AsrToken(value='on', confidence=0.680434, range_start=15, range_end=18, time=AsrTokenTime(start=0.990489, end=1.77))]], lang=None)
+[WARNING:2021-06-16 07:47:52,885] rhasspydialogue_hermes: Ignoring unknown session e5e7accc-ac46-9dd1-772b-375d4d18eba4
+[DEBUG:2021-06-16 07:47:52,883] rhasspynlu_hermes: <- NluQuery(input='mach das radio on', site_id='motox', id=None, intent_filter=None, session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', wakeword_id=None, lang=None, custom_data=None, asr_confidence=None, custom_entities=None)
+[DEBUG:2021-06-16 07:47:52,925] rhasspynlu_hermes: -> NluIntentParsed(input='mach das radio on', intent=Intent(intent_name='de.fhem:SetOnOff', confidence_score=1.0), site_id='motox', id=None, slots=[Slot(entity='de.fhem.Device', value={'kind': 'Unknown', 'value': 'radio'}, slot_name='Device', raw_value='radio', confidence=1.0, range=SlotRange(start=9, end=14, raw_start=9, raw_end=14)), Slot(entity='OnOffValue', value={'kind': 'Unknown', 'value': 'on'}, slot_name='Value', raw_value='on', confidence=1.0, range=SlotRange(start=15, end=17, raw_start=15, raw_end=17))], session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:52,926] rhasspynlu_hermes: Publishing 592 bytes(s) to hermes/nlu/intentParsed
+[DEBUG:2021-06-16 07:47:52,936] rhasspynlu_hermes: -> NluIntent(input='mach das radio on', intent=Intent(intent_name='de.fhem:SetOnOff', confidence_score=1.0), site_id='motox', id=None, slots=[Slot(entity='de.fhem.Device', value={'kind': 'Unknown', 'value': 'radio'}, slot_name='Device', raw_value='radio', confidence=1.0, range=SlotRange(start=9, end=14, raw_start=9, raw_end=14)), Slot(entity='OnOffValue', value={'kind': 'Unknown', 'value': 'on'}, slot_name='Value', raw_value='on', confidence=1.0, range=SlotRange(start=15, end=17, raw_start=15, raw_end=17))], session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', custom_data=None, asr_tokens=[[AsrToken(value='mach', confidence=1.0, range_start=0, range_end=4, time=None), AsrToken(value='das', confidence=1.0, range_start=5, range_end=8, time=None), AsrToken(value='radio', confidence=1.0, range_start=9, range_end=14, time=None), AsrToken(value='on', confidence=1.0, range_start=15, range_end=17, time=None)]], asr_confidence=None, raw_input='mach das radio on', wakeword_id=None, lang=None)
+[DEBUG:2021-06-16 07:47:52,937] rhasspynlu_hermes: Publishing 1056 bytes(s) to hermes/intent/de.fhem:SetOnOff
+[DEBUG:2021-06-16 07:47:52,977] rhasspydialogue_hermes: <- NluIntent(input='mach das radio on', intent=Intent(intent_name='de.fhem:SetOnOff', confidence_score=1.0), site_id='motox', id=None, slots=[Slot(entity='de.fhem.Device', value={'kind': 'Unknown', 'value': 'radio'}, slot_name='Device', raw_value='radio', confidence=1.0, range=SlotRange(start=9, end=14, raw_start=9, raw_end=14)), Slot(entity='OnOffValue', value={'kind': 'Unknown', 'value': 'on'}, slot_name='Value', raw_value='on', confidence=1.0, range=SlotRange(start=15, end=17, raw_start=15, raw_end=17))], session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', custom_data=None, asr_tokens=[[AsrToken(value='mach', confidence=1.0, range_start=0, range_end=4, time=None), AsrToken(value='das', confidence=1.0, range_start=5, range_end=8, time=None), AsrToken(value='radio', confidence=1.0, range_start=9, range_end=14, time=None), AsrToken(value='on', confidence=1.0, range_start=15, range_end=17, time=None)]], asr_confidence=None, raw_input='mach das radio on', wakeword_id=None, lang=None)
+[WARNING:2021-06-16 07:47:52,979] rhasspydialogue_hermes: No session for id e5e7accc-ac46-9dd1-772b-375d4d18eba4. Dropping recognition.
+[DEBUG:2021-06-16 07:47:52,982] rhasspydialogue_hermes: <- DialogueEndSession(session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', text='Gerne!', custom_data=None)
+[WARNING:2021-06-16 07:47:52,983] rhasspydialogue_hermes: No session for id e5e7accc-ac46-9dd1-772b-375d4d18eba4. Cannot end.
+[DEBUG:2021-06-16 07:47:53,021] rhasspytts_cli_hermes: <- TtsSay(text='Gerne!', site_id='motox', lang=None, id='6f5d80dc-8a4e-a24d-23b8-9ce318e8cba6', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', volume=None)
+[DEBUG:2021-06-16 07:47:53,024] rhasspytts_cli_hermes: ['nanotts', '-v', 'de-DE', '-o', '/tmp/tmpc_uvf9n7.wav']
+Using Lingware directory: /usr/lib/rhasspy/lib/nanotts/pico/lang
+read: 6 bytes from stdin
+using lang: de-DE
+[DEBUG:2021-06-16 07:47:53,062] rhasspyasr_kaldi_hermes: <- AsrStopListening(site_id='motox', session_id='null')
+[DEBUG:2021-06-16 07:47:53,062] rhasspyasr_kaldi_hermes: Stopping listening (session_id=null)
+wrote "/tmp/tmpc_uvf9n7.wav" (29868 bytes)
+[DEBUG:2021-06-16 07:47:53,069] rhasspytts_cli_hermes: Got 29868 byte(s) of WAV data
+[DEBUG:2021-06-16 07:47:53,071] rhasspytts_cli_hermes: -> AudioPlayBytes(29868 byte(s)) to hermes/audioServer/motox/playBytes/6f5d80dc-8a4e-a24d-23b8-9ce318e8cba6
+[DEBUG:2021-06-16 07:47:53,073] rhasspytts_cli_hermes: Waiting for play finished (timeout=1.182)
+[WARNING:2021-06-16 07:47:54,258] rhasspytts_cli_hermes: Did not receive playFinished before timeout
+[DEBUG:2021-06-16 07:47:54,262] rhasspytts_cli_hermes: -> TtsSayFinished(site_id='motox', id='6f5d80dc-8a4e-a24d-23b8-9ce318e8cba6', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:54,262] rhasspytts_cli_hermes: Publishing 118 bytes(s) to hermes/tts/sayFinished
+[DEBUG:2021-06-16 07:47:54,269] rhasspydialogue_hermes: <- TtsSayFinished(site_id='motox', id='6f5d80dc-8a4e-a24d-23b8-9ce318e8cba6', session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4')
+[DEBUG:2021-06-16 07:47:54,315] rhasspytts_cli_hermes: <- AudioPlayFinished(id='6f5d80dc-8a4e-a24d-23b8-9ce318e8cba6', session_id='')
+[DEBUG:2021-06-16 07:47:54,315] rhasspydialogue_hermes: <- AudioPlayFinished(id='6f5d80dc-8a4e-a24d-23b8-9ce318e8cba6', session_id='')
+[DEBUG:2021-06-16 07:48:02,026] rhasspydialogue_hermes: <- DialogueEndSession(session_id='e5e7accc-ac46-9dd1-772b-375d4d18eba4', text='Tut mir leid, da hat etwas zu lange gedauert', custom_data=None)
+[DEBUG:2021-06-16 07:48:02,032] rhasspydialogue_hermes: <- DialogueConfigure(intents=[DialogueConfigureIntent(intent_id='de.fhem:ChoiceDevice', enable=False), DialogueConfigureIntent(intent_id='de.fhem:CancelAction', enable=False)], site_id='motox')
+[WARNING:2021-06-16 07:48:02,033] rhasspydialogue_hermes: No session for id e5e7accc-ac46-9dd1-772b-375d4d18eba4. Cannot end.
+[DEBUG:2021-06-16 07:48:02,035] rhasspydialogue_hermes: Removed default intent filter
