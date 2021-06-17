@@ -1,4 +1,4 @@
-# $Id: 10_RHASSPY.pm 24573 + switchable configure_DialogManager + $
+# $Id: 10_RHASSPY.pm 24573 + new respond + $
 ###########################################################################
 #
 # FHEM RHASSPY modul  (https://github.com/rhasspy)
@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.27';
+    $hash->{MODULE_VERSION} = '0.4.28';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -1197,7 +1197,7 @@ sub RHASSPY_DialogTimeout {
     delete $hash->{helper}{'.delayed'}{$identiy};
     deleteSingleRegIntTimer($identiy, $hash, 1); 
 
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $siteId, getResponse( $hash, 'DefaultConfirmationTimeout' ));
+    respond($hash, $data->{requestType}, $data->{sessionId}, $siteId, getResponse( $hash, 'DefaultConfirmationTimeout' ));
     configure_DialogManager($hash, $siteId, $toDisable, 'false') if $hash->{switchDM}; #dialog
 
     return;
@@ -1235,7 +1235,7 @@ sub setDialogTimeout {
           };
 
     configure_DialogManager($hash, $siteId, $toEnable, 'true') if $hash->{switchDM}; #dialog 
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $reaction);
+    respond( $hash, $data, $reaction );
 
     my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
     delete $hash->{'.toTrigger'};
@@ -1988,7 +1988,7 @@ sub parseJSONPayload {
     # Standard-Keys auslesen
     ($data->{intent} = $decoded->{intent}{intentName}) =~ s{\A.*.:}{}x if exists $decoded->{intent}{intentName};
     $data->{probability} = $decoded->{intent}{confidenceScore}         if exists $decoded->{intent}{confidenceScore};
-    for my $key (qw(sessionId siteId input rawInput customData)) {
+    for my $key (qw(sessionId siteId input rawInput customData lang)) {
         $data->{$key} = $decoded->{$key} if exists $decoded->{$key};
     }
 
@@ -2163,7 +2163,7 @@ sub analyzeMQTTmessage {
 
     if ($mute) {
         $data->{requestType} = $message =~ m{${fhemId}.textCommand}x ? 'text' : 'voice';
-        respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, q{ });
+        respond( $hash, $data, q{ } );
         #Beta-User: Da fehlt mir der Soll-Ablauf für das "room-listening"-Reading; das wird ja über einen anderen Topic abgewickelt
         return \@updatedList;
     }
@@ -2197,18 +2197,20 @@ sub analyzeMQTTmessage {
 
 # Antwort ausgeben
 sub respond {
-    my $hash      = shift // return;
-    my $type      = shift // return;
-    my $sessionId = shift // return;
-    my $siteId    = shift // return;
-    my $response  = shift // return;
+    my $hash     = shift // return;
+    my $data     = shift // return;
+    my $response = shift // return;
+    #former call: respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultCancelConfirmation' ) );
+
+    my $type      = $data->{requestType} // return;
 
     my $topic = q{endSession};
 
-    my $sendData =  {
-        sessionId => $sessionId,
-        siteId    => $siteId
-    };
+    my $sendData;
+
+    for my $key (qw(sessionId siteId customData lang)) {
+        $sendData->{$key} = $data->{$key} if exists $data->{$key} && $data->{$key} ne 'NULL';
+    }
 
     if (ref $response eq 'HASH') {
         #intentFilter
@@ -2231,7 +2233,7 @@ sub respond {
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/$topic $json});
     Log3($hash->{NAME}, 5, "Response is: $response");
     
-    my $secondAudio = ReadingsVal($hash->{NAME}, "siteId2doubleSpeak_$siteId",0);
+    my $secondAudio = ReadingsVal($hash->{NAME}, "siteId2doubleSpeak_$data->{siteId}",0);
     sendSpeakCommand( $hash, { 
             siteId => $secondAudio, 
             text   => $response} )
@@ -2575,7 +2577,7 @@ sub handleCustomIntent {
     }
 
     my $subName = $custom->{function};
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultError')) if !defined $subName;
+    return respond( $hash, $data, getResponse( $hash, 'DefaultError' ) ) if !defined $subName;
 
     my $params = $custom->{args};
     my @rets = @{$params};
@@ -2605,7 +2607,7 @@ sub handleCustomIntent {
             $timeout = ${$error}[1] if looks_like_number( ${$error}[1] );
             return setDialogTimeout($hash, $data, $timeout, ${$error}[0]);
         }
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+        respond( $hash, $data, $response );
         return ${$error}[1]; #comma separated list of devices to trigger
     } elsif ( ref $error eq 'HASH' ) {
         return setDialogTimeout($hash, $data, $timeout, $error);
@@ -2616,7 +2618,7 @@ sub handleCustomIntent {
     $response = getResponse($hash, 'DefaultConfirmation') if !defined $response;
 
     # Antwort senden
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return respond( $hash, $data, $response );
 }
 
 
@@ -2634,7 +2636,7 @@ sub handleIntentSetMute {
         $response = getResponse($hash, 'DefaultConfirmation');
     }
     $response = $response  // getResponse($hash, 'DefaultError');
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return respond( $hash, $data, $response );
 }
 
 # Handle custom Shortcuts
@@ -2684,7 +2686,7 @@ sub handleIntentShortcuts {
         AnalyzeCommand($hash, $cmd);
     }
     $response = _ReplaceReadingsVal( $hash, $response );
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     # update Readings
     #updateLastIntentReadings($hash, $topic,$data);
 
@@ -2728,7 +2730,7 @@ sub handleIntentSetOnOff {
     }
     # Send response
     $response = $response  // getResponse($hash, 'DefaultError');
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $device;
 }
 
@@ -2738,7 +2740,7 @@ sub handleIntentSetOnOffGroup {
 
     Log3($hash->{NAME}, 5, "handleIntentSetOnOffGroup called");
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !defined $data->{Value}; 
+    return respond( $hash, $data, getResponse($hash, 'NoValidData') ) if !defined $data->{Value}; 
 
     my $devices = getDevicesByGroup($hash, $data);
 
@@ -2750,7 +2752,7 @@ sub handleIntentSetOnOffGroup {
         }  keys %{$devices};
         
     Log3($hash, 5, 'sorted devices list is: ' . join q{ }, @devlist);
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound')) if !keys %{$devices}; 
+    return respond( $hash, $data, getResponse($hash, 'NoDeviceFound') ) if !keys %{$devices}; 
 
     my $delaysum = 0;
     
@@ -2789,7 +2791,7 @@ sub handleIntentSetOnOffGroup {
     _sortAsyncQueue($hash) if $init_delay && $needs_sorting;
 
     # Send response
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultConfirmation'));
+    respond( $hash, $data, getResponse($hash, 'DefaultConfirmation') );
     return $updatedList;
 }
 
@@ -2801,7 +2803,7 @@ sub handleIntentSetTimedOnOff {
 
     Log3($hash->{NAME}, 5, "handleIntentSetTimedOnOff called");
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'duration_not_understood' )) 
+    return respond( $hash, $data, getResponse( $hash, 'duration_not_understood' ) ) 
     if !defined $data->{Hourabs} && !defined $data->{Hour} && !defined $data->{Min} && !defined $data->{Sec};
     
     # Device AND Value must exist
@@ -2820,7 +2822,7 @@ sub handleIntentSetTimedOnOff {
             $cmd .= "-for-timer";
 
             my $allset = getAllSets($device);
-            return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoTimedOnDeviceFound')) if $allset !~ m{\b$cmd(?:[\b:\s]|\Z)}xms;
+            return respond( $hash, $data, getResponse($hash, 'NoTimedOnDeviceFound') ) if $allset !~ m{\b$cmd(?:[\b:\s]|\Z)}xms;
 
             my $hour = 0;
             my $now1 = time;
@@ -2856,7 +2858,7 @@ sub handleIntentSetTimedOnOff {
     }
     # Send response
     $response = $response  // getResponse($hash, 'DefaultError');
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $device; 
 }
 
@@ -2867,8 +2869,8 @@ sub handleIntentSetTimedOnOffGroup {
 
     Log3($hash->{NAME}, 5, "handleIntentSetTimedOnOffGroup called");
 
-    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'NoValidData' ) ) if !defined $data->{Value}; 
-    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'duration_not_understood' ) ) 
+    return respond( $hash, $data, getResponse( $hash, 'NoValidData' ) ) if !defined $data->{Value}; 
+    return respond( $hash, $data, getResponse( $hash, 'duration_not_understood' ) ) 
     if !defined $data->{Hourabs} && !defined $data->{Hour} && !defined $data->{Min} && !defined $data->{Sec};
 
     my $devices = getDevicesByGroup($hash, $data);
@@ -2881,7 +2883,7 @@ sub handleIntentSetTimedOnOffGroup {
         }  keys %{$devices};
 
     Log3($hash, 5, 'sorted devices list is: ' . join q{ }, @devlist);
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound')) if !keys %{$devices}; 
+    return respond( $hash, $data, getResponse($hash, 'NoDeviceFound') ) if !keys %{$devices}; 
 
     #calculate duration for on/off-timer
     my $hour = 0;
@@ -2945,7 +2947,7 @@ sub handleIntentSetTimedOnOffGroup {
     _sortAsyncQueue($hash) if $init_delay && $needs_sorting;
 
     # Send response
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultConfirmation'));
+    respond( $hash, $data, getResponse($hash, 'DefaultConfirmation') );
     return $updatedList;
 }
 
@@ -2986,7 +2988,7 @@ sub handleIntentGetOnOff {
     }
     # Send response
     $response = getResponse($hash, 'DefaultError')  if !defined $response;
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $device;
 }
 
@@ -3020,7 +3022,7 @@ sub handleIntentSetNumericGroup {
 
     Log3($hash->{NAME}, 5, 'handleIntentSetNumericGroup called');
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !exists $data->{Value} && !exists $data->{Change}; 
+    return respond( $hash, $data, getResponse($hash, 'NoValidData') ) if !exists $data->{Value} && !exists $data->{Change};
 
     my $devices = getDevicesByGroup($hash, $data);
 
@@ -3032,7 +3034,7 @@ sub handleIntentSetNumericGroup {
         }  keys %{$devices};
 
     Log3($hash, 5, 'sorted devices list is: ' . join q{ }, @devlist);
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound')) if !keys %{$devices}; 
+    return respond( $hash, $data, getResponse( $hash, 'NoDeviceFound' ) ) if !keys %{$devices}; 
 
     my $delaysum = 0;
 
@@ -3066,7 +3068,7 @@ sub handleIntentSetNumericGroup {
     _sortAsyncQueue($hash) if $init_delay && $needs_sorting;
 
     # Send response
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultConfirmation'));
+    respond( $hash, $data, getResponse( $hash, 'DefaultConfirmation' ) );
     return $updatedList;
 }
 
@@ -3081,7 +3083,7 @@ sub handleIntentSetNumeric {
 
     if ( !defined $device && !isValidData($data) ) {
         return if defined $data->{'.inBulk'};
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData'));
+        return respond( $hash, $data, getResponse( $hash, 'NoValidData' ) );
     }
 
     my $unit   = $data->{Unit};
@@ -3101,10 +3103,10 @@ sub handleIntentSetNumeric {
     } elsif ( defined $type && ( $type eq 'volume' || $type eq 'Lautstärke' ) ) {
         $device = 
             getActiveDeviceForIntentAndType($hash, $room, 'SetNumeric', $type) 
-            // return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoActiveMediaDevice'));
+            // return respond( $hash, $data, getResponse( $hash, 'NoActiveMediaDevice') );
     }
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound')) if !defined $device;
+    return respond( $hash, $data, getResponse( $hash, 'NoDeviceFound' ) ) if !defined $device;
 
     my $mapping = getMapping($hash, $device, 'SetNumeric', $type, defined $hash->{helper}{devicemap}, 0);
 
@@ -3113,12 +3115,12 @@ sub handleIntentSetNumeric {
             #Beta-User: long forms to later add options to check upper/lower limits for pure on/off devices
             return;
         } else { 
-           return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
+           return respond( $hash, $data, getResponse( $hash, 'NoMappingFound' ) );
         }
     }
 
     # Mapping and device found -> execute command
-    my $cmd     = $mapping->{cmd} // return defined $data->{'.inBulk'} ? undef : respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
+    my $cmd     = $mapping->{cmd} // return defined $data->{'.inBulk'} ? undef : respond( $hash, $data, getResponse( $hash, 'NoMappingFound' ) );
     my $part    = $mapping->{part};
     my $minVal  = $mapping->{minVal};
     my $maxVal  = $mapping->{maxVal};
@@ -3185,7 +3187,7 @@ sub handleIntentSetNumeric {
     }
 
     if ( !defined $newVal ) {
-        return defined $data->{'.inBulk'} ? undef : respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoNewValDerived'));
+        return defined $data->{'.inBulk'} ? undef : respond( $hash, $data, getResponse( $hash, 'NoNewValDerived' ) );
     }
 
     # limit to min/max  (if set)
@@ -3210,7 +3212,7 @@ sub handleIntentSetNumeric {
 
     # send response
     $response = getResponse($hash, 'DefaultError') if !defined $response;
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !defined $data->{'.inBulk'};
+    respond( $hash, $data, $response ) if !defined $data->{'.inBulk'};
     return $device;
 }
 
@@ -3224,7 +3226,7 @@ sub handleIntentGetNumeric {
     Log3($hash->{NAME}, 5, "handleIntentGetNumeric called");
 
     # Mindestens Type oder Device muss existieren
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultError')) if !exists $data->{Type} && !exists $data->{Device};
+    return respond( $hash, $data, getResponse( $hash, 'DefaultError' ) ) if !exists $data->{Type} && !exists $data->{Device};
 
     my $type = $data->{Type};
     my $subType = $data->{subType} // $type;
@@ -3234,7 +3236,7 @@ sub handleIntentGetNumeric {
     my $device = exists $data->{Device}
         ? getDeviceByName($hash, $room, $data->{Device})
         : getDeviceByIntentAndType($hash, $room, 'GetNumeric', $type)
-        // return respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound'));
+        // return respond( $hash, $data, getResponse( $hash, 'NoDeviceFound' ) );
 
     #more than one device 
     if (ref $device eq 'ARRAY') {
@@ -3251,7 +3253,7 @@ sub handleIntentGetNumeric {
     }
 
     my $mapping = getMapping($hash, $device, 'GetNumeric', { type => $type, subType => $subType }, defined $hash->{helper}{devicemap}, 0)
-        // return respond($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
+        // return respond( $hash, $data, getResponse( $hash, 'NoMappingFound' ) );
 
     # Mapping found
     my $part = $mapping->{part};
@@ -3284,7 +3286,7 @@ sub handleIntentGetNumeric {
 
     # Antwort falls Custom Response definiert ist
     if ( defined $mapping->{response} ) {
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, _getValue($hash, $device, $mapping->{response}, $value, $location));
+        return respond( $hash, $data, _getValue( $hash, $device, $mapping->{response}, $value, $location ) );
     }
     my $responses = getResponse( $hash, 'Change' );
 
@@ -3312,7 +3314,7 @@ sub handleIntentGetNumeric {
     # Variablen ersetzen?
     $response =~ s{(\$\w+)}{$1}eegx;
     # Antwort senden
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return respond( $hash, $data, $response );
 }
 
 
@@ -3338,7 +3340,7 @@ sub handleIntentGetState {
     }
     # Antwort senden
     $response = getResponse($hash, 'DefaultError') if !defined $response;
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return respond( $hash, $data, $response );
 }
 
 
@@ -3393,7 +3395,7 @@ sub handleIntentMediaControls {
         }
     }
     # Send voice response
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $device;
 }
 
@@ -3404,11 +3406,11 @@ sub handleIntentSetScene{
     my ($scene, $device, $room, $siteId, $mapping, $response);
 
     Log3($hash->{NAME}, 5, "handleIntentSetScene called");
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !defined $data->{Scene};
+    return respond( $hash, $data, getResponse( $hash, 'NoValidData' ) ) if !defined $data->{Scene};
 
     # Device AND Scene are optimum exist
     if ( !exists $data->{Device} ) {
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound'));
+        return respond( $hash, $data, getResponse( $hash, 'NoDeviceFound' ) );
     } else {
         $room = getRoomName($hash, $data);
         $scene = $data->{Scene};
@@ -3432,7 +3434,7 @@ sub handleIntentSetScene{
 =cut
 
         # Mapping found?
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !$device || !defined $mapping;
+        return respond( $hash, $data, getResponse( $hash, 'NoValidData' ) ) if !$device || !defined $mapping;
         my $cmd = qq(scene $scene);
 
         # execute Cmd
@@ -3440,12 +3442,12 @@ sub handleIntentSetScene{
         Log3($hash->{NAME}, 5, "Running command [$cmd] on device [$device]" );
 
         # Define response
-        $response = $mapping->{response} // getResponse($hash, 'DefaultConfirmation');
+        $response = $mapping->{response} // getResponse( $hash, 'DefaultConfirmation' );
     }
 
     # Send response
     $response = $response  // getResponse($hash, 'DefaultError');
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $device;
 }
 
@@ -3461,7 +3463,7 @@ sub handleIntentGetTime {
     Log3($hash->{NAME}, 5, "Response: $response");
 
     # Send voice reponse
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return respond( $hash, $data, $response );
 }
 
 
@@ -3484,7 +3486,7 @@ sub handleIntentGetDate {
     Log3($hash->{NAME}, 5, "Response: $response");
 
     # Send voice reponse
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    return respond( $hash, $data, $response );
 }
 
 
@@ -3527,7 +3529,7 @@ sub handleIntentMediaChannels {
 
     # Antwort senden
     $response = getResponse($hash, 'NoMediaChannelFound') if !defined $response;
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $device;
 }
 
@@ -3546,7 +3548,7 @@ sub handleIntentSetColor {
     # At least Device AND Color have to be received
     if ( !exists $data->{Color} && !exists $data->{Rgb} &&!exists $data->{Saturation} && !exists $data->{Colortemp} && !exists $data->{Hue} || !exists $data->{Device} && !defined $device) {
         return if $inBulk;
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData'));
+        return respond( $hash, $data, getResponse( $hash, 'NoValidData' ) );
     }
 
     #if (exists $data->{Color} && exists $data->{Device}) {
@@ -3563,7 +3565,7 @@ sub handleIntentSetColor {
     }
 
     return if $inBulk && !defined $device;
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound')) if !defined $device;
+    return respond( $hash, $data, getResponse( $hash, 'NoDeviceFound' ) ) if !defined $device;
 
     if ( defined $cmd || defined $cmd2 ) {
         $response = getResponse($hash, 'DefaultConfirmation');
@@ -3574,7 +3576,7 @@ sub handleIntentSetColor {
     }
     # Send voice response
     $response = getResponse($hash, 'DefaultError') if !defined $response;
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response) if !$inBulk;
+    respond( $hash, $data, $response ) if !$inBulk;
     return $device;
 }
 
@@ -3586,7 +3588,7 @@ sub _runSetColorCmd {
 
     my $color  = $data->{Color};
 
-    my $mapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetColorParms} // return $inBulk ?undef : respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoMappingFound'));
+    my $mapping = $hash->{helper}{devicemap}{devices}{$device}{intents}{SetColorParms} // return $inBulk ?undef : respond( $hash, $data, getResponse( $hash, 'NoMappingFound' ) );
 
     my $error;
 
@@ -3604,7 +3606,7 @@ sub _runSetColorCmd {
             $error = AnalyzeCommand($hash, "set $device $cmd");
             return if $inBulk;
             Log3($hash->{NAME}, 5, "Setting $device to $cmd");
-            return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+            return respond( $hash, $data, $error ) if $error;
             return getResponse($hash, 'DefaultConfirmation');
         } elsif ( defined $data->{$kw} && defined $mapping->{$_} ) {
             my $value = round( ($mapping->{$_}->{maxVal} - $mapping->{$_}->{minVal}) * $data->{$kw} / ($kw eq 'Hue' ? 360 : 100) , 0);
@@ -3612,7 +3614,7 @@ sub _runSetColorCmd {
             $error = AnalyzeCommand($hash, "set $device $mapping->{$_}->{cmd} $value");
             return if $inBulk;
             Log3($hash->{NAME}, 5, "Setting color to $value");
-            return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+            return respond( $hash, $data, $error ) if $error;
             return getResponse($hash, 'DefaultConfirmation');
         }
     }
@@ -3623,7 +3625,7 @@ sub _runSetColorCmd {
         $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $color");
         return if $inBulk;
         Log3($hash->{NAME}, 5, "Setting rgb-color to $color");
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+        return respond( $hash, $data, $error ) if $error;
         return getResponse($hash, 'DefaultConfirmation');
     }
 
@@ -3665,7 +3667,7 @@ sub _runSetColorCmd {
         $error = AnalyzeCommand($hash, "set $device $rgbcmd $rgb");
         return if $inBulk;
         Log3($hash->{NAME}, 5, "Setting rgb-color to $rgb using hue");
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+        return respond( $hash, $data, $error ) if $error;
         return getResponse($hash, 'DefaultConfirmation');
     }
 
@@ -3679,7 +3681,7 @@ sub _runSetColorCmd {
         $error = AnalyzeCommand($hash, "set $device $mapping->{rgb}->{cmd} $rgb");
         return if $inBulk;
         Log3($hash->{NAME}, 5, "Setting color-temperature to $ct");
-        return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $error) if $error;
+        return respond( $hash, $data, $error ) if $error;
         return getResponse($hash, 'DefaultConfirmation');
     }
 
@@ -3721,7 +3723,7 @@ sub handleIntentSetColorGroup {
 
     Log3($hash->{NAME}, 5, 'handleIntentSetColorGroup called');
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoValidData')) if !exists $data->{Color} && !exists $data->{Rgb} &&!exists $data->{Saturation} && !exists $data->{Colortemp} && !exists $data->{Hue};
+    return respond( $hash, $data, getResponse( $hash, 'NoValidData' ) ) if !exists $data->{Color} && !exists $data->{Rgb} &&!exists $data->{Saturation} && !exists $data->{Colortemp} && !exists $data->{Hue};
 
     my $devices = getDevicesByGroup($hash, $data);
 
@@ -3733,7 +3735,7 @@ sub handleIntentSetColorGroup {
         }  keys %{$devices};
 
     Log3($hash, 5, 'sorted devices list is: ' . join q{ }, @devlist);
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'NoDeviceFound')) if !keys %{$devices}; 
+    return respond( $hash, $data, getResponse( $hash, 'NoDeviceFound' ) ) if !keys %{$devices}; 
 
     my $delaysum = 0;
     my $updatedList;
@@ -3762,7 +3764,7 @@ sub handleIntentSetColorGroup {
     _sortAsyncQueue($hash) if $init_delay && $needs_sorting;
 
     # Send response
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultConfirmation'));
+    respond( $hash, $data, getResponse( $hash, 'DefaultConfirmation' ) );
     return $updatedList;
 }
 
@@ -3777,7 +3779,7 @@ sub handleIntentSetTimer {
 
     Log3($name, 5, 'handleIntentSetTimer called');
 
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'duration_not_understood' ) ) 
+    return respond( $hash, $data, getResponse( $hash, 'duration_not_understood' ) ) 
     if !defined $data->{Hourabs} && !defined $data->{Hour} && !defined $data->{Min} && !defined $data->{Sec} && !defined $data->{CancelTimer};
 
     my $room = getRoomName($hash, $data);
@@ -3827,7 +3829,7 @@ sub handleIntentSetTimer {
         Log3($name, 5, "deleted timer: $roomReading");
         $response = getResponse($hash, 'timerCancellation');
         $response =~ s{(\$\w+)}{$1}eegx;
-        respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+        respond( $hash, $data, $response );
         return $name;
     }
 
@@ -3850,7 +3852,7 @@ sub handleIntentSetTimer {
             CommandDefMod($hash, "-temporary $roomReading at +$attime set $name speak siteId=\"$timerRoom\" text=\"$responseEnd\";deletereading $name ${roomReading}$addtrigger");
         } else {
             $soundoption =~ m{((?<repeats>[0-9]*)[:]){0,1}((?<duration>[0-9.]*)[:]){0,1}(?<file>(.+))}x;
-            my $file = $+{file} // Log3($hash->{NAME}, 2, "no WAV file for $label provided, check attribute rhasspyTweaks (item timerSounds)!") && return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse($hash, 'DefaultError'));
+            my $file = $+{file} // Log3($hash->{NAME}, 2, "no WAV file for $label provided, check attribute rhasspyTweaks (item timerSounds)!") && return respond( $hash, $data, getResponse( $hash, 'DefaultError' ) );
             my $repeats = $+{repeats} // 5;
             my $duration = $+{duration} // 15;
             CommandDefMod($hash, "-temporary $roomReading at +$attime set $name play siteId=\"$timerRoom\" path=\"$file\" repeats=$repeats wait=$duration id=${roomReading}$addtrigger");
@@ -3892,7 +3894,7 @@ sub handleIntentSetTimer {
 
     $response = getResponse($hash, 'DefaultError') if !defined $response;
 
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
     return $name;
 }
 
@@ -3907,11 +3909,11 @@ sub handleIntentCancelAction {
 
     my $identiy = qq($data->{sessionId});
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
-    return respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'SilentCancelConfirmation')) if !defined $data_old;
+    return respond( $hash, $data, getResponse( $hash, 'SilentCancelConfirmation' ) ) if !defined $data_old;
 
     deleteSingleRegIntTimer($identiy, $hash);
     delete $hash->{helper}{'.delayed'}->{$identiy};
-    respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultCancelConfirmation' ) );
+    respond( $hash, $data, getResponse( $hash, 'DefaultCancelConfirmation' ) );
     configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM};#dialog 
 
     return $hash->{NAME};
@@ -3932,7 +3934,7 @@ sub handleIntentConfirmAction {
 
     deleteSingleRegIntTimer($identiy, $hash);
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
-    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
+    return respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
 
     my $toDisable = defined $data_old && defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction)]; #dialog
     configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM}; #dialog
@@ -3965,7 +3967,7 @@ sub handleIntentChoiceRoom {
     delete $hash->{helper}{'.delayed'}{$identiy};
     deleteSingleRegIntTimer($identiy, $hash);
 
-    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if !defined $data_old;
+    return respond( $hash, $data, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if !defined $data_old;
 
     $data_old->{siteId} = $data->{siteId};
     $data_old->{sessionId} = $data->{sessionId};
@@ -3995,7 +3997,7 @@ sub handleIntentChoiceDevice {
     delete $hash->{helper}{'.delayed'}{$identiy};
     deleteSingleRegIntTimer($identiy, $hash);
 
-    return respond( $hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if ! defined $data_old;
+    return respond( $hash, $data, getResponse( $hash, 'DefaultChoiceNoOutstanding' ) ) if ! defined $data_old;
 
     $data_old->{siteId} = $data->{siteId};
     $data_old->{sessionId} = $data->{sessionId};
@@ -4023,7 +4025,7 @@ sub handleIntentReSpeak {
 
     Log3($hash->{NAME}, 5, 'handleIntentReSpeak called');
 
-    respond ($hash, $data->{requestType}, $data->{sessionId}, $data->{siteId}, $response);
+    respond( $hash, $data, $response );
 
     return $name;
 }
