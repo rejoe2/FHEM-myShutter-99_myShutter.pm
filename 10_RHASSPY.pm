@@ -2264,7 +2264,8 @@ sub sendTextCommand {
     
     my $data = {
          input => $text,
-         sessionId => "$hash->{fhemId}.textCommand"
+         sessionId => "$hash->{fhemId}.textCommand" #,
+         #canBeEnqueued => 'true'
     };
     my $message = _toCleanJSON($data);
 
@@ -2275,6 +2276,25 @@ sub sendTextCommand {
     return IOWrite($hash, 'publish', qq{$topic $message});
 }
 
+=pod
+sendTextCommand and sendSpeakCommand might need review; seems using https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager (for details see also https://rhasspy-hermes.readthedocs.io/en/latest/api.html#rhasspyhermes.dialogue.DialogueAction and https://community.rhasspy.org/t/start-conversation-with-tts-and-start-listening/2099/2) with "init" => "type": "notification" is the more generic approach
+
+hermes/dialogueManager/startSession (JSON)
+
+    Starts a new dialogue session (done automatically on hotword detected)
+    init: object - JSON object with one of two forms:
+        Action
+            type: string = "action" - required
+            canBeEnqueued: bool - true if session can be queued if there is already one (required)
+            text: string? = null - sentence to speak using text to speech
+            intentFilter: [string]? = null - valid intent names (null means all)
+            sendIntentNotRecognized: bool = false - send hermes/dialogueManager/intentNotRecognized if intent recognition fails
+        Notification
+            type: string = "notification" - required
+            text: string - sentence to speak using text to speech (required)
+    siteId: string = "default" - Hermes site ID
+    customData: string? = null - user-defined data passed to subsequent session messages
+=cut 
 
 # Sprachausgabe / TTS über RHASSPY
 sub sendSpeakCommand {
@@ -2283,7 +2303,8 @@ sub sendSpeakCommand {
 
     my $sendData =  {
         id => '0',
-        sessionId => '0'
+        sessionId => '0'#,
+        #canBeEnqueued => 'true'
     };
     if (ref $cmd eq 'HASH') {
         return 'speak with explicite params needs siteId and text as arguments!' if !defined $cmd->{siteId} || !defined $cmd->{text};
