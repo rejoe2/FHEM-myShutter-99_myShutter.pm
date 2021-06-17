@@ -1192,13 +1192,14 @@ sub RHASSPY_DialogTimeout {
 
     my $data     = shift // $hash->{helper}{'.delayed'}->{$identiy};
     my $siteId = $data->{siteId};
-    my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)]; #dialog 
+    #my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)]; #dialog 
 
-    delete $hash->{helper}{'.delayed'}{$identiy};
     deleteSingleRegIntTimer($identiy, $hash, 1); 
 
-    respond($hash, $data->{requestType}, $data->{sessionId}, $siteId, getResponse( $hash, 'DefaultConfirmationTimeout' ));
-    configure_DialogManager($hash, $siteId, $toDisable, 'false') if $hash->{switchDM}; #dialog
+    respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationTimeout' ) );
+    #configure_DialogManager($hash, $siteId, $toDisable, 'false') if $hash->{switchDM}; #dialog
+    configure_DialogManager($hash, $siteId, $data->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
+    delete $hash->{helper}{'.delayed'}{$identiy};
 
     return;
 }
@@ -2141,6 +2142,8 @@ sub analyzeMQTTmessage {
             my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
             if (defined $data_old) {
                 $data->{text} = getResponse( $hash, 'DefaultCancelConfirmation' );
+                #_resetDialogueFilter( $hash, $data_old, $data );
+                $data->{intentFilter} = 'null' if !defined $data->{intentFilter}; #dialog II
                 sendTextCommand( $hash, $data );
                 delete $hash->{helper}{'.delayed'}{$identiy};
                 deleteSingleRegIntTimer($identiy, $hash);
@@ -2209,7 +2212,7 @@ sub respond {
     my $sendData;
 
     for my $key (qw(sessionId siteId customData lang)) {
-        $sendData->{$key} = $data->{$key} if exists $data->{$key} && $data->{$key} ne 'NULL';
+        $sendData->{$key} = $data->{$key} if exists $data->{$key} && $data->{$key} ne 'null';
     }
 
     if (ref $response eq 'HASH') {
@@ -3905,16 +3908,21 @@ sub handleIntentCancelAction {
 
     Log3($hash->{NAME}, 5, 'handleIntentCancelAction called');
 
-    my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)]; #dialog
+    #my $toDisable = defined $data->{'.ENABLED'} ? $data->{'.ENABLED'} : [qw(ConfirmAction CancelAction)]; #dialog
 
     my $identiy = qq($data->{sessionId});
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
-    return respond( $hash, $data, getResponse( $hash, 'SilentCancelConfirmation' ) ) if !defined $data_old;
+    if ( !defined $data_old ) {
+        respond( $hash, $data, getResponse( $hash, 'SilentCancelConfirmation' ) );
+        configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
+        return;
+    }
 
     deleteSingleRegIntTimer($identiy, $hash);
     delete $hash->{helper}{'.delayed'}->{$identiy};
     respond( $hash, $data, getResponse( $hash, 'DefaultCancelConfirmation' ) );
-    configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM};#dialog 
+    #configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM};#dialog 
+    configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false') if $hash->{switchDM};
 
     return $hash->{NAME};
 }
@@ -3934,10 +3942,12 @@ sub handleIntentConfirmAction {
 
     deleteSingleRegIntTimer($identiy, $hash);
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
-    return respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) ) if ! defined $data_old;
 
-    my $toDisable = defined $data_old && defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction)]; #dialog
-    configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM}; #dialog
+    if ( !defined $data_old ) {
+        respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) );
+        configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
+        return;
+    };
 
     $data_old->{siteId} = $data->{siteId};
     $data_old->{sessionId} = $data->{sessionId};
@@ -3951,6 +3961,9 @@ sub handleIntentConfirmAction {
     if (ref $dispatchFns->{$intent} eq 'CODE') {
         $device = $dispatchFns->{$intent}->($hash, $data_old);
     }
+    #my $toDisable = defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction )]; #dialog
+    #configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM}; #dialog
+    configure_DialogManager($hash, $data->{siteId}, $data_old->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
     delete $hash->{helper}{'.delayed'}{$identiy};
 
     return $device;
@@ -4182,6 +4195,7 @@ sub _toCleanJSON {
     my $json = toJSON($data);
     
     $json =~ s{(":"(true|false)")}{": $2}gms;
+    $json =~ s{(":"null")}{": null}gms;
     $json =~ s{":"}{": "}gms;
     $json =~ s{("enable": (?:false|true)),("intentId": "[^"]+")}{$2,$1}gms;
     return $json;
