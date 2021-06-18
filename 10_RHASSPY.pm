@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.28';
+    $hash->{MODULE_VERSION} = '0.4.29';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -2298,7 +2298,7 @@ sub sendTextCommand {
 }
 
 =pod
-sendTextCommand and sendSpeakCommand might need review; seems using https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager (for details see also https://rhasspy-hermes.readthedocs.io/en/latest/api.html#rhasspyhermes.dialogue.DialogueAction and https://community.rhasspy.org/t/start-conversation-with-tts-and-start-listening/2099/2) with "init" => "type": "notification" is the more generic approach
+sendSpeakCommand might need review; seems using https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager (for details see also https://rhasspy-hermes.readthedocs.io/en/latest/api.html#rhasspyhermes.dialogue.DialogueAction and https://community.rhasspy.org/t/start-conversation-with-tts-and-start-listening/2099/2) with "init" => "type": "notification" is the more generic approach
 
 hermes/dialogueManager/startSession (JSON)
 
@@ -2318,6 +2318,36 @@ hermes/dialogueManager/startSession (JSON)
 =cut 
 
 # Sprachausgabe / TTS über RHASSPY
+sub sendSpeakCommand {
+    my $hash = shift;
+    my $cmd  = shift;
+
+    my $sendData =  { 
+        init => {
+            type          => 'notification',
+            canBeEnqueued => 'true'
+        }
+    };
+    if (ref $cmd eq 'HASH') {
+        return 'speak with explicite params needs siteId and text as arguments!' if !defined $cmd->{siteId} || !defined $cmd->{text};
+        $sendData->{siteId} =  $cmd->{siteId};
+        $sendData->{init}->{text} =  $cmd->{text};
+    } else {    #Beta-User: might need review, as parseParams is used by default...!
+        my($unnamedParams, $namedParams) = parseParams($cmd);
+
+        if (defined $namedParams->{siteId} && defined $namedParams->{text}) {
+            $sendData->{siteId} = $namedParams->{siteId};
+            $sendData->{init}->{text} = $namedParams->{text};
+        } else {
+            return 'speak needs siteId and text as arguments!';
+        }
+    }
+    my $json = _toCleanJSON($sendData);
+    return IOWrite($hash, 'publish', qq{hermes/dialogueManager/startSession $json});
+}
+
+=pod 
+#old version
 sub sendSpeakCommand {
     my $hash = shift;
     my $cmd  = shift;
@@ -2346,6 +2376,7 @@ sub sendSpeakCommand {
     my $json = _toCleanJSON($sendData);
     return IOWrite($hash, 'publish', qq{hermes/tts/say $json});
 }
+=cut
 
 # Send all devices, rooms, etc. to Rhasspy HTTP-API to update the slots
 sub updateSlots {
