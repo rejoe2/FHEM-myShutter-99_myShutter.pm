@@ -2222,7 +2222,12 @@ sub respond {
             $sendData->{$key} = $response->{$key};
         }
     } else {
-        $sendData->{text} = $response
+        $sendData->{text} = $response;
+        if ( defined $data->{'.ENABLED'} ) { 
+            $sendData->{intentFilter} = 'null';
+            configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
+        }
+    
     }
 
     my $json = _toCleanJSON($sendData);
