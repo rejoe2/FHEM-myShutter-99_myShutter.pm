@@ -2228,7 +2228,7 @@ sub respond {
     my $sendData;
 
     for my $key (qw(sessionId siteId customData lang)) {
-        $sendData->{$key} = $data->{$key} if exists $data->{$key} && $data->{$key} ne 'null';
+        $sendData->{$key} = $data->{$key} if defined $data->{$key} && $data->{$key} ne 'null';
     }
 
     if (ref $response eq 'HASH') {
