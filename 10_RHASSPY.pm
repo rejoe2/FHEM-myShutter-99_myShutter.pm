@@ -720,11 +720,20 @@ sub initialize_rhasspyTweaks {
 
 sub configure_DialogManager {
     my $hash      = shift // return;
-    Log3($hash,3,"R-DM for $hash->{NAME} called");
+    #Log3($hash,3,"R-DM for $hash->{NAME} called");
     my $siteId    = shift // ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) // return;
     my $toDisable = shift // [qw(ConfirmAction CancelAction ChoiceRoom ChoiceDevice)];
     my $enable    = shift // q{false};
-    #return if !$hash->{testing};
+    my $timer     = shift;
+
+    #option to delay execution to make reconfiguration last action after everything else has been done and published.
+    if ( $timer ) {
+        
+        my $fnHash = resetRegIntTimer( $siteId, time, \&RHASSPY_configure_DialogManager, $hash, 0);
+        $fnHash->{toDisable} = $toDisable;
+        $fnHash->{enable}    = $enable;
+        return;
+    }
 
     #loop for global initialization or for several siteId's
     #Log3($hash,3,"R-DM - $siteId $toDisable $enable");
@@ -770,6 +779,13 @@ hermes/dialogueManager/configure (JSON)
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure $json});
     return;
 }
+
+
+sub RHASSPY_configure_DialogManager {
+    my $fnHash = shift // return;
+    return configure_DialogManager( $fnHash->{HASH}, $fnHash->{MODIFIER}, $fnHash->{toDisable}, $fnHash->{enable} );
+}
+
 
 sub init_custom_intents {
     my $hash    = shift // return;
@@ -1198,7 +1214,7 @@ sub RHASSPY_DialogTimeout {
 
     respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationTimeout' ) );
     #configure_DialogManager($hash, $siteId, $toDisable, 'false') if $hash->{switchDM}; #dialog
-    configure_DialogManager($hash, $siteId, $data->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
+    #configure_DialogManager($hash, $siteId, $data->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
     delete $hash->{helper}{'.delayed'}{$identiy};
 
     return;
@@ -1235,7 +1251,7 @@ sub setDialogTimeout {
             customData => $data->{customData}
           };
 
-    configure_DialogManager($hash, $siteId, $toEnable, 'true') if $hash->{switchDM}; #dialog 
+    #configure_DialogManager($hash, $siteId, $toEnable, 'true') if $hash->{switchDM}; #dialog 
     respond( $hash, $data, $reaction );
 
     my $toTrigger = $hash->{'.toTrigger'} // $hash->{NAME};
@@ -2223,10 +2239,10 @@ sub respond {
         }
     } else {
         $sendData->{text} = $response;
-        if ( defined $data->{'.ENABLED'} ) { 
+        #if ( defined $data->{'.ENABLED'} ) { 
             $sendData->{intentFilter} = 'null';
-            configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
-        }
+            configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false', 1 ) if $hash->{switchDM}; #dialog II
+        #}
     
     }
 
@@ -3940,7 +3956,7 @@ sub handleIntentCancelAction {
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
     if ( !defined $data_old ) {
         respond( $hash, $data, getResponse( $hash, 'SilentCancelConfirmation' ) );
-        configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
+        #configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
         return;
     }
 
@@ -3948,7 +3964,7 @@ sub handleIntentCancelAction {
     delete $hash->{helper}{'.delayed'}->{$identiy};
     respond( $hash, $data, getResponse( $hash, 'DefaultCancelConfirmation' ) );
     #configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM};#dialog 
-    configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false') if $hash->{switchDM};
+    #configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false') if $hash->{switchDM};
 
     return $hash->{NAME};
 }
@@ -3971,7 +3987,7 @@ sub handleIntentConfirmAction {
 
     if ( !defined $data_old ) {
         respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) );
-        configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
+        #configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
         return;
     };
 
@@ -3989,7 +4005,7 @@ sub handleIntentConfirmAction {
     }
     #my $toDisable = defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction )]; #dialog
     #configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM}; #dialog
-    configure_DialogManager($hash, $data->{siteId}, $data_old->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
+    #configure_DialogManager($hash, $data->{siteId}, $data_old->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
     delete $hash->{helper}{'.delayed'}{$identiy};
 
     return $device;
