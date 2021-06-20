@@ -345,7 +345,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.29';
+    $hash->{MODULE_VERSION} = '0.4.30';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -721,7 +721,7 @@ sub initialize_rhasspyTweaks {
 sub configure_DialogManager {
     my $hash      = shift // return;
     #Log3($hash,3,"R-DM for $hash->{NAME} called");
-    my $siteId    = shift // ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) // return;
+    my $siteId    = shift // 'null'; #ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) // return;
     my $toDisable = shift // [qw(ConfirmAction CancelAction ChoiceRoom ChoiceDevice)];
     my $enable    = shift // q{false};
     my $timer     = shift;
@@ -729,7 +729,7 @@ sub configure_DialogManager {
     #option to delay execution to make reconfiguration last action after everything else has been done and published.
     if ( $timer ) {
         
-        my $fnHash = resetRegIntTimer( $siteId, time, \&RHASSPY_configure_DialogManager, $hash, 0);
+        my $fnHash = resetRegIntTimer( $siteId, time + looks_like_number($timer) ? $timer : 0, \&RHASSPY_configure_DialogManager, $hash, 0);
         $fnHash->{toDisable} = $toDisable;
         $fnHash->{enable}    = $enable;
         return;
@@ -2611,6 +2611,9 @@ sub RHASSPY_ParseHttpResponse {
         if ( $urls->{$url} eq 'updateSlots' && $hash->{'.needTraining'} ) {
             trainRhasspy($hash);
             delete $hash->{'.needTraining'};
+        }
+        if ( $urls->{$url} eq 'training' ) {
+            configure_DialogManager($hash, undef, undef, undef, 5 )
         }
     }
     elsif ( $url =~ m{api/profile}ix ) {
