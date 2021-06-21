@@ -1762,7 +1762,7 @@ sub getNeedsConfirmation {
     my $intent = shift // return;
     my $device = shift;
 
-    my $re = defined $device ? $intent : $data->{Group};
+    my $re = defined $device ? $device : $data->{Group};
     my $timeout = _getDialogueTimeout($hash);
     my $response = getResponse($hash, 'DefaultConfirmationRequestRawInput');
     my $rawInput = $data->{rawInput};
@@ -1780,7 +1780,7 @@ sub getNeedsConfirmation {
 
     my $confirm = $hash->{helper}{devicemap}{devices}{$device}->{confirmIntents};
     return if !defined $confirm;
-    if ( $confirm->{$intent} =~ m{\b$re(?:[\b:\s]|\Z)}i ) { ##no critic qw(RequireExtendedFormatting)
+    if ( $confirm->{$intent} =~ m{\b$intent(?:[\b:\s]|\Z)}i ) { ##no critic qw(RequireExtendedFormatting)
         setDialogTimeout($hash, $data, $timeout, $response);
         return 1;
     }
