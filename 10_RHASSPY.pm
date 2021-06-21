@@ -94,6 +94,7 @@ my $languagevars = {
     'DefaultConfirmationReceived' => "ok will do it",
     'DefaultConfirmationNoOutstanding' => "no command is awaiting confirmation",
     'DefaultConfirmationRequest' => 'please confirm switching $device $wanted',
+    'DefaultConfirmationRequestRawInput' => 'please confirm: $rawInput',
     'RequestChoiceDevice' => 'there are several possible devices, choose between $first_items and $last_item',
     'RequestChoiceRoom' => 'more than one possible device, please choose one of the following rooms $first_items and $last_item',
     'DefaultChoiceNoOutstanding' => "no choice expected",
@@ -345,7 +346,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.30';
+    $hash->{MODULE_VERSION} = '0.4.31';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -704,7 +705,7 @@ sub initialize_rhasspyTweaks {
             next;
         }
 
-        if ($line =~ m{\A[\s]*(timeouts|useGenericAttrs|timerSounds)[\s]*=}x) {
+        if ($line =~ m{\A[\s]*(timeouts|useGenericAttrs|timerSounds|confirmIntents)[\s]*=}x) {
             ($tweak, $values) = split m{=}x, $line, 2;
             $tweak = trim($tweak);
             return "Error in $line! No content provided!" if !length $values && $init_done;
@@ -720,14 +721,13 @@ sub initialize_rhasspyTweaks {
 
 sub configure_DialogManager {
     my $hash      = shift // return;
-    #Log3($hash,3,"R-DM for $hash->{NAME} called");
     my $siteId    = shift // 'null'; #ReadingsVal( $hash->{NAME}, 'siteIds', 'default' ) // return;
     my $toDisable = shift // [qw(ConfirmAction CancelAction ChoiceRoom ChoiceDevice)];
     my $enable    = shift // q{false};
     my $timer     = shift;
 
     #option to delay execution to make reconfiguration last action after everything else has been done and published.
-    if ( $timer ) {
+    if ( defined $timer ) {
         
         my $fnHash = resetRegIntTimer( $siteId, time + looks_like_number($timer) ? $timer : 0, \&RHASSPY_configure_DialogManager, $hash, 0);
         $fnHash->{toDisable} = $toDisable;
@@ -736,7 +736,6 @@ sub configure_DialogManager {
     }
 
     #loop for global initialization or for several siteId's
-    #Log3($hash,3,"R-DM - $siteId $toDisable $enable");
     if ( $siteId =~ m{,}xms ) {
         my @siteIds = split m{,}xms, $siteId;
         for (@siteIds) {
@@ -760,6 +759,10 @@ hermes/dialogueManager/configure (JSON)
     Further reading on continuing sessions:
     https://rhasspy-hermes-app.readthedocs.io/en/latest/usage.html#continuing-a-session
 =cut
+
+    #First reset default intent filter
+    my $sId = $siteId eq 'null' ? 'null' : qq("$siteId"); 
+    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure {"intents": [{"intentId": [], "enable": true}], "siteId": $sId}}) if $enable eq 'false';
 
     my @disabled;
     for (@{$toDisable}) {
@@ -964,6 +967,9 @@ sub _analyze_rhassypAttr {
             keys %{$combined} ?
                 $hash->{helper}{devicemap}{devices}{$device}{intents}{SetScene}->{SetScene} = $combined
                 : delete $hash->{helper}{devicemap}{devices}{$device}{intents}->{SetScene};
+        }
+        if ($key eq 'confirm') {
+            $hash->{helper}{devicemap}{devices}{$device}{confirmIntents} = $val;
         }
     }
 
@@ -1247,7 +1253,7 @@ sub setDialogTimeout {
         ? $response
         : { text         => $response, 
             intentFilter => [@ca_strings],
-            sendIntentNotRecognized => 'false',
+            sendIntentNotRecognized => 'true', #'false',
             customData => $data->{customData}
           };
 
@@ -1750,6 +1756,38 @@ sub getDevicesByGroup {
     return $devices;
 }
 
+sub getNeedsConfirmation {
+    my $hash   = shift // return;
+    my $data   = shift // return;
+    my $intent = shift // return;
+    my $device = shift;
+
+    my $re = defined $device ? $intent : $data->{Group};
+    my $timeout = _getDialogueTimeout($hash);
+    my $response = getResponse($hash, 'DefaultConfirmationRequestRawInput');
+    my $rawInput = $data->{rawInput};
+    $response =~ s{(\$\w+)}{$1}eegx;
+
+    if (defined $hash->{helper}{tweaks} 
+         && defined $hash->{helper}{tweaks}{confirmIntents} 
+         && defined $hash->{helper}{tweaks}{confirmIntents}{$intent} 
+         && $hash->{helper}{tweaks}{confirmIntents}{$intent} =~ m{\b$re(?:[\b:\s]|\Z)}i ) { ##no critic qw(RequireExtendedFormatting)
+        setDialogTimeout($hash, $data, $timeout, $response);
+        return 1;
+    }
+
+    return if !defined $device;
+
+    my $confirm = $hash->{helper}{devicemap}{devices}{$device}->{confirmIntents};
+    return if !defined $confirm;
+    if ( $confirm->{$intent} =~ m{\b$re(?:[\b:\s]|\Z)}i ) { ##no critic qw(RequireExtendedFormatting)
+        setDialogTimeout($hash, $data, $timeout, $response);
+        return 1;
+    }
+
+    return;
+}
+
 
 # Mappings in Key/Value Paare aufteilen
 sub splitMappingString {
@@ -2239,11 +2277,8 @@ sub respond {
         }
     } else {
         $sendData->{text} = $response;
-        #if ( defined $data->{'.ENABLED'} ) { 
-            $sendData->{intentFilter} = 'null';
-            configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false', 1 ) if $hash->{switchDM}; #dialog II
-        #}
-    
+        $sendData->{intentFilter} = 'null';
+        configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false', 1 ) if $hash->{switchDM}; #dialog II
     }
 
     my $json = _toCleanJSON($sendData);
@@ -2820,6 +2855,9 @@ sub handleIntentSetOnOffGroup {
     Log3($hash->{NAME}, 5, "handleIntentSetOnOffGroup called");
 
     return respond( $hash, $data, getResponse($hash, 'NoValidData') ) if !defined $data->{Value}; 
+
+    #check if confirmation is required
+    return $hash->{NAME} if !$data->{Confirmation} && getNeedsConfirmation( $hash, $data, 'SetOnOffGroup', 1 );
 
     my $devices = getDevicesByGroup($hash, $data);
 
@@ -3990,15 +4028,12 @@ sub handleIntentCancelAction {
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
     if ( !defined $data_old ) {
         respond( $hash, $data, getResponse( $hash, 'SilentCancelConfirmation' ) );
-        #configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
         return;
     }
 
     deleteSingleRegIntTimer($identiy, $hash);
     delete $hash->{helper}{'.delayed'}->{$identiy};
     respond( $hash, $data, getResponse( $hash, 'DefaultCancelConfirmation' ) );
-    #configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM};#dialog 
-    #configure_DialogManager($hash, $data->{siteId}, $data->{'.ENABLED'}, 'false') if $hash->{switchDM};
 
     return $hash->{NAME};
 }
@@ -4021,7 +4056,6 @@ sub handleIntentConfirmAction {
 
     if ( !defined $data_old ) {
         respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) );
-        #configure_DialogManager( $hash, $data->{siteId} ) if $hash->{switchDM}; #dialog II
         return;
     };
 
@@ -4037,9 +4071,6 @@ sub handleIntentConfirmAction {
     if (ref $dispatchFns->{$intent} eq 'CODE') {
         $device = $dispatchFns->{$intent}->($hash, $data_old);
     }
-    #my $toDisable = defined $data_old->{'.ENABLED'} ? $data_old->{'.ENABLED'} : [qw(ConfirmAction CancelAction )]; #dialog
-    #configure_DialogManager($hash, $data->{siteId}, $toDisable, 'false') if $hash->{switchDM}; #dialog
-    #configure_DialogManager($hash, $data->{siteId}, $data_old->{'.ENABLED'}, 'false') if $hash->{switchDM}; #dialog II
     delete $hash->{helper}{'.delayed'}{$identiy};
 
     return $device;
