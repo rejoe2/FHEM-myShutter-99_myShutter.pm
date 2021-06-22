@@ -383,7 +383,8 @@ sub firstInit {
 
     fetchSiteIds($hash) if !ReadingsVal( $name, 'siteIds', 0 );
     initialize_rhasspyTweaks($hash, AttrVal($name,'rhasspyTweaks', undef ));
-    configure_DialogManager($hash);
+    #configure_DialogManager($hash);
+    fetchIntents($hash);
     IOWrite($hash, 'subscriptions', join q{ }, @topics) if InternalVal($IODev,'TYPE',undef) eq 'MQTT2_CLIENT';
     initialize_devicemap($hash);
 
@@ -744,6 +745,7 @@ sub configure_DialogManager {
         return;
     }
 
+    my @intents  = split m{,}xm, ReadingsVal( $hash->{NAME}, 'intents', '' );
     my $language = $hash->{LANGUAGE};
     my $fhemId   = $hash->{fhemId};
 
@@ -760,24 +762,27 @@ hermes/dialogueManager/configure (JSON)
     https://rhasspy-hermes-app.readthedocs.io/en/latest/usage.html#continuing-a-session
 =cut
 
-    #First reset default intent filter
     my $sId = $siteId eq 'null' ? 'null' : qq("$siteId"); 
-    IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure {"intents": [{"intentId": [], "enable": true}], "siteId": $sId}}) if $enable eq 'false';
 
     my @disabled;
+    my $matches = join q{|}, @{$toDisable};
+    for (@intents) {
+        last if $enable eq 'true';
+        next if $_ =~ m{$matches}ms
+        my $defaults = {intentId => "$_", enable => 'true'} ;
+        push @disabled, $defaults;
+    }
     for (@{$toDisable}) {
         my $id = qq(${language}.${fhemId}:$_);
         my $disable = {intentId => "$id", enable => "$enable"};
         push @disabled, $disable;
     }
-    #my $disable = {intentId => [@disabled], enable => "$enable"};
     my $sendData = {
         siteId  => $siteId,
         intents => [@disabled]
     };
 
     my $json = _toCleanJSON($sendData);
-    #Log3($hash,3,qq{hermes/dialogueManager/configure $json});
 
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/configure $json});
     return;
@@ -2576,6 +2581,16 @@ sub fetchSiteIds {
     return _sendToApi($hash, $url, $method, undef);
 }
 
+# Use the HTTP-API to fetch all available siteIds
+sub fetchIntents {
+    my $hash   = shift // return;
+    my $url    = q{/api/intents};
+    my $method = q{GET};
+
+    Log3($hash->{NAME}, 5, 'fetchIntents called');
+    return _sendToApi($hash, $url, $method, undef);
+}
+
 =pod
 # Check connection to HTTP-API
 # Seems useless, because fetchSiteIds is called after DEF
@@ -2660,6 +2675,16 @@ sub RHASSPY_ParseHttpResponse {
         #my $ref = decode_json($data);
         my $siteIds = encode($cp,$ref->{dialogue}{satellite_site_ids});
         readingsBulkUpdate($hash, 'siteIds', $siteIds);
+    }
+    elsif ( $url =~ m{api/intents}ix ) {
+        my $refb; 
+        if ( !eval { $refb = decode_json($data) ; 1 } ) {
+            readingsEndUpdate($hash, 1);
+            return Log3($hash->{NAME}, 1, "JSON decoding error: $@");
+        }
+        my $intents = encode($cp,join q{,}, keys %{$refb});
+        readingsBulkUpdate($hash, 'intents', $intents);
+        configure_DialogManager($hash);
     }
     else {
         Log3($name, 3, qq(error while requesting $param->{url} - $data));
