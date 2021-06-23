@@ -1766,7 +1766,7 @@ sub getNeedsConfirmation {
     my $device = shift;
 
     my $re = defined $device ? $device : $data->{Group};
-    Log3( $hash, 5, "[$hash-{NAME}] getNeedsConfirmation called, regex is $re" );
+    Log3( $hash, 5, "[$hash->{NAME}] getNeedsConfirmation called, regex is $re" );
     my $timeout = _getDialogueTimeout($hash);
     my $response = getResponse($hash, 'DefaultConfirmationRequestRawInput');
     my $rawInput = $data->{rawInput};
@@ -1776,7 +1776,7 @@ sub getNeedsConfirmation {
          && defined $hash->{helper}{tweaks}{confirmIntents} 
          && defined $hash->{helper}{tweaks}{confirmIntents}{$intent} 
          && $hash->{helper}{tweaks}{confirmIntents}{$intent} =~ m{\b$re(?:[,]|\Z)}i ) { ##no critic qw(RequireExtendedFormatting)
-        Log3( $hash, 5, "[$hash-{NAME}] getNeedsConfirmation is true for tweak" );
+        Log3( $hash, 5, "[$hash->{NAME}] getNeedsConfirmation is true for tweak, response is $response" );
         setDialogTimeout($hash, $data, $timeout, $response);
         return 1;
     }
@@ -1786,7 +1786,7 @@ sub getNeedsConfirmation {
     my $confirm = $hash->{helper}{devicemap}{devices}{$device}->{confirmIntents};
     return if !defined $confirm;
     if ( $confirm->{$intent} =~ m{\b$intent(?:[,]|\Z)}i ) { ##no critic qw(RequireExtendedFormatting)
-        Log3( $hash, 5, "[$hash-{NAME}] getNeedsConfirmation is true on device level" );
+        Log3( $hash, 5, "[$hash->{NAME}] getNeedsConfirmation is true on device level" );
         setDialogTimeout($hash, $data, $timeout, $response);
         return 1;
     }
@@ -2882,7 +2882,7 @@ sub handleIntentSetOnOffGroup {
     return respond( $hash, $data, getResponse($hash, 'NoValidData') ) if !defined $data->{Value}; 
 
     #check if confirmation is required
-    return $hash->{NAME} if !$data->{Confirmation} && getNeedsConfirmation( $hash, $data, 'SetOnOffGroup', 1 );
+    return $hash->{NAME} if !$data->{Confirmation} && getNeedsConfirmation( $hash, $data, 'SetOnOffGroup' );
 
     my $devices = getDevicesByGroup($hash, $data);
 
