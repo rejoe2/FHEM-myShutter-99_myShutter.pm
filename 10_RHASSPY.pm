@@ -304,6 +304,7 @@ my @topics = qw(
     hermes/intent/+
     hermes/dialogueManager/sessionStarted
     hermes/dialogueManager/sessionEnded
+    hermes/nlu/intentNotRecognized
 );
 
 sub Initialize {
@@ -1233,7 +1234,7 @@ sub RHASSPY_DialogTimeout {
 sub setDialogTimeout {
     my $hash     = shift // return;
     my $data     = shift // return;
-    my $timeout  = shift;
+    my $timeout  = shift // _getDialogueTimeout($hash);
     my $response = shift;
     my $toEnable = shift // [qw(ConfirmAction CancelAction)];
 
@@ -2096,7 +2097,7 @@ sub Parse {
         # Name mit IODev vergleichen
         next if $ioname ne AttrVal($hash->{NAME}, 'IODev', ReadingsVal($hash->{NAME}, 'IODev', InternalVal($hash->{NAME}, 'IODev', 'none')));
         next if IsDisabled( $hash->{NAME} );
-        my $topicpart = qq{/$hash->{LANGUAGE}\.$hash->{fhemId}\[._]|hermes/dialogueManager};
+        my $topicpart = qq{/$hash->{LANGUAGE}\.$hash->{fhemId}\[._]|hermes/dialogueManager|hermes/nlu/intentNotRecognized};
         next if $topic !~ m{$topicpart}x;
 
         Log3($hash,5,"RHASSPY: [$hash->{NAME}] Parse (IO: ${ioname}): Msg: $topic => $value");
@@ -2228,6 +2229,11 @@ sub analyzeMQTTmessage {
         respond( $hash, $data, q{ } );
         #Beta-User: Da fehlt mir der Soll-Ablauf für das "room-listening"-Reading; das wird ja über einen anderen Topic abgewickelt
         return \@updatedList;
+    }
+    
+    if ($topic =~ m{\Ahermes/nlu/intentNotRecognized}x && defined $siteId) {
+        handleIntentNotRecognized($hash, $data);
+        return;
     }
 
     my $command = $data->{input};
@@ -4041,6 +4047,23 @@ sub handleIntentSetTimer {
 }
 
 
+sub handleIntentNotRecognized {
+    my $hash = shift // return;
+    my $data = shift // return;
+
+    Log3( $hash, 5, "[$hash->{NAME}] handleIntentNotRecognized called, input is $data->{input}" );
+    my $identiy = qq($data->{sessionId});
+    my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
+    return if !defined $data_old;
+    $hash->{helper}{'.delayed'}->{$identiy}->{intentNotRecognized} = $data;
+    my $response = getResponse($hash, 'DefaultConfirmationRequestRawInput');
+    my $rawInput = $data->{input};
+    $response =~ s{(\$\w+)}{$1}eegx;
+
+    return setDialogTimeout( $hash, $data, undef, $response ); # , $data_old->{intentNotRecognized} );
+
+}
+
 sub handleIntentCancelAction {
     my $hash = shift // return;
     my $data = shift // return;
@@ -4053,7 +4076,7 @@ sub handleIntentCancelAction {
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
     if ( !defined $data_old ) {
         respond( $hash, $data, getResponse( $hash, 'SilentCancelConfirmation' ) );
-        return;
+        return configure_DialogManager( $hash, $data->{siteId}, undef, undef, 1 ); #global intent filter seems to be not working!
     }
 
     deleteSingleRegIntTimer($identiy, $hash);
@@ -4071,7 +4094,7 @@ sub handleIntentConfirmAction {
     Log3($hash->{NAME}, 5, 'handleIntentConfirmAction called');
 
     #cancellation case
-    return handleIntentCancelAction($hash, $data) if $data->{Mode} ne 'OK';
+    return handleIntentCancelAction($hash, $data) if $data->{Mode} ne 'OK' && $data->{Mode} ne 'Back' && $data->{Mode} ne 'Next' ;
 
     #confirmed case
     my $identiy = qq($data->{sessionId});
@@ -4081,6 +4104,16 @@ sub handleIntentConfirmAction {
 
     if ( !defined $data_old ) {
         respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) );
+        return configure_DialogManager( $hash, $data->{siteId}, undef, undef, 1 ); #global intent filter seems to be not working!;
+    };
+
+    #continued session after intentNotRecognized
+    if ( defined $data_old->{intentNotRecognized} && ( $data->{Mode} eq 'OK' || $data->{Mode} eq 'Back') ) {
+        Log3($hash->{NAME}, 5, "ConfirmAction in $data->{Mode}");
+        #$hash->{helper}{'.delayed'}->{$identiy}->{intentNotRecognized} = $data;
+        #respond( $hash, $data, getResponse( $hash, 'DefaultConfirmationNoOutstanding' ) );
+        #return configure_DialogManager( $hash, $data->{siteId}, undef, undef, 1 ); #global intent filter seems to be not working!;
+        #atm no idea, how to continue...
         return;
     };
 
@@ -4435,7 +4468,7 @@ So all parameters in define should be provided in the <i>key=value</i> form. In 
 <p><b>Example for defining an MQTT2_CLIENT device and the Rhasspy device in FHEM:</b></p>
 <p><code>defmod rhasspyMQTT2 MQTT2_CLIENT 192.168.1.122:12183<br>
 attr rhasspyMQTT2 clientOrder RHASSPY MQTT_GENERIC_BRIDGE MQTT2_DEVICE<br>
-attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionStarted hermes/dialogueManager/sessionEnded</code></p>
+attr rhasspyMQTT2 subscriptions hermes/intent/+ hermes/dialogueManager/sessionStarted hermes/dialogueManager/sessionEnded hermes/nlu/intentNotRecognized</code></p>
 <p><code>define Rhasspy RHASSPY devspec=room=Rhasspy defaultRoom=Livingroom language=en</code></p>
 
 <p><b>Additionals remarks on MQTT2-IOs:</b></p>
