@@ -2292,6 +2292,7 @@ sub respond {
     }
 
     my $json = _toCleanJSON($sendData);
+    $response = $response->{text} if ref $response eq 'HASH' && defined $response->{text};
     $response = $response->{response} if ref $response eq 'HASH' && defined $response->{response};
     readingsBeginUpdate($hash);
     $type eq 'voice' ?
@@ -2301,7 +2302,7 @@ sub respond {
     readingsEndUpdate($hash,1);
     IOWrite($hash, 'publish', qq{hermes/dialogueManager/$topic $json});
     Log3($hash->{NAME}, 5, "Response is: $response");
-    
+
     my $secondAudio = ReadingsVal($hash->{NAME}, "siteId2doubleSpeak_$data->{siteId}",0);
     sendSpeakCommand( $hash, { 
             siteId => $secondAudio, 
@@ -4056,6 +4057,7 @@ sub handleIntentNotRecognized {
     my $data_old = $hash->{helper}{'.delayed'}->{$identiy};
     return if !defined $data_old;
     $hash->{helper}{'.delayed'}->{$identiy}->{intentNotRecognized} = $data;
+    Log3( $hash->{NAME}, 5, "data_old is: " . toJSON( $hash->{helper}{'.delayed'}->{$identiy} ) );
     my $response = getResponse($hash, 'DefaultConfirmationRequestRawInput');
     my $rawInput = $data->{input};
     $response =~ s{(\$\w+)}{$1}eegx;
