@@ -347,7 +347,7 @@ sub Define {
 
     $hash->{defaultRoom} = $defaultRoom;
     my $language = $h->{language} // shift @{$anon} // lc AttrVal('global','language','en');
-    $hash->{MODULE_VERSION} = '0.4.34';
+    $hash->{MODULE_VERSION} = '0.4.35';
     $hash->{baseUrl} = $Rhasspy;
     initialize_Language($hash, $language) if !defined $hash->{LANGUAGE} || $hash->{LANGUAGE} ne $language;
     $hash->{LANGUAGE} = $language;
@@ -432,13 +432,13 @@ sub initialize_prefix {
 
     return if defined $old_prefix && $prefix eq $old_prefix;
     # provide attributes "rhasspyName" etc. for all devices
-    addToAttrList("${prefix}Name");
-    addToAttrList("${prefix}Room");
-    addToAttrList("${prefix}Mapping:textField-long");
+    addToAttrList("${prefix}Name",'RHASSPY');
+    addToAttrList("${prefix}Room",'RHASSPY');
+    addToAttrList("${prefix}Mapping:textField-long",'RHASSPY');
     #addToAttrList("${prefix}Channels:textField-long");
     #addToAttrList("${prefix}Colors:textField-long");
-    addToAttrList("${prefix}Group:textField");
-    addToAttrList("${prefix}Specials:textField-long");
+    addToAttrList("${prefix}Group:textField",'RHASSPY');
+    addToAttrList("${prefix}Specials:textField-long",'RHASSPY');
 
     return if !$init_done || !defined $old_prefix;
     my @devs = devspec2array("$hash->{devspec}");
@@ -4736,25 +4736,25 @@ Each of the keywords found in these attributes will be sent by <a href="#RHASSPY
 
 <ul>
   <li>
-    <a id="RHASSPY-attr-rhasspyName"></a><b>rhasspyName</b>
+    <a id="RHASSPY-attr-rhasspyName" data-pattern=".*Name"></a><b>rhasspyName</b>
     <p>Comma-separated "labels" for the device as used when speaking a voice-command. They will be used as keywords by Rhasspy. May contain space or mutated vovels.</p>
     <p>Example:<br>
     <code>attr m2_wz_08_sw rhasspyName kitchen lamp,ceiling lamp,workspace,whatever</code></p>
   </li>
   <li>
-    <a id="RHASSPY-attr-rhasspyRoom"></a><b>rhasspyRoom</b>
+    <a id="RHASSPY-attr-rhasspyRoom" data-pattern=".*Room"></a><b>rhasspyRoom</b>
     <p>Comma-separated "labels" for the "rooms" the device is located in. Recommended to be unique.</p>
     <p>Example:<br>
     <code>attr m2_wz_08_sw rhasspyRoom living room</code></p>
   </li>
   <li>
-    <a id="RHASSPY-attr-rhasspyGroup"></a><b>rhasspyGroup</b>
+    <a id="RHASSPY-attr-rhasspyGroup" data-pattern=".*Group"></a><b>rhasspyGroup</b>
     <p>Comma-separated "labels" for the "groups" the device is in. Recommended to be unique.</p>
     <p>Example:
     <code>attr m2_wz_08_sw rhasspyGroup lights</code></p>
   </li>
   <li>
-    <a id="RHASSPY-attr-Mapping"></a><b>rhasspyMapping</b>
+    <a id="RHASSPY-attr-Mapping" data-pattern=".*Mapping"></a><b>rhasspyMapping</b>
     <p>If automatic detection (gDT) does not work or is not desired, this is the place to tell RHASSPY how your device can be controlled.</p>
     <p>Example:</p>
     <p><code>attr lamp rhasspyMapping SetOnOff:cmdOn=on,cmdOff=off,response="All right"<br>
@@ -4765,7 +4765,7 @@ GetState:response=The temperature in the kitchen is at [lamp:temperature] degree
 MediaControls:cmdPlay=play,cmdPause=pause,cmdStop=stop,cmdBack=previous,cmdFwd=next</code></p>
   </li>
   <li>
-    <a id="RHASSPY-attr-rhasspyChannels"></a><b>rhasspyChannels</b>
+    <a id="RHASSPY-attr-rhasspyChannels" data-pattern=".*Channels"></a><b>rhasspyChannels</b>
     <p>Used to change the channels of a tv, set light-scenes, etc.<br>
     <i>key=value</i> line by line arguments mapping command strings to fhem- or Perl commands.</p>
     <p>Example:</p>
@@ -4776,7 +4776,7 @@ orf drei=channel 203<br>
     <p>Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute.</p>
   </li>
   <li>
-    <a id="RHASSPY-attr-rhasspyColors"></a><b>rhasspyColors</b>
+    <a id="RHASSPY-attr-rhasspyColors" data-pattern=".*Colors"></a><b>rhasspyColors</b>
     <p>Used to change to colors of a light<br>
     <i>key=value</i> line by line arguments mapping keys to setter strings on the same device.</p>
     <p>Example:</p>
@@ -4787,7 +4787,7 @@ yellow=rgb FFFF00</code></p>
     <p>Note: This attribute is not added to global attribute list by default. Add it using userattr or by editing the global userattr attribute. You may consider using <a href="#RHASSPY-attr-rhasspySpecials">rhasspySpecials</a> (<i>colorCommandMap</i> and/or <i>colorForceHue2rgb</i>) instead.</p>
   </li>
   <li>
-    <a id="RHASSPY-attr-rhasspySpecials"></a><b>rhasspySpecials</b>
+    <a id="RHASSPY-attr-rhasspySpecials" data-pattern=".*Specials"></a><b>rhasspySpecials</b>
     <p>Currently some colour light options besides group and venetian blind related stuff is implemented, this could be the place to hold additional options, e.g. for confirmation requests. You may use several of the following lines.</p>
     <p><i>key:value</i> line by line arguments similar to <a href="#RHASSPY-attr-rhasspyTweaks">rhasspyTweaks</a>.</p>
     <ul>
