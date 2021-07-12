@@ -748,12 +748,12 @@ sub initUserAttr {
   #Log3($hash->{NAME},5,"MQTT_GENERIC_BRIDGE:DEBUG:> [$hash->{NAME}] initUserAttr: addToDevAttrList: $prefix");
   #Log3($hash->{NAME},1,"MQTT_GENERIC_BRIDGE:DEBUG:> [$hash->{NAME}] initUserAttr> devspec: '$devspec', array: ".Dumper(@devices));
   for my $dev (@devices) {
-    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_DEFAULTS.":textField-long", 'MQTT_GENERIC_BRIDGE');
-    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_ALIAS.":textField-long", 'MQTT_GENERIC_BRIDGE');
-    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_PUBLISH.":textField-long", 'MQTT_GENERIC_BRIDGE');
-    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_SUBSCRIBE.":textField-long", 'MQTT_GENERIC_BRIDGE');
-    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_IGNORE.":both,incoming,outgoing", 'MQTT_GENERIC_BRIDGE');
-    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_FORWARD.":all,none", 'MQTT_GENERIC_BRIDGE');
+    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_DEFAULTS.":textField-long");
+    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_ALIAS.":textField-long");
+    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_PUBLISH.":textField-long");
+    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_SUBSCRIBE.":textField-long");
+    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_IGNORE.":both,incoming,outgoing");
+    addToDevAttrList($dev, $prefix.CTRL_ATTR_NAME_FORWARD.":all,none");
   }
   return \@devices;
 }
@@ -3007,7 +3007,7 @@ __END__
 =item summary MQTT_GENERIC_BRIDGE acts as a bridge for any fhem-devices and mqtt-topics
 =begin html
 
-<a id="MQTT_GENERIC_BRIDGE"></a>
+<a name="MQTT_GENERIC_BRIDGE"></a>
  <h3>MQTT_GENERIC_BRIDGE</h3>
  <ul>
  <p>
@@ -3018,7 +3018,7 @@ __END__
      <a href="#MQTT2_CLIENT">MQTT2_CLIENT</a> or <a href="#MQTT2_SERVER">MQTT2_SERVER</a>.
  </p>
  <p>The (minimal) configuration of the bridge itself is basically very simple.</p>
- <a id="MQTT_GENERIC_BRIDGE-define"></a>
+ <a name="MQTT_GENERIC_BRIDGEdefine"></a>
  <p><b>Definition:</b></p>
  <ul>
    <p>In the simplest case, two lines are enough:</p>
@@ -3034,32 +3034,32 @@ __END__
       Example for devspec: 'TYPE=dummy' or 'dummy1,dummy2'. Following the general rules for <a href="#devspec">devspec</a>, a comma separated list must not contain any whitespaces!</p>
  </ul>
  
- <a id="MQTT_GENERIC_BRIDGE-get"></a>
+ <a name="MQTT_GENERIC_BRIDGEget"></a>
  <p><b>get:</b></p>
  <ul>
    <li>
-     <a id="MQTT_GENERIC_BRIDGE-get-version"></a>
-        version<br/>
-        <p>Displays module version.</p>
+                                                 
+     <p>version<br/>
+        Displays module version.</p>
    </li>
    <li>
-     <a id="MQTT_GENERIC_BRIDGE-get-devlist"></a>
-        devlist [&lt;name (regex)&gt;]<br/>
-        <p>Returns list of names of devices monitored by this bridge whose names correspond to the optional regular expression. 
+                                                 
+     <p>devlist [&lt;name (regex)&gt;]<br/>
+        Returns list of names of devices monitored by this bridge whose names correspond to the optional regular expression. 
         If no expression provided, all devices are listed.
      </p>
    </li>
    <li>
-        <a id="MQTT_GENERIC_BRIDGE-get-devinfo"></a>
-        devinfo [&lt;name (regex)&gt;]<br/>
-        <p>Returns a list of monitored devices whose names correspond to the optional regular expression. 
+                                                    
+     <p>devinfo [&lt;name (regex)&gt;]<br/>
+        Returns a list of monitored devices whose names correspond to the optional regular expression. 
         If no expression provided, all devices are listed. 
         In addition, the topics used in 'publish' and 'subscribe' are displayed including the corresponding read-in names.
     </p>
    </li>
  </ul>
 
- <a id="MQTT_GENERIC_BRIDGE-readings"></a>
+ <a name="MQTT_GENERIC_BRIDGEreadings"></a>
  <p><b>readings:</b></p>
  <ul>
    <li>
@@ -3088,15 +3088,15 @@ __END__
    </li>
  </ul>
 
- <a id="MQTT_GENERIC_BRIDGE-attr"></a>
+ <a name="MQTT_GENERIC_BRIDGEattr"></a>
  <p><b>Attributes:</b></p>
  <ul>
    <p><b>The MQTT_GENERIC_BRIDGE device itself</b> supports the following attributes:</p>
    <ul>
-   <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-IODev"></a>
-    IODev<br/>
-    <p>This attribute is mandatory and must contain the name of a functioning MQTT-IO module instance. MQTT, MQTT2_CLIENT and MQTT2_SERVER are supported.</p>
+       
+                                               
+   <li><p>IODev<br/>
+    This attribute is mandatory and must contain the name of a functioning MQTT-IO module instance. MQTT, MQTT2_CLIENT and MQTT2_SERVER are supported.</p>
    </li>
 
    <li>
@@ -3108,28 +3108,28 @@ __END__
    </li>
 
    <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-globalDefaults"></a>
-        globalDefaults<br/>
-        <p>Defines defaults. These are used in the case where suitable values are not defined in the respective device.
-        see <a href="#MQTT_GENERIC_BRIDGE-attr-mqttDefaults">mqttDefaults</a>. 
+                                                            
+     <p>globalDefaults<br/>
+        Defines defaults. These are used in the case where suitable values are not defined in the respective device.
+        see <a href="#MQTT_GENERIC_BRIDGEmqttDefaults">mqttDefaults</a>. 
         <p>Example:<br>
         <code>attr &lt;dev&gt; sub:base=FHEM/set pub:base=FHEM</code>
      </p>
    </li>
 
    <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-globalAlias"></a>
-        globalAlias<br/>
-        <p>Defines aliases. These are used in the case where suitable values are not defined in the respective device. 
-        see <a href="#MQTT_GENERIC_BRIDGE-attr-mqttAlias">mqttAlias</a>.
+                                                         
+    <p>globalAlias<br/>
+        Defines aliases. These are used in the case where suitable values are not defined in the respective device. 
+        see <a href="#MQTT_GENERIC_BRIDGEmqttAlias">mqttAlias</a>.
      </p>
    </li>
    
    <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-globalPublish"></a>
-        globalPublish<br/>
-        <p>Defines topics / flags for MQTT transmission. These are used if there are no suitable values in the respective device.
-        see <a href="#MQTT_GENERIC_BRIDGE-attr-mqttPublish">mqttPublish</a>.
+                                                           
+    <p>globalPublish<br/>
+        Defines topics / flags for MQTT transmission. These are used if there are no suitable values in the respective device.
+        see <a href="#MQTT_GENERIC_BRIDGEmqttPublish">mqttPublish</a>.
      </p>
      <p>Remark:<br>
         Setting this attribute will publish any reading value from any device matching the devspec. In most cases this may not be the intented behaviour, setting accurate attributes to the subordinated devices should be preferred.
@@ -3137,8 +3137,8 @@ __END__
    </li>
 
    <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-globalTypeExclude"></a>
-        globalTypeExclude<br/><p>
+                                                           
+    <p>globalTypeExclude<br/>
         Defines (device) types and readings that should not be considered in the transmission.
         Values can be specified separately for each direction (publish or subscribe). Use prefixes 'pub:' and 'sub:' for this purpose.
         A single value means that a device is completely ignored (for all its readings and both directions). 
@@ -3150,9 +3150,9 @@ __END__
    </li>
 
    <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-globalDeviceExclude"></a>
-        globalDeviceExclude<br/>
-        <p>Defines device names and readings that should not be transferred. 
+                                                                 
+    <p>globalDeviceExclude<br/>
+        Defines device names and readings that should not be transferred. 
         Values can be specified separately for each direction (publish or subscribe). Use prefixes 'pub:' and 'sub:' for this purpose.
         A single value means that a device with that name is completely ignored (for all its readings and both directions).
         Colon-separated pairs are interpreted as '[sub:|pub:]Device:Reading'. 
@@ -3162,8 +3162,8 @@ __END__
    </li>
    
    <li>
-       <a id="MQTT_GENERIC_BRIDGE-attr-forceNEXT"></a>forceNEXT<br/>
-       <p>Only relevant for MQTT2_CLIENT or MQTT2_SERVER as IODev. If set to 1, MQTT_GENERIC_BRIDGE will forward incoming messages also to further client modules like MQTT2_DEVICE, even if the topic matches to one of the subscriptions of the controlled devices. By default, these messages will not be forwarded for better compability with autocreate feature on MQTT2_DEVICE. See also <a href="#MQTT2_CLIENT-attr-clientOrder">clientOrder attribute in MQTT2 IO-type commandrefs</a>; setting this in one instance of MQTT_GENERIC _BRIDGE might affect others, too.</p>
+    <p>forceNEXT<br/>
+       Only relevant for MQTT2_CLIENT or MQTT2_SERVER as IODev. If set to 1, MQTT_GENERIC_BRIDGE will forward incoming messages also to further client modules like MQTT2_DEVICE, even if the topic matches to one of the subscriptions of the controlled devices. By default, these messages will not be forwarded for better compability with autocreate feature on MQTT2_DEVICE. See also <a href="#MQTT2_CLIENTclientOrder">clientOrder attribute in MQTT2 IO-type commandrefs</a>; setting this in one instance of MQTT_GENERIC _BRIDGE might affect others, too.</p>
    </li>
    </ul>
    <br>
@@ -3175,8 +3175,8 @@ __END__
     </p>
     <ul>
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttDefaults" data-pattern="(?<!global)Defaults"></a>mqttDefaults<br/>
-            <p>Here is a list of "key = value" pairs defined. The following keys are possible:
+        <p><a name="MQTT_GENERIC_BRIDGEmqttDefaults">mqttDefaults</a><br/>
+            Here is a list of "key = value" pairs defined. The following keys are possible:
             <ul>
              <li>'qos' <br/>defines a default value for MQTT parameter 'Quality of Service'.</li>
              <li>'retain' <br/>allows MQTT messages to be marked as 'retained'.</li>
@@ -3184,8 +3184,8 @@ __END__
                 It can contain either text or a Perl expression. 
                 Perl expression must be enclosed in curly brackets. 
                 The following variables can be used in an expression:
-                   $base = corresponding definition from the '<a href="#MQTT_GENERIC_BRIDGE-attr-globalDefaults">globalDefaults</a>', 
-                   $reading = Original reading name, $device = device name, and $name = reading alias (see <a href="#MQTT_GENERIC_BRIDGE-attr-mqttAlias">mqttAlias</a>. 
+                   $base = corresponding definition from the '<a href="#MQTT_GENERIC_BRIDGEglobalDefaults">globalDefaults</a>', 
+                   $reading = Original reading name, $device = device name, and $name = reading alias (see <a href="#MQTT_GENERIC_BRIDGEmqttAlias">mqttAlias</a>. 
                    If no alias is defined, than $name = $ reading).<br/>
                    Furthermore, freely named variables can be defined. These can also be used in the public / subscribe definitions. 
                    These variables are always to be used there with quotation marks.
@@ -3201,8 +3201,8 @@ __END__
     </li>
 
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttAlias" data-pattern="(?<!global)Alias"></a>mqttAlias<br/>
-            <p>This attribute allows readings to be mapped to MQTT topic under a different name. 
+        <p><a name="MQTT_GENERIC_BRIDGEmqttAlias">mqttAlias</a><br/>
+            This attribute allows readings to be mapped to MQTT topic under a different name. 
             Usually only useful if topic definitions are Perl expressions with corresponding variables or to achieve somehow standardized topic structures. 
             Again, 'pub:' and 'sub:' prefixes are supported 
             (For 'subscribe', the mapping will be reversed).
@@ -3213,10 +3213,10 @@ __END__
     </li>
   
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttPublish" data-pattern="(?<!global)Publish"></a>mqttPublish<br/>
-            <p>Specific topics can be defined and assigned to the Readings(Format: &lt;reading&gt;:topic=&lt;topic&gt;). 
+        <p><a name="MQTT_GENERIC_BRIDGEmqttPublish">mqttPublish</a><br/>
+            Specific topics can be defined and assigned to the Readings(Format: &lt;reading&gt;:topic=&lt;topic&gt;). 
             Furthermore, these can be individually provided with 'qos' and 'retain' flags.<br/>
-            Topics can also be defined as Perl expression with variables ($reading, $device, $name, $base or additional variables as provided in <a href="#MQTT_GENERIC_BRIDGE-attr-mqttDefaults">mqttDefaults</a>).<br/><br/>
+            Topics can also be defined as Perl expression with variables ($reading, $device, $name, $base or additional variables as provided in <a href="#MQTT_GENERIC_BRIDGEmqttDefaults">mqttDefaults</a>).<br/><br/>
             Values for several readings can also be defined together, separated with '|'.<br/>
             If a '*' is used instead of a reading name, this definition applies to all readings for which no explicit information was provided.<br/>
             Topic can also be written as a 'readings-topic'.<br/>
@@ -3254,7 +3254,7 @@ __END__
     </li>
 
     <li>
-        <p><a id="MQTT_GENERIC_BRIDGE-attr-mqttSubscribe" data-pattern="(?<!global)Subscribe"></a>mqttSubscribe<br/>
+        <p><a name="MQTT_GENERIC_BRIDGEmqttSubscribe">mqttSubscribe</a><br/>
             This attribute configures the device to receive MQTT messages and execute corresponding actions.<br/>
             The configuration is similar to that for the 'mqttPublish' attribute. 
             Topics can be defined for setting readings ('topic' or 'readings-topic') and calls to the 'set' command on the device ('stopic' or 'set-topic').<br/>
@@ -3291,22 +3291,22 @@ __END__
     </li>
 
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttForward" data-pattern=".*Forward"></a>mqttForward<br/>
-            <p>This attribute defines what happens when one and the same reading is both subscribed and posted. 
+        <p><a name="MQTT_GENERIC_BRIDGEmqttForward">mqttForward</a><br/>
+            This attribute defines what happens when one and the same reading is both subscribed and posted. 
             Possible values: 'all' and 'none'.<br/>
             If 'none' is selected, than messages received via MQTT will not be published from the same device.<br/>
             The setting 'all' does the opposite, so that the forwarding is possible.<br/>
-            If this attribute is missing, the default setting for all device types except 'dummy' is 'all' 
-            (so that actuators can receive commands and send their changes in the same time) and for dummies 'none' is used. 
-            This was chosen because dummies are often used as a kind of GUI switch element. 
-            In this case, 'all' might cause an endless loop of messages.
+      If this attribute is missing, the default setting for all device types except 'dummy' is 'all' 
+      (so that actuators can receive commands and send their changes in the same time) and for dummies 'none' is used. 
+      This was chosen because dummies are often used as a kind of GUI switch element. 
+      In this case, 'all' might cause an endless loop of messages.
             </p>
         </p>
     </li>
 
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttDisable" data-pattern=".*Disable"></a>mqttDisable<br/>
-            <p>If this attribute is set in a device, this device is excluded from sending or receiving the readings.</p>
+        <p><a name="MQTT_GENERIC_BRIDGEmqttDisable">mqttDisable</a><br/>
+            If this attribute is set in a device, this device is excluded from sending or receiving the readings.</p>
         </p>
     </li>
     </ul>
@@ -3416,7 +3416,7 @@ __END__
 =item summary_DE MQTT_GENERIC_BRIDGE acts as a bridge for any fhem-devices and mqtt-topics
 =begin html_DE
 
- <a id="MQTT_GENERIC_BRIDGE"></a>
+ <a name="MQTT_GENERIC_BRIDGE"></a>
  <h3>MQTT_GENERIC_BRIDGE</h3>
  <ul>
  <p>
@@ -3427,8 +3427,8 @@ __END__
      <a href="#MQTT2_CLIENT">MQTT2_CLIENT</a> oder <a href="#MQTT2_SERVER">MQTT2_SERVER</a>.
  </p>
  <p>Die (minimale) Konfiguration der Bridge selbst ist grundsätzlich sehr einfach.</p>
- <a id="MQTT_GENERIC_BRIDGE-define"></a>
- <b>Definition:</b>
+ <a name="MQTT_GENERIC_BRIDGEdefine"></a>
+ <p><b>Definition:</b></p>
  <ul>
    <p>Im einfachsten Fall reichen schon zwei Zeilen:</p>
      <p><code>defmod mqttGeneric MQTT_GENERIC_BRIDGE [prefix] [devspec,[devspec]]</br>
@@ -3444,31 +3444,31 @@ __END__
    
  </ul>
  
- <a id="MQTT_GENERIC_BRIDGE-get"></a>
- <b>get:</b>
+ <a name="MQTT_GENERIC_BRIDGEget"></a>
+ <p><b>get:</b></p>
  <ul>
    <li>
-     <a id="MQTT_GENERIC_BRIDGE-get-version"></a>
-     version<br/><p>
+                                                 
+     <p>version<br/>
      Zeigt Modulversion an.</p>
    </li>
    <li>
-     <a id="MQTT_GENERIC_BRIDGE-get-devlist"></a>
-     devlist [&lt;name (regex)&gt;]<br/>
-     <p>Liefert Liste der Namen der von dieser Bridge überwachten Geräte deren Namen zu dem optionalen regulärem Ausdruck entsprechen. 
+                                                 
+     <p>devlist [&lt;name (regex)&gt;]<br/>
+     Liefert Liste der Namen der von dieser Bridge überwachten Geräte deren Namen zu dem optionalen regulärem Ausdruck entsprechen. 
      Fehlt der Ausdruck, werden alle Geräte aufgelistet. 
      </p>
    </li>
    <li>
-     <a id="MQTT_GENERIC_BRIDGE-get-devinfo"></a>
-     devinfo [&lt;name (regex)&gt;]<br/>
-     <p>Gibt eine Liste der überwachten Geräte aus, deren Namen dem optionalen regulären Ausdruck entsprechen.
+                                                 
+     <p>devinfo [&lt;name (regex)&gt;]<br/>
+     Gibt eine Liste der überwachten Geräte aus, deren Namen dem optionalen regulären Ausdruck entsprechen.
      Fehlt der Ausdruck, werden alle Geräte aufgelistet. Zusätzlich werden bei 'publish' und 'subscribe' 
      verwendete Topics angezeigt incl. der entsprechenden Readingsnamen.</p>
    </li>
  </ul>
 
- <a id="MQTT_GENERIC_BRIDGE-readings"></a>
+ <a name="MQTT_GENERIC_BRIDGEreadings"></a>
  <p><b>readings:</b></p>
  <ul>
    <li>
@@ -3497,15 +3497,15 @@ __END__
    </li>
  </ul>
 
- <a id="MQTT_GENERIC_BRIDGE-attr"></a>
+ <a name="MQTT_GENERIC_BRIDGEattr"></a>
  <p><b>Attribute:</b></p>
    <p>Folgende Attribute werden unterstützt:</p>
    <li><p><b>Im MQTT_GENERIC_BRIDGE-Device selbst:</b></p>
    <ul>
-   <li>
-     <a id="MQTT_GENERIC_BRIDGE-attr-IODev"></a>
-     IODev<br/>
-     <p>Dieses Attribut ist obligatorisch und muss den Namen einer funktionierenden MQTT-IO-Modulinstanz enthalten. 
+       
+                                                
+   <li><p>IODev<br/>
+     Dieses Attribut ist obligatorisch und muss den Namen einer funktionierenden MQTT-IO-Modulinstanz enthalten. 
      Es werden derzeit MQTT, MQTT2_CLIENT und MQTT2_SERVER unterstützt.</p>
    </li>
 
@@ -3518,10 +3518,10 @@ __END__
    </li>
 
    <li>
-     <a id="MQTT_GENERIC_BRIDGE-attr-globalDefaults"></a>
-        globalDefaults<br/>
-        <p>Definiert Defaults. Diese greifen in dem Fall, wenn in dem jeweiligen Gerät definierte Werte nicht zutreffen. 
-        s.a. <a href="#MQTT_GENERIC_BRIDGE-attr-mqttDefaults">mqttDefaults</a>.
+                                                         
+     <p>globalDefaults<br/>
+        Definiert Defaults. Diese greifen in dem Fall, wenn in dem jeweiligen Gerät definierte Werte nicht zutreffen. 
+        s.a. <a href="#MQTT_GENERIC_BRIDGEmqttDefaults">mqttDefaults</a>.
       <p>Beispiel:<br>
         <code>attr &lt;dev&gt; sub:base={"FHEM/set/$device"} pub:base={"FHEM/$device"}</code>
      </p>
@@ -3529,19 +3529,19 @@ __END__
    </li>
 
    <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-globalAlias"></a>
-        globalAlias<br/>
-        <p>Definiert Alias. Diese greifen in dem Fall, wenn in dem jeweiligen Gerät definierte Werte nicht zutreffen. 
-        s.a. <a href="#MQTT_GENERIC_BRIDGE-attr-mqttAlias">mqttAlias</a>.
+                                                     
+    <p>globalAlias<br/>
+        Definiert Alias. Diese greifen in dem Fall, wenn in dem jeweiligen Gerät definierte Werte nicht zutreffen. 
+        s.a. <a href="#MQTT_GENERIC_BRIDGEmqttAlias">mqttAlias</a>.
      </p>
    </li>
    
    <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-globalPublish"></a>
-        globalPublish<br/>
-        <p>Definiert Topics/Flags für die Übertragung per MQTT. Diese werden angewendet, falls in dem jeweiligen Gerät 
+                                                       
+    <p>globalPublish<br/>
+        Definiert Topics/Flags für die Übertragung per MQTT. Diese werden angewendet, falls in dem jeweiligen Gerät 
         definierte Werte nicht greifen oder nicht vorhanden sind. 
-        s.a. <a href="#MQTT_GENERIC_BRIDGE-attr-mqttPublish">mqttPublish</a>.
+        s.a. <a href="#MQTT_GENERIC_BRIDGEmqttPublish">mqttPublish</a>.
      </p>
    <p>Hinweis:<br>
       Dieses Attribut sollte nur gesetzt werden, wenn wirklich alle Werte aus den überwachten Geräten versendet werden sollen; dies wird eher nur im Ausnahmefall zutreffen!
@@ -3549,9 +3549,9 @@ __END__
    </li>
 
    <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-globalTypeExclude"></a>
-        globalTypeExclude<br/>
-        <p>Definiert (Geräte-)Typen und Readings, die nicht bei der Übertragung berücksichtigt werden. 
+                                                           
+    <p>globalTypeExclude<br/>
+        Definiert (Geräte-)Typen und Readings, die nicht bei der Übertragung berücksichtigt werden. 
         Werte können getrennt für jede Richtung (publish oder subscribe) vorangestellte Prefixe 'pub:' und 'sub:' angegeben werden.
         Ein einzelner Wert bedeutet, dass ein Gerät diesen Types komplett ignoriert wird (also für alle seine Readings und beide Richtungen).
         Durch einen Doppelpunkt getrennte Paare werden als [sub:|pub:]Type:Reading interpretiert.
@@ -3563,8 +3563,8 @@ __END__
    </li>
 
    <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-globalDeviceExclude"></a>
-        globalDeviceExclude<br/><p>
+                                                             
+    <p>globalDeviceExclude<br/>
         Definiert Gerätenamen und Readings, die nicht übertragen werden.
         Werte können getrennt für jede Richtung (publish oder subscribe) vorangestellte Prefixe 'pub:' und 'sub:' angegeben werden.
         Ein einzelner Wert bedeutet, dass ein Gerät mit diesem Namen komplett ignoriert wird (also für alle seine Readings und beide Richtungen).
@@ -3575,22 +3575,22 @@ __END__
    </li>
 
    <li>
-    <a id="MQTT_GENERIC_BRIDGE-attr-forceNEXT"></a>forceNEXT
-       <p>Nur relevant, wenn MQTT2_CLIENT oder MQTT2_SERVER als IODev verwendet werden. Wird dieses Attribut auf 1 gesetzt, gibt MQTT_GENERIC_BRIDGE alle eingehenden Nachrichten an weitere Client Module (z.b. MQTT2_DEVICE) weiter, selbst wenn der betreffende Topic von einem von der MQTT_GENERIC_BRIDGE überwachten Gerät verwendet wird. Im Regelfall ist dies nicht erwünscht und daher ausgeschaltet, um unnötige <i>autocreates</i> oder Events an MQTT2_DEVICEs zu vermeiden. Siehe dazu auch das <a href="#MQTT2_CLIENT-attr-clientOrder">clientOrder Attribut</a> bei MQTT2_CLIENT bzw -SERVER; wird das Attribut in einer Instance von MQTT_GENERIC _BRIDGE gesetzt, kann das Auswirkungen auf weitere Instanzen haben.</p>
+    <p>forceNEXT<br/>
+       Nur relevant, wenn MQTT2_CLIENT oder MQTT2_SERVER als IODev verwendet werden. Wird dieses Attribut auf 1 gesetzt, gibt MQTT_GENERIC_BRIDGE alle eingehenden Nachrichten an weitere Client Module (z.b. MQTT2_DEVICE) weiter, selbst wenn der betreffende Topic von einem von der MQTT_GENERIC_BRIDGE überwachten Gerät verwendet wird. Im Regelfall ist dies nicht erwünscht und daher ausgeschaltet, um unnötige <i>autocreates</i> oder Events an MQTT2_DEVICEs zu vermeiden. Siehe dazu auch das <a href="#MQTT2_CLIENTclientOrder">clientOrder Attribut</a> bei MQTT2_CLIENT bzw -SERVER; wird das Attribut in einer Instance von MQTT_GENERIC _BRIDGE gesetzt, kann das Auswirkungen auf weitere Instanzen haben.</p>
    </li>
    </li>
    </ul>
    <br>
 
    <li><p><b>Für die überwachten Geräte</b> wird eine Liste der möglichen Attribute automatisch um mehrere weitere Einträge ergänzt. <br>
-      Sie fangen alle mit vorher mit dem in der Bridge definierten <a href="#MQTT_GENERIC_BRIDGE-define">Prefix</a> an. <b>Über diese Attribute wird die eigentliche MQTT-Anbindung konfiguriert.</b><br>
+      Sie fangen alle mit vorher mit dem in der Bridge definierten <a href="#MQTT_GENERIC_BRIDGEdefine">Prefix</a> an. <b>Über diese Attribute wird die eigentliche MQTT-Anbindung konfiguriert.</b><br>
       Als Standardwert werden folgende Attributnamen verwendet: <i>mqttDefaults</i>, <i>mqttAlias</i>, <i>mqttPublish</i>, <i>mqttSubscribe</i>.
       <br/>Die Bedeutung dieser Attribute wird im Folgenden erklärt.
     </p>
     <ul>
        <li>
-       <a id="MQTT_GENERIC_BRIDGE-attr-mqttDefaults" data-pattern="(?<!global)Defaults"></a>mqttDefaults<br/>
-            <p>Hier wird eine Liste der "key=value"-Paare erwartet. Folgende Keys sind dabei möglich:
+        <p><a name="MQTT_GENERIC_BRIDGEmqttDefaults">mqttDefaults</a><br/>
+            Hier wird eine Liste der "key=value"-Paare erwartet. Folgende Keys sind dabei möglich:
             <ul>
              <li>'qos' <br/>definiert ein Defaultwert für MQTT-Paramter 'Quality of Service'.</li>
              <li>'retain' <br/>erlaubt MQTT-Nachrichten als 'retained messages' zu markieren.</li>
@@ -3598,9 +3598,9 @@ __END__
                    Sie kann entweder Text oder eine Perl-Expression enthalten. 
                    Perl-Expression muss in geschweifte Klammern eingeschlossen werden.
                    In einer Expression können folgende Variablen verwendet werden:
-                   $base = entsprechende Definition aus dem '<a href="#MQTT_GENERIC_BRIDGE-attr-globalDefaults">globalDefaults</a>', 
+                   $base = entsprechende Definition aus dem '<a href="#MQTT_GENERIC_BRIDGEglobalDefaults">globalDefaults</a>', 
                    $reading = Original-Readingname, 
-                   $device = Devicename und $name = Readingalias (s. <a href="#MQTT_GENERIC_BRIDGE-attr-mqttAlias">mqttAlias</a>. 
+                   $device = Devicename und $name = Readingalias (s. <a href="#MQTT_GENERIC_BRIDGEmqttAlias">mqttAlias</a>. 
                    Ist kein Alias definiert, ist $name=$reading).<br/>
                    Weiterhin können frei benannte Variablen definiert werden, die neben den oben genannten in den public/subscribe Definitionen 
                    verwendet werden können. Allerdings ist zu beachten, dass diese Variablen dort immer mit Anführungszeichen zu verwenden sind.
@@ -3614,12 +3614,12 @@ __END__
             <p>Beispiel:<br/>
                 <code>attr &lt;dev&gt; mqttDefaults base={"TEST/$device"} pub:qos=0 sub:qos=2 retain=0</code></p>
         </p>
-        </p>
+            
     </li>
  
 
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttAlias" data-pattern="(?<!global)Alias"></a>mqttAlias<br/><p>
+        <p><a name="MQTT_GENERIC_BRIDGEmqttAlias">mqttAlias</a><br/>
             Dieses Attribut ermöglicht Readings unter einem anderen Namen auf MQTT-Topic zu mappen. 
             Dies ist dann sinnvoll, wenn entweder Topicdefinitionen Perl-Expressions mit entsprechenden Variablen sind oder der Alias dazu dient, aus MQTT-Sicht standardisierte Readingnamen zu ermöglichen.
             Auch hier werden 'pub:' und 'sub:' Prefixe unterstützt (für 'subscribe' gilt das Mapping quasi umgekehrt).
@@ -3631,10 +3631,10 @@ __END__
     </li>
   
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttPublish" data-pattern="(?<!global)Publish"></a>mqttPublish<br/><p>
+        <p><a name="MQTT_GENERIC_BRIDGEmqttPublish">mqttPublish</a><br/>
             Hier werden konkrete Topics definiert und den Readings zugeordnet (Format: &lt;reading&gt;:topic=&lt;topic&gt;). 
             Weiterhin können diese einzeln mit 'qos'- und 'retain'-Flags versehen werden. <br/>
-            Topics können auch als Perl-Expression mit Variablen definiert werden ($device, $reading, $name, $base sowie ggf. über <a href="#MQTT_GENERIC_BRIDGE-attr-mqttDefaults">mqttDefaults</a> weitere).<br/><br/>
+            Topics können auch als Perl-Expression mit Variablen definiert werden ($device, $reading, $name, $base sowie ggf. über <a href="#MQTT_GENERIC_BRIDGEmqttDefaults">mqttDefaults</a> weitere).<br/><br/>
             'topic' kann auch als 'readings-topic' geschrieben werden.<br/>
             Werte für mehrere Readings können auch gemeinsam gleichzeitig definiert werden, 
             indem sie, mittels '|' getrennt, zusammen angegeben werden.<br/>
@@ -3676,7 +3676,7 @@ __END__
     </li>
 
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttSubscribe" data-pattern="(?<!global)Subscribe"></a>mqttSubscribe<br/><p>
+        <p><a name="MQTT_GENERIC_BRIDGEmqttSubscribe">mqttSubscribe</a><br/>
             Dieses Attribut konfiguriert das Empfangen der MQTT-Nachrichten und die entsprechenden Reaktionen darauf.<br/>
             Die Konfiguration ist ähnlich der für das 'mqttPublish'-Attribut. Es können Topics für das Setzen von Readings ('topic' oder auch 'readings-topic') und
             Aufrufe von 'set'-Befehl an dem Gerät ('stopic' oder 'set-topic') definiert werden. <br/>
@@ -3713,8 +3713,8 @@ __END__
     </li>
 
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttForward" data-pattern=".*Forward"></a>mqttForward<br/>
-            <p>Dieses Attribut definiert was passiert, wenn eine und dasselbe Reading sowohl aboniert als auch gepublisht wird. 
+        <p><a name="MQTT_GENERIC_BRIDGEmqttForward">mqttForward</a><br/>
+            Dieses Attribut definiert was passiert, wenn eine und dasselbe Reading sowohl aboniert als auch gepublisht wird. 
             Mögliche Werte: 'all' und 'none'. <br/>
             Bei 'none' werden per MQTT angekommene Nachrichten nicht aus dem selben Gerät per MQTT weiter gesendet.<br/>
             Die Einstellung 'all' bewirkt das Gegenteil, also damit wird das Weiterleiten ermöglicht.<br/>
@@ -3728,8 +3728,8 @@ __END__
     </li>
     
     <li>
-        <a id="MQTT_GENERIC_BRIDGE-attr-mqttDisable" data-pattern=".*Disable"></a>mqttDisable<br/>
-            <p>Wird dieses Attribut in einem Gerät gesetzt, wird dieses Gerät vom Versand  bzw. Empfang der Readingswerten ausgeschlossen.</p>
+        <p><a name="MQTT_GENERIC_BRIDGEmqttDisable">mqttDisable</a><br/>
+            Wird dieses Attribut in einem Gerät gesetzt, wird dieses Gerät vom Versand  bzw. Empfang der Readingswerten ausgeschlossen.</p>
         </p>
     </li>
   </ul>
