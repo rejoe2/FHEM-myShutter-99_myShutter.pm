@@ -1,5 +1,5 @@
 ###########################################
-# $Id: mqtt2.template 24599 + IODev III Beta-User $
+# $Id: mqtt2.template 24622 2021-06-12 16:20:25Z Otto123 $
 #
 # Comments start with #. Empty lines are ignored.
 # Syntax of one entry: name: line, one optional filter: line, zero or more par: lines,  FHEM-Commands
@@ -3397,8 +3397,8 @@ par:ICON;ICON as set, defaults to sani_boiler_temp;{ AttrVal("DEVICE","icon","sa
 attr DEVICE icon ICON
 modify DEVICE DEV_ID
 attr DEVICE autocreate 1
-attr DEVICE bridgeRegexp (ebus..*?)/(bai|\d+|cc|e7f|ehp|f\d\d|hc|he.|hmu|hwc|mc|mc.\d|omu|omu.\d|pms|rcc|rcc.\d|sc|sdr_p|solar|ui|uih|v\d\d|v81.\d|vd\d|vl\d|vr_\d\d|zeo)/.*:.* "$1_$2"\
-(ebus..*?)/(global|broadcast|general|scan([^/]*))/.*:.* "$1"
+attr DEVICE bridgeRegexp (ebus\S[^/]*?)/(bai|\d+|cc|e7f|ehp|f\d\d|hc|hc\d+|he.|hmu|hwc|mc|mc.\d|omu|omu.\d|pms|rcc|rcc.\d|sc|sdr_p|solar|ui|uih|v\d\d|v81.\d|vd\d|vl\d|vr_\d\d|zeo)/.*:.* "$1_$2"\
+(ebus\S[^/]*?)/(global|broadcast|general|scan([^/]*))/.*:.* "$1"
 attr DEVICE userReadings formatedUptime:uptime.* {my $m = ReadingsVal($name,"uptime",0)/60;; return sprintf "0 000 00:%02d", $m if $m < 60;; my $h = $m / 60;; $m %= 60;; return sprintf "0 000 %02d:%02d", $h, $m if $h < 24;; my $d = $h / 24;; $h %= 24;; return sprintf "0 %03d %02d:%02d", $d, $h, $m if $d <365;; my $y = $d / 365;; $d %= 365;; return sprintf "%d %03d %02d:%02d", $y, $d, $h, $m}
 attr DEVICE stateFormat Status: \
 1:running\
@@ -4526,7 +4526,7 @@ attr DEVICE devStateIcon (STOPPED|PAUSED_PLAYBACK):rc_PLAY:toggle PLAYING:rc_PAU
 attr DEVICE alias ALIAS
 attr DEVICE model sonos2mqtt_speaker
 attr DEVICE devicetopic BASE_TOPIC
-attr DEVICE userReadings Master:groupName.* {(split(' +',ReadingsVal($name,'groupName','')))[0]},\
+attr DEVICE userReadings Master:groupName.* {(split(' \+',ReadingsVal($name,'groupName','')))[0]},\
 isMaster:coordinatorUuid.* {ReadingsVal($name,'coordinatorUuid','') eq ReadingsVal($name,'uuid','')?1:0},\
 inGroup:groupName.* {ReadingsVal($name,'groupName','') =~ / \+ /?1:0},\
 inCouple:coordinatorUuid.* {(ReadingsVal($name,'coordinatorUuid','') ne ReadingsVal($name,'uuid','') and (index(ReadingsVal($name,'groupName',''), ReadingsVal($name,'name','')) != -1))?1:0},\
