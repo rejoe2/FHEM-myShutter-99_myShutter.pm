@@ -1266,6 +1266,7 @@ sub setDialogTimeout {
 
     #interactive dialogue as described in https://rhasspy.readthedocs.io/en/latest/reference/#dialoguemanager_continuesession and https://docs.snips.ai/articles/platform/dialog/multi-turn-dialog
     my @ca_strings;
+    $toEnable = split m{,}, $toEnable if ref $toEnable ne 'ARRAY';
     for (@{$toEnable}) {
         my $id = qq{$hash->{LANGUAGE}.$hash->{fhemId}:$_};
         push @ca_strings, $id;
@@ -4647,8 +4648,15 @@ DefaultConfirmation=Klaro, mach ich</code></p>
     <li>DATA => entire JSON-$data (as parsed internally), encoded in JSON</li>
     <li>siteId, Device etc. => any element out of the JSON-$data.</li>
     </ul>
-    <p>If a simple text is returned, this will be considered as response.<br>
-    For more advanced use of this feature, you may return an array. First element of the array will be interpreted as comma-separated list of devices that may have been modified (otherwise, these devices will not cast any events! See also the "d" parameter in <a href="#RHASSPY-attr-rhasspyShortcuts"><i>rhasspyShortcuts</i></a>). The second element is interpreted as response and may either be simple text or HASH-type data. This will keep the dialogue-session open to allow interactive data exchange with <i>Rhasspy</i>. An open dialogue will be closed after some time, default is 20 seconds, you may alternatively hand over other numeric values as third element of the array.<br>See also <a href="#RHASSPY-additional-files">additionals files</a> for further examples on this.</p>
+    <p>If a simple text is returned, this will be considered as response, if return value is not defined, the default response will be used.<br>
+    For more advanced use of this feature, you may return either a HASH or an ARRAY data structure. If ARRAY is returned:
+    <ul><li>First element of the array is interpreted as response and may be plain text (dialog will be ended) or HASH type to continue the session. The latter will keep the dialogue-session open to allow interactive data exchange with <i>Rhasspy</i>. An open dialogue will be closed after some time, (configurable) default is 20 seconds, you may alternatively hand over other numeric values as second element of the array.
+    </li>
+    <li>Second element might either be a comma-separated list of devices that may have been modified (otherwise, these devices will not cast any events! See also the "d" parameter in <a href="#RHASSPY-attr-rhasspyShortcuts"><i>rhasspyShortcuts</i></a>), or (if first element is HASH type) a nummeric value as timeout.</li> 
+    <li>If HASH type data (or $response in ARRAY) is returned to continue a session, make sure to hand over all relevant elements, including especially <i>intentFilter</i> if you want to restrict possible intents. It's recommended to always also activate <i>CancelAction</i> to allow user to actively exit the dialoge.
+    </li>
+    </ul>
+    <br>See also <a href="#RHASSPY-additional-files">additionals files</a> for further examples on this.</p>
   </li>
 
   <li>
