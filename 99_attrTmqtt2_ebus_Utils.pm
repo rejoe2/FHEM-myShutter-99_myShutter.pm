@@ -73,12 +73,14 @@ sub send_weekprofile {
         return;
     }
 
-    my @D = ("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday");
+    my @Dl = ("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday");
+    my @D = ("Sun","Mon","Tue","Wed","Thu","Fri","Sat");
+
     my $payload;
     my @days = (0..6);
     my $text = decode_json($wp_profile_data);
 
-    ( $model, my @days ) = split m{:}xms, $model;
+    ( $model, @days ) = split m{:}xms, $model;
     (my $sec,my $min,my $hour,my $mday,my $mon,my $year,my $wday,my $yday,my $isdst) = localtime;
 
     @days = ( $model eq 'Mo-Fr' || $model eq 'Mo-So' ) ? (1) : ($model eq 'Sa-So' || $model eq 'holiday' ) ? (0) :  (0..6) if !@days;
@@ -86,7 +88,7 @@ sub send_weekprofile {
     for my $i (@days) {
         $payload = q{};
         my $pairs = 0;
-        my $onOff = "on";
+        my $onOff = 'off';
 
         for my $j (0..20) {
             my $time = '00:00';
@@ -98,10 +100,12 @@ sub send_weekprofile {
                     $payload .= qq{$time;;$text->{$D[$i]}{time}[$j];;};
                     $pairs++;
                     $val = $val eq 'on' ? 'off' : 'on';
+                    #$time = $text->{$D[$i]}{time}[$j] if $j;
                 }
             }
             while ( $pairs < 3 && !defined $text->{$D[$i]}{time}[$j] ) {
                 #fill up the three pairs with last time
+                $time = $text->{$D[$i]}{time}[$j-1];
                 $pairs++;
                 $payload .= qq{$time;;$time;;};
             }
@@ -110,10 +114,10 @@ sub send_weekprofile {
 
         if ( $model eq 'holiday' ) {
             $payload .= 'selected';
-            CommandSet($defs{$name},"$name $D[$wday] $payload")
+            CommandSet($defs{$name},"$name $Dl[$wday] $payload")
         } else {
             $payload .= $model;
-            CommandSet($defs{$name},"$name $D[$i] $payload");
+            CommandSet($defs{$name},"$name $Dl[$i] $payload");
         }
     }
 
