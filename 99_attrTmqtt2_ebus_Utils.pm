@@ -7,6 +7,9 @@ package FHEM::aTm2u_ebus;    ## no critic 'Package declaration'
 use strict;
 use warnings;
 
+use JSON qw(decode_json);
+use Scalar::Util qw(looks_like_number);
+
 use GPUtils qw(GP_Import);
 
 #-- Run before package compilation
@@ -15,7 +18,21 @@ BEGIN {
     # Import from main context
     GP_Import(
         qw(
-            json2nameValue
+          json2nameValue
+          AttrVal
+          InternalVal
+          CommandGet
+          CommandSet
+          readingsSingleUpdate
+          readingsBulkUpdate
+          readingsBeginUpdate
+          readingsEndUpdate
+          ReadingsVal
+          ReadingsNum
+          ReadingsAge
+          json2nameValue
+          defs
+          Log3
           )
     );
 }
@@ -25,8 +42,8 @@ sub ::attrTmqtt2_ebus_createBarView { goto &createBarView }
 
 # initialize ##################################################################
 sub Initialize {
-  my $hash = shift;
-  return;
+    my $hash = shift;
+    return;
 }
 # Enter you functions below _this_ line.
 
@@ -37,6 +54,84 @@ sub j2nv {
     my $not   = shift;
     $EVENT=~ s{[{]"value":\s("[^"]+")[}]}{$1}g;
     return json2nameValue($EVENT, $pre, $filt, $not);
+}
+
+sub send_weekprofile {
+    my $name       = shift;
+    my $wp_name    = shift;
+    my $wp_profile = shift // return;
+    my $model      = shift // ReadingsVal($name,'week','selected'); #selected,Mo-Fr,Mo-So,Sa-So? holiday to set actual $wday to sunday program?
+    my $topic      = shift // AttrVal($name,'devicetopic','') . '/hcTimer.$wkdy/set ';
+
+    my $onLimit    = shift // '20';
+
+    my $hash = $defs{$name};
+
+    my $wp_profile_data = CommandGet(undef,"$wp_name profile_data $wp_profile 0");
+    if ($wp_profile_data =~ m{(profile.*not.found|usage..profile_data..name)}xms ) {
+        Log3( $hash, 3, "[$name] weekprofile $wp_name: no profile named \"$wp_profile\" available" );
+        return;
+    }
+
+    my @D = ("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday");
+    my $payload;
+    my @days = (0..6);
+    my $text = decode_json($wp_profile_data);
+
+    ( $model, my @days ) = split m{:}xms, $model;
+    (my $sec,my $min,my $hour,my $mday,my $mon,my $year,my $wday,my $yday,my $isdst) = localtime;
+
+    @days = ( $model eq 'Mo-Fr' || $model eq 'Mo-So' ) ? (1) : ($model eq 'Sa-So' || $model eq 'holiday' ) ? (0) :  (0..6) if !@days;
+
+    for my $i (@days) {
+        $payload = q{};
+        my $pairs = 0;
+        my $onOff = "on";
+
+        for my $j (0..20) {
+            my $time = '00:00';
+            if (defined $text->{$D[$i]}{time}[$j]) {
+                $time = $text->{$D[$i]}{time}[$j-1] // '00:00';
+                my $val = $text->{$D[$i]}{temp}[$j];
+                if ( $val eq $onOff || (looks_like_number($val) && _compareOnOff( $val, $onOff, $onLimit ) ) ) {
+                    $time = '00:00' if !$j;
+                    $payload .= qq{$time;;$text->{$D[$i]}{time}[$j];;};
+                    $pairs++;
+                    $val = $val eq 'on' ? 'off' : 'on';
+                }
+            }
+            while ( $pairs < 3 && !defined $text->{$D[$i]}{time}[$j] ) {
+                #fill up the three pairs with last time
+                $pairs++;
+                $payload .= qq{$time;;$time;;};
+            }
+            last if $pairs == 3;
+        }
+
+        if ( $model eq 'holiday' ) {
+            $payload .= 'selected';
+            CommandSet($defs{$name},"$name $D[$wday] $payload")
+        } else {
+            $payload .= $model;
+            CommandSet($defs{$name},"$name $D[$i] $payload");
+        }
+    }
+
+    readingsSingleUpdate( $defs{$name}, 'weekprofile', "$wp_name $wp_profile",1);
+    return;
+}
+
+sub _compareOnOff {
+    my $val   = shift // return;
+    my $onOff = shift // return;
+    my $lim   = shift;
+
+    if ( $onOff eq 'on' ) {
+        return $val < $lim;
+    } else {
+        return $val >= $lim;
+    }
+    return;
 }
 
 sub createBarView {
