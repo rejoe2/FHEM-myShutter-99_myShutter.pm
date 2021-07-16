@@ -57,15 +57,14 @@ sub j2nv {
 }
 
 sub send_weekprofile {
-    my $name       = shift;
-    my $wp_name    = shift;
+    my $name       = shift // return;
+    my $wp_name    = shift // return;
     my $wp_profile = shift // return;
+    my $onLimit    = shift // '20';
     my $model      = shift // ReadingsVal($name,'week','selected'); #selected,Mo-Fr,Mo-So,Sa-So? holiday to set actual $wday to sunday program?
     my $topic      = shift // AttrVal($name,'devicetopic','') . '/hcTimer.$wkdy/set ';
 
-    my $onLimit    = shift // '20';
-
-    my $hash = $defs{$name};
+    my $hash = $defs{$name} // return;
 
     my $wp_profile_data = CommandGet(undef,"$wp_name profile_data $wp_profile 0");
     if ($wp_profile_data =~ m{(profile.*not.found|usage..profile_data..name)}xms ) {
@@ -97,7 +96,7 @@ sub send_weekprofile {
                 my $val = $text->{$D[$i]}{temp}[$j];
                 if ( $val eq $onOff || (looks_like_number($val) && _compareOnOff( $val, $onOff, $onLimit ) ) ) {
                     $time = '00:00' if !$j;
-                    $payload .= qq{$time;;$text->{$D[$i]}{time}[$j];;};
+                    $payload .= qq{$time;$text->{$D[$i]}{time}[$j];};
                     $pairs++;
                     $val = $val eq 'on' ? 'off' : 'on';
                     #$time = $text->{$D[$i]}{time}[$j] if $j;
@@ -107,7 +106,7 @@ sub send_weekprofile {
                 #fill up the three pairs with last time
                 $time = $text->{$D[$i]}{time}[$j-1];
                 $pairs++;
-                $payload .= qq{$time;;$time;;};
+                $payload .= qq{$time;$time;};
             }
             last if $pairs == 3;
         }
@@ -137,6 +136,46 @@ sub _compareOnOff {
     }
     return;
 }
+
+
+
+#ebusd/hc1/HP1.Mo.1:.* { json2nameValue($EVENT) }
+#zwei Readings "Start_value" und "End_value" 
+# Vermutung: { "Start": {"value": "10:00"}, "End": {"value": "11:00"}}
+#ebusd/hc1/HP1\x2eMo\x2e2:.* { json2nameValue($EVENT) }
+sub upd_day_profile {
+    my $name    = shift // return;
+    my $topic   = shift // return;
+    my $payload = shift // return;
+    my $daylist = shift // q(Su|Mo|Tu|We|Th|Fr|Sa);
+
+    my $hash = $defs{$name} // return;
+
+    my @Dl = ("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday");
+
+    my $data = decode_json($payload);
+    $topic =~ m{[.](?<dayshort>$daylist)[.](?<pair>[1-3])\z}xms;
+    my $shday   = $+{dayshort} // return;
+    my $pairNr  = $+{pair} // return;
+    $pairNr--;
+
+    my @days = split m{\|}xms, $daylist;
+    my %days_index = map { $days[$_] => $_ } (0..6);
+    my $index = $days_index{$shday};
+    #Log3(undef,3, "[$name] day $shday, pair $pairNr, index $index days @days");
+
+    return if !defined $index;
+
+    my $rVal = ReadingsVal( $name, $Dl[$index], '-,-;-,-;-,-;-,-;-,-;-,-;Mo-So' );
+    my @times = split m{;}xms, $rVal;
+    $times[$pairNr*2] = $data->{Start}->{value};
+    $times[$pairNr*2+1] = $data->{End}->{value};
+    $rVal = join q{;}, @times;
+
+    readingsSingleUpdate( $defs{$name}, $Dl[$index], $rVal, 1);
+    return;
+}
+
 
 sub createBarView {
   my ($val,$maxValue,$color) = @_;
