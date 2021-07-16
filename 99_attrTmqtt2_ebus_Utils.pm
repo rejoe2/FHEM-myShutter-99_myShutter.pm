@@ -118,7 +118,7 @@ sub send_weekprofile {
             CommandSet($defs{$name},"$name $Dl[$wday] $payload") if ReadingsVal($name,$Dl[$wday],'') ne $payload;
         } else {
             $payload .= $model;
-            CommandSet($defs{$name},"$name $Dl[$i] $payload") if ReadingsVal($name,$Dl[$wday],'') ne $payload;
+            CommandSet($defs{$name},"$name $Dl[$i] $payload") if ReadingsVal($name,$Dl[$i],'') ne $payload;
         }
     }
 
@@ -204,7 +204,7 @@ __END__
 =pod
 =begin html
 
-<a name="attrTmqtt2_ebus_Utils"></a>
+<a id="attrTmqtt2_ebus_Utils"></a>
 <h3>attrTmqtt2_ebus_Utils</h3>
 <ul>
   <b>Functions to support attrTemplates for ebusd</b><br> 
