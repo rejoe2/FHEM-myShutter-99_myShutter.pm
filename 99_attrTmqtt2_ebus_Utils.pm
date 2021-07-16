@@ -60,8 +60,11 @@ sub send_weekprofile {
     my $name       = shift // return;
     my $wp_name    = shift // return;
     my $wp_profile = shift // return;
-    my $onLimit    = shift // '20';
     my $model      = shift // ReadingsVal($name,'week','selected'); #selected,Mo-Fr,Mo-So,Sa-So? holiday to set actual $wday to sunday program?
+    #[quote author=Reinhart link=topic=97989.msg925644#msg925644 date=1554057312]
+    #"daysel" nicht. Für mich bedeutet dies, das das Csv mit der Feldbeschreibung nicht überein stimmt. Ich kann aber nirgends einen Fehler sichten (timerhc.inc oder _templates.csv). [code]daysel,UCH,0=selected;1=Mo-Fr;2=Sa-So;3=Mo-So,,Tage[/code]
+    #Ebenfalls getestet mit numerischem daysel (0,1,2,3), auch ohne Erfolg.
+    my $onLimit    = shift // '20';
     my $topic      = shift // AttrVal($name,'devicetopic','') . '/hcTimer.$wkdy/set ';
 
     my $hash = $defs{$name} // return;
@@ -104,19 +107,18 @@ sub send_weekprofile {
             }
             while ( $pairs < 3 && !defined $text->{$D[$i]}{time}[$j] ) {
                 #fill up the three pairs with last time
-                $time = $text->{$D[$i]}{time}[$j-1];
                 $pairs++;
-                $payload .= qq{$time;$time;};
+                $payload .= qq{-,-;-,-;};
             }
             last if $pairs == 3;
         }
 
         if ( $model eq 'holiday' ) {
             $payload .= 'selected';
-            CommandSet($defs{$name},"$name $Dl[$wday] $payload")
+            CommandSet($defs{$name},"$name $Dl[$wday] $payload") if ReadingsVal($name,$Dl[$wday],'') ne $payload;
         } else {
             $payload .= $model;
-            CommandSet($defs{$name},"$name $Dl[$i] $payload");
+            CommandSet($defs{$name},"$name $Dl[$i] $payload") if ReadingsVal($name,$Dl[$wday],'') ne $payload;
         }
     }
 

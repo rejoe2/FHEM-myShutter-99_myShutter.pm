@@ -17,7 +17,8 @@ attr MQTT2_ebusd_sc setList Sunday ebusd/sc/hcTimer.Sunday/set\
   Thursday ebusd/sc/hcTimer.Thursday/set\
   Friday ebusd/sc/hcTimer.Friday/set\
   Saturday ebusd/sc/hcTimer.Saturday/set\
-  weekprofile { FHEM::aTm2u_ebus::send_weekprofile($NAME, $EVTPART1, $EVTPART2) }
+  weekprofile { FHEM::aTm2u_ebus::send_weekprofile($NAME, $EVTPART1, $EVTPART2) }\
+  today_holiday_weekprofile { FHEM::aTm2u_ebus::send_weekprofile( $NAME, $EVTPART1, $EVTPART2, 'holiday' ) }
 attr MQTT2_ebusd_sc setStateList on off
 attr MQTT2_ebusd_sc weekprofile brenner
 
@@ -31,8 +32,10 @@ set wp profile_data test {"Thu":{"temp":["18.0","23.5","5.0","20.0","15.0"],"tim
 { FHEM::aTm2u_ebus::send_weekprofile('MQTT2_ebusd_sc', 'wp','default') }
 { FHEM::aTm2u_ebus::send_weekprofile('MQTT2_ebusd_sc', 'wp','test') }
 
+{ FHEM::aTm2u_ebus::send_weekprofile('MQTT2_ebusd_sc', 'wp','test','holiday','15') }
 
 set wp send_to_device test MQTT2_ebusd_sc
 
+set MQTT2_ebusd_sc today_holiday_weekprofile wp default
 
 set m2client publish ebusd/hc1/HP1.Mo.1 { "Start": {"value": "10:00"}, "End": {"value": "11:00"}}
